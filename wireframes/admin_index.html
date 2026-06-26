@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Device Portal — Devices (Admin)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <style>[x-cloak]{display:none}</style>
+</head>
+<body class="bg-gray-100 min-h-screen" x-data="{
+  userOpen: false,
+  bellOpen: false,
+  addDeviceOpen: false,
+  filter: 'all'
+}">
+
+  <!-- Wireframe view switcher -->
+  <div class="bg-indigo-900 text-indigo-200 text-xs text-center py-1.5 flex items-center justify-center gap-4">
+    <span class="font-semibold text-white">Admin view</span>
+    <span>·</span>
+    <a href="index.html" class="hover:text-white hover:underline">Switch to Member view →</a>
+  </div>
+
+  <!-- ── Header ── -->
+  <header class="bg-white shadow-sm sticky top-0 z-40">
+    <div class="max-w-screen-2xl mx-auto px-6">
+      <div class="flex items-center justify-between h-16">
+        <div class="flex items-center gap-8">
+          <div class="flex items-center gap-2">
+            <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+              <span class="text-white text-xs font-bold">DP</span>
+            </div>
+            <span class="font-semibold text-gray-900 text-lg">Device Portal</span>
+          </div>
+          <nav class="flex gap-1">
+            <a href="admin_index.html" class="px-3 py-2 rounded-md text-sm font-medium bg-blue-50 text-blue-700">Devices</a>
+            <a href="users.html" class="px-3 py-2 rounded-md text-sm font-medium text-gray-500 hover:text-gray-900 hover:bg-gray-100">Users</a>
+          </nav>
+        </div>
+        <div class="flex items-center gap-3">
+          <!-- Notification Bell — has pending request -->
+          <div class="relative">
+            <button @click="bellOpen = !bellOpen; userOpen = false"
+                    class="relative p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+              </svg>
+              <span class="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold leading-none">1</span>
+            </button>
+            <div x-show="bellOpen" x-cloak @click.outside="bellOpen = false"
+                 class="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-xl border border-gray-200 z-50">
+              <div class="px-4 py-3 border-b border-gray-100">
+                <p class="text-sm font-semibold text-gray-900">Notifications</p>
+              </div>
+              <div class="p-4 space-y-4">
+                <div>
+                  <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Awaiting your approval</p>
+                  <div class="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                    <p class="text-sm text-gray-900"><span class="font-semibold">Carol Martinez</span> wants to reserve</p>
+                    <p class="text-sm font-semibold text-blue-700 mt-0.5">Andrew-cherry</p>
+                    <p class="text-xs text-gray-400 mt-1">Requested 47 min ago · expires in 2h 13m</p>
+                    <p class="text-xs text-gray-500 mt-1 italic">Contact Carol directly to discuss, then use the email link to respond.</p>
+                    <div class="flex gap-2 mt-3">
+                      <a href="confirm.html" class="flex-1 text-center py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold rounded-md">Approve</a>
+                      <button class="flex-1 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded-md">Reject</button>
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Your requests</p>
+                  <p class="text-sm text-gray-400 italic">No pending outbound requests</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- User chip + log out -->
+          <div class="relative" x-data="{ open: false }">
+            <button @click="open = !open" @click.outside="open = false"
+                    class="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-sm shadow-sm">
+              <div class="w-6 h-6 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-bold">A</div>
+              <span class="font-medium text-gray-900">Alice Johnson</span>
+              <span class="text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-semibold">Admin</span>
+              <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+              </svg>
+            </button>
+            <div x-show="open" x-cloak
+                 class="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-gray-200 z-50 py-1">
+              <div class="px-4 py-3 border-b border-gray-100">
+                <p class="text-sm font-semibold text-gray-900">Alice Johnson</p>
+                <p class="text-xs text-gray-400 mt-0.5">alice@zededa.com · PLATFORM · Admin</p>
+              </div>
+              <a href="login.html"
+                 class="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-red-600 hover:bg-red-50">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+                </svg>
+                Log out
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── Main Content ── -->
+  <main class="max-w-screen-2xl mx-auto px-6 py-6">
+    <div class="flex items-center justify-between mb-5">
+      <div>
+        <h1 class="text-2xl font-bold text-gray-900">Devices</h1>
+        <p class="text-sm text-gray-500 mt-0.5">6 devices &middot; 2 available</p>
+      </div>
+      <button @click="addDeviceOpen = true"
+              class="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg shadow-sm">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+        </svg>
+        Add Device
+      </button>
+    </div>
+
+    <div class="flex flex-col sm:flex-row gap-3 mb-4">
+      <div class="relative flex-1">
+        <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0"/>
+        </svg>
+        <input type="text" placeholder="Search by name, model, cluster, team, owner, EVE version…"
+               class="w-full pl-9 pr-4 py-2.5 border border-gray-200 bg-white rounded-lg text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+      </div>
+      <div class="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1 shadow-sm">
+        <button @click="filter='all'" :class="filter==='all' ? 'bg-gray-800 text-white' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'" class="px-3 py-1.5 rounded-md text-sm font-medium transition-colors">All</button>
+        <button @click="filter='available'" :class="filter==='available' ? 'bg-emerald-600 text-white' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'" class="px-3 py-1.5 rounded-md text-sm font-medium transition-colors">Available</button>
+        <button @click="filter='reserved'" :class="filter==='reserved' ? 'bg-orange-500 text-white' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'" class="px-3 py-1.5 rounded-md text-sm font-medium transition-colors">Reserved</button>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-100 text-sm">
+          <thead>
+            <tr class="bg-gray-50 text-left">
+              <th class="px-4 py-3 font-semibold text-gray-500 cursor-pointer hover:text-gray-800 whitespace-nowrap">Name <span class="text-gray-300 font-normal">↕</span></th>
+              <th class="px-4 py-3 font-semibold text-gray-500 cursor-pointer hover:text-gray-800 whitespace-nowrap">Model <span class="text-gray-300 font-normal">↕</span></th>
+              <th class="px-4 py-3 font-semibold text-gray-500 cursor-pointer hover:text-gray-800 whitespace-nowrap">Cluster <span class="text-gray-300 font-normal">↕</span></th>
+              <th class="px-4 py-3 font-semibold text-gray-500 cursor-pointer hover:text-gray-800 whitespace-nowrap">Team <span class="text-gray-300 font-normal">↕</span></th>
+              <th class="px-4 py-3 font-semibold text-gray-500 cursor-pointer hover:text-gray-800 whitespace-nowrap">Owner <span class="text-gray-300 font-normal">↕</span></th>
+              <th class="px-4 py-3 font-semibold text-gray-500 cursor-pointer hover:text-gray-800 whitespace-nowrap">EVE Version <span class="text-gray-300 font-normal">↕</span></th>
+              <th class="px-4 py-3 font-semibold text-gray-500 whitespace-nowrap">SSH IPs</th>
+              <th class="px-4 py-3 font-semibold text-gray-500 whitespace-nowrap">Status</th>
+              <th class="px-4 py-3 font-semibold text-gray-500 whitespace-nowrap">IDRAC</th>
+              <th class="px-4 py-3 font-semibold text-gray-500 whitespace-nowrap">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+
+            <!-- Row 1: Alice's device (current admin user) -->
+            <tr class="hover:bg-gray-50 transition-colors">
+              <td class="px-4 py-3 font-semibold text-gray-900 whitespace-nowrap">eve-node-01</td>
+              <td class="px-4 py-3 text-gray-600 whitespace-nowrap">OptiPlex 7040</td>
+              <td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700">hummingbird</span></td>
+              <td class="px-4 py-3 text-gray-600 whitespace-nowrap">PLATFORM</td>
+              <td class="px-4 py-3">
+                <div class="flex items-center gap-1.5">
+                  <div class="w-6 h-6 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">A</div>
+                  <span class="font-medium text-gray-900">Alice Johnson</span>
+                  <span class="text-xs text-blue-500">(you)</span>
+                </div>
+                <div class="flex items-center gap-1 mt-1.5">
+                  <button class="px-2 py-0.5 text-xs font-medium bg-gray-50 text-gray-600 border border-gray-200 rounded-md hover:bg-gray-100">Release</button>
+                  <button class="px-2 py-0.5 text-xs font-medium bg-orange-50 text-orange-700 border border-orange-200 rounded-md hover:bg-orange-100">Reserve</button>
+                </div>
+              </td>
+              <td class="px-4 py-3 text-gray-600 font-mono text-xs leading-relaxed">0.0.0-eve-k-size-<br>reporting-e30b9f85</td>
+              <td class="px-4 py-3 font-mono text-xs text-gray-600 leading-relaxed">192.168.0.121<br>10.244.244.1</td>
+              <td class="px-4 py-3">
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Online
+                </span>
+                <br><button class="mt-1.5 text-xs text-blue-500 hover:text-blue-700 hover:underline">Refresh</button>
+              </td>
+              <td class="px-4 py-3">
+                <a href="#" class="text-blue-600 hover:underline text-xs font-medium block">IDRAC Console ↗</a>
+                <a href="#" class="text-gray-400 hover:underline text-xs block mt-0.5">Show IDRAC credentials</a>
+              </td>
+              <td class="px-4 py-3" x-data="{ open: false }">
+                <div class="relative inline-block">
+                  <button @click="open = !open" @click.outside="open = false" class="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4z"/></svg>
+                  </button>
+                  <div x-show="open" x-cloak class="absolute right-0 mt-1 w-36 bg-white rounded-lg shadow-lg border border-gray-200 z-30 py-1">
+                    <button class="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50">Edit</button>
+                    <button class="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50">Delete</button>
+                  </div>
+                </div>
+              </td>
+            </tr>
+
+            <!-- Row 2: Bob's device -->
+            <tr class="hover:bg-gray-50 transition-colors">
+              <td class="px-4 py-3 font-semibold text-gray-900 whitespace-nowrap">eve-node-02</td>
+              <td class="px-4 py-3 text-gray-600 whitespace-nowrap">PowerEdge R740</td>
+              <td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700">alpha</span></td>
+              <td class="px-4 py-3 text-gray-600">ST</td>
+              <td class="px-4 py-3">
+                <div class="flex items-center gap-1.5">
+                  <div class="w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">B</div>
+                  <span class="font-medium text-gray-900">Bob Smith</span>
+                </div>
+                <div class="flex items-center gap-1 mt-1.5">
+                  <button class="px-2 py-0.5 text-xs font-medium bg-gray-50 text-gray-600 border border-gray-200 rounded-md hover:bg-gray-100">Release</button>
+                  <button class="px-2 py-0.5 text-xs font-medium bg-orange-50 text-orange-700 border border-orange-200 rounded-md hover:bg-orange-100">Reserve</button>
+                </div>
+              </td>
+              <td class="px-4 py-3 text-gray-600 font-mono text-xs">0.0.0-master-<br>abc12345</td>
+              <td class="px-4 py-3 text-gray-400 text-xs italic">—</td>
+              <td class="px-4 py-3">
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-700">
+                  <span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>Offline
+                </span>
+                <br><button class="mt-1.5 text-xs text-blue-500 hover:text-blue-700 hover:underline">Refresh</button>
+              </td>
+              <td class="px-4 py-3">
+                <a href="#" class="text-blue-600 hover:underline text-xs font-medium block">IDRAC Console ↗</a>
+                <a href="#" class="text-gray-400 hover:underline text-xs block mt-0.5">Show IDRAC credentials</a>
+              </td>
+              <td class="px-4 py-3" x-data="{ open: false }">
+                <div class="relative inline-block">
+                  <button @click="open = !open" @click.outside="open = false" class="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4z"/></svg>
+                  </button>
+                  <div x-show="open" x-cloak class="absolute right-0 mt-1 w-36 bg-white rounded-lg shadow-lg border border-gray-200 z-30 py-1">
+                    <button class="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50">Edit</button>
+                    <button class="w-full text-left px-3 py-2 text-xs text-indigo-600 hover:bg-indigo-50">Force Assign</button>
+                    <button class="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50">Delete</button>
+                  </div>
+                </div>
+              </td>
+            </tr>
+
+            <!-- Row 3: Alice's device, pending request from Carol -->
+            <tr class="bg-amber-50/60 hover:bg-amber-50 transition-colors border-l-4 border-l-amber-400">
+              <td class="px-4 py-3 font-semibold text-gray-900 whitespace-nowrap">Andrew-cherry</td>
+              <td class="px-4 py-3 text-gray-600 whitespace-nowrap">OptiPlex 7040</td>
+              <td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700">hummingbird</span></td>
+              <td class="px-4 py-3 text-gray-600">PLATFORM</td>
+              <td class="px-4 py-3">
+                <div class="flex items-center gap-1.5">
+                  <div class="w-6 h-6 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">A</div>
+                  <span class="font-medium text-gray-900">Alice Johnson</span>
+                  <span class="text-xs text-blue-500">(you)</span>
+                </div>
+                <p class="text-xs text-amber-600 mt-1 flex items-center gap-1">
+                  <svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0"/>
+                  </svg>
+                  Carol Martinez has requested · expires 2h 13m
+                </p>
+                <div class="flex items-center gap-1 mt-1">
+                  <button class="px-2 py-0.5 text-xs font-medium bg-gray-50 text-gray-600 border border-gray-200 rounded-md hover:bg-gray-100">Release</button>
+                  <button class="px-2 py-0.5 text-xs font-medium bg-orange-50 text-orange-700 border border-orange-200 rounded-md hover:bg-orange-100">Reserve</button>
+                </div>
+              </td>
+              <td class="px-4 py-3 text-gray-600 font-mono text-xs">0.0.0-eve-k-size-<br>reporting-e30b9f85</td>
+              <td class="px-4 py-3 font-mono text-xs text-gray-600 leading-relaxed">192.168.0.121<br>10.244.244.1</td>
+              <td class="px-4 py-3">
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Online
+                </span>
+                <br><button class="mt-1.5 text-xs text-blue-500 hover:text-blue-700 hover:underline">Refresh</button>
+              </td>
+              <td class="px-4 py-3 text-gray-400 text-xs italic">—</td>
+              <td class="px-4 py-3" x-data="{ open: false }">
+                <div class="relative inline-block">
+                  <button @click="open = !open" @click.outside="open = false" class="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4z"/></svg>
+                  </button>
+                  <div x-show="open" x-cloak class="absolute right-0 mt-1 w-36 bg-white rounded-lg shadow-lg border border-gray-200 z-30 py-1">
+                    <button class="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50">Edit</button>
+                    <button class="w-full text-left px-3 py-2 text-xs text-indigo-600 hover:bg-indigo-50">Force Assign</button>
+                    <button class="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50">Delete</button>
+                  </div>
+                </div>
+              </td>
+            </tr>
+
+            <!-- Row 4: Charlie's device -->
+            <tr class="hover:bg-gray-50 transition-colors">
+              <td class="px-4 py-3 font-semibold text-gray-900 whitespace-nowrap">thor-node-01</td>
+              <td class="px-4 py-3 text-gray-600 whitespace-nowrap">PowerEdge R640</td>
+              <td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700">thor</span></td>
+              <td class="px-4 py-3 text-gray-600">EVE</td>
+              <td class="px-4 py-3">
+                <div class="flex items-center gap-1.5">
+                  <div class="w-6 h-6 rounded-full bg-violet-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">C</div>
+                  <span class="font-medium text-gray-900">Charlie Brown</span>
+                </div>
+                <div class="flex items-center gap-1 mt-1.5">
+                  <button class="px-2 py-0.5 text-xs font-medium bg-gray-50 text-gray-600 border border-gray-200 rounded-md hover:bg-gray-100">Release</button>
+                  <button class="px-2 py-0.5 text-xs font-medium bg-orange-50 text-orange-700 border border-orange-200 rounded-md hover:bg-orange-100">Reserve</button>
+                </div>
+              </td>
+              <td class="px-4 py-3 text-gray-600 font-mono text-xs">9.9.9-lts-k-amd64</td>
+              <td class="px-4 py-3 font-mono text-xs text-gray-600">10.0.0.50</td>
+              <td class="px-4 py-3">
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Online
+                </span>
+                <br><button class="mt-1.5 text-xs text-blue-500 hover:text-blue-700 hover:underline">Refresh</button>
+              </td>
+              <td class="px-4 py-3">
+                <a href="#" class="text-blue-600 hover:underline text-xs font-medium block">IDRAC Console ↗</a>
+                <a href="#" class="text-gray-400 hover:underline text-xs block mt-0.5">Show IDRAC credentials</a>
+              </td>
+              <td class="px-4 py-3" x-data="{ open: false }">
+                <div class="relative inline-block">
+                  <button @click="open = !open" @click.outside="open = false" class="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4z"/></svg>
+                  </button>
+                  <div x-show="open" x-cloak class="absolute right-0 mt-1 w-36 bg-white rounded-lg shadow-lg border border-gray-200 z-30 py-1">
+                    <button class="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50">Edit</button>
+                    <button class="w-full text-left px-3 py-2 text-xs text-indigo-600 hover:bg-indigo-50">Force Assign</button>
+                    <button class="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50">Delete</button>
+                  </div>
+                </div>
+              </td>
+            </tr>
+
+            <!-- Row 5: Available -->
+            <tr class="hover:bg-gray-50 transition-colors">
+              <td class="px-4 py-3 font-semibold text-gray-900 whitespace-nowrap">canary-dev-01</td>
+              <td class="px-4 py-3 text-gray-600 whitespace-nowrap">NUC12WSi7</td>
+              <td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700">canary</span></td>
+              <td class="px-4 py-3 text-gray-400 italic">—</td>
+              <td class="px-4 py-3">
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600">Available</span>
+                <br><button class="mt-1.5 px-2 py-0.5 text-xs font-semibold bg-blue-600 text-white rounded-md hover:bg-blue-700">Reserve</button>
+              </td>
+              <td class="px-4 py-3 text-gray-400 text-xs italic">—</td>
+              <td class="px-4 py-3 text-gray-400 text-xs italic">—</td>
+              <td class="px-4 py-3">
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-500">
+                  <span class="w-1.5 h-1.5 rounded-full bg-gray-400"></span>Unknown
+                </span>
+                <br><button class="mt-1.5 text-xs text-blue-500 hover:text-blue-700 hover:underline">Refresh</button>
+              </td>
+              <td class="px-4 py-3 text-gray-400 text-xs italic">—</td>
+              <td class="px-4 py-3" x-data="{ open: false }">
+                <div class="relative inline-block">
+                  <button @click="open = !open" @click.outside="open = false" class="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4z"/></svg>
+                  </button>
+                  <div x-show="open" x-cloak class="absolute right-0 mt-1 w-36 bg-white rounded-lg shadow-lg border border-gray-200 z-30 py-1">
+                    <button class="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50">Edit</button>
+                    <button class="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50">Delete</button>
+                  </div>
+                </div>
+              </td>
+            </tr>
+
+            <!-- Row 6: Available, Unknown (after 404) -->
+            <tr class="hover:bg-gray-50 transition-colors">
+              <td class="px-4 py-3 font-semibold text-gray-900 whitespace-nowrap">gmwtus-test-01</td>
+              <td class="px-4 py-3 text-gray-600 whitespace-nowrap">OptiPlex 7040</td>
+              <td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700">gmwtus</span></td>
+              <td class="px-4 py-3 text-gray-400 italic">—</td>
+              <td class="px-4 py-3">
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600">Available</span>
+                <br><button class="mt-1.5 px-2 py-0.5 text-xs font-semibold bg-blue-600 text-white rounded-md hover:bg-blue-700">Reserve</button>
+              </td>
+              <td class="px-4 py-3 text-gray-400 text-xs italic">Unknown</td>
+              <td class="px-4 py-3 text-gray-400 text-xs italic">Unknown</td>
+              <td class="px-4 py-3">
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-500">
+                  <span class="w-1.5 h-1.5 rounded-full bg-gray-400"></span>Unknown
+                </span>
+                <br><button class="mt-1.5 text-xs text-blue-500 hover:text-blue-700 hover:underline">Refresh</button>
+              </td>
+              <td class="px-4 py-3 text-gray-400 text-xs italic">—</td>
+              <td class="px-4 py-3" x-data="{ open: false }">
+                <div class="relative inline-block">
+                  <button @click="open = !open" @click.outside="open = false" class="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4z"/></svg>
+                  </button>
+                  <div x-show="open" x-cloak class="absolute right-0 mt-1 w-36 bg-white rounded-lg shadow-lg border border-gray-200 z-30 py-1">
+                    <button class="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50">Edit</button>
+                    <button class="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50">Delete</button>
+                  </div>
+                </div>
+              </td>
+            </tr>
+
+          </tbody>
+        </table>
+      </div>
+      <div class="px-4 py-3 border-t border-gray-100 bg-gray-50 flex items-center justify-between text-xs text-gray-400">
+        <span>Auto-refreshes every 15 minutes</span>
+        <span>Last updated: just now</span>
+      </div>
+    </div>
+  </main>
+
+  <!-- Add Device Modal (same as member view) -->
+  <div x-show="addDeviceOpen" x-cloak class="fixed inset-0 z-50 overflow-y-auto">
+    <div class="flex items-center justify-center min-h-screen px-4 py-8">
+      <div class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm" @click="addDeviceOpen = false"></div>
+      <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <h2 class="text-lg font-bold text-gray-900">Add Device</h2>
+          <button @click="addDeviceOpen = false" class="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div class="px-6 py-5 space-y-4">
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-semibold text-gray-700 mb-1.5">Name <span class="text-red-500">*</span></label>
+              <input type="text" placeholder="e.g. eve-node-07" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-700 mb-1.5">Name in Cluster <span class="text-red-500">*</span></label>
+              <input type="text" placeholder="e.g. Andrew-cherry" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-semibold text-gray-700 mb-1.5">Model <span class="text-red-500">*</span></label>
+              <div class="relative" x-data="{
+                query: '', open: false,
+                models: ['OptiPlex 7040', 'PowerEdge R740', 'PowerEdge R640', 'NUC12WSi7'],
+                get filtered() { return this.models.filter(m => m.toLowerCase().includes(this.query.toLowerCase())) },
+                get showCreate() { return this.query.trim() && !this.models.some(m => m.toLowerCase() === this.query.toLowerCase()) },
+                select(m) { this.query = m; this.open = false; }
+              }">
+                <input type="text" x-model="query" @focus="open = true" @click.outside="open = false"
+                       placeholder="Search or type to create…"
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <div x-show="open" x-cloak class="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-44 overflow-y-auto">
+                  <template x-for="m in filtered" :key="m">
+                    <button @click="select(m)" class="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50" x-text="m"></button>
+                  </template>
+                  <button x-show="showCreate" @click="models.push(query.trim()); select(query.trim())"
+                          class="w-full text-left px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 font-medium border-t border-gray-100">
+                    + Create "<span x-text="query"></span>"
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-700 mb-1.5">Cluster <span class="text-red-500">*</span></label>
+              <div class="flex gap-1">
+                <select class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="">Select cluster…</option>
+                  <option>hummingbird</option><option>alpha</option><option>canary</option>
+                  <option>gmwtus</option><option>thor</option><option>prod</option>
+                </select>
+                <button class="px-2.5 border border-gray-300 rounded-lg text-blue-600 hover:bg-blue-50 font-bold text-base" title="Add new cluster">+</button>
+              </div>
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-700 mb-1.5">Team</label>
+            <select class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="" disabled selected>Select team…</option>
+              <option>ST</option>
+              <option>EVE</option>
+              <option>PLATFORM</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-700 mb-1.5">IDRAC IP <span class="text-gray-400 font-normal">(optional)</span></label>
+            <input type="text" placeholder="e.g. 192.168.1.10" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-semibold text-gray-700 mb-1.5">IDRAC Username <span class="text-gray-400 font-normal">(optional)</span></label>
+              <input type="text" placeholder="root" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-700 mb-1.5">IDRAC Password <span class="text-gray-400 font-normal">(optional)</span></label>
+              <input type="password" placeholder="••••••••" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+          </div>
+          <p class="text-xs text-gray-400 bg-gray-50 rounded-lg px-3 py-2">EVE version, SSH IPs and status are populated later via <strong>Fetch Status</strong>.</p>
+        </div>
+        <div class="flex justify-end gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50 rounded-b-2xl">
+          <button @click="addDeviceOpen = false" class="px-4 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
+          <button class="px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700">Add Device</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>

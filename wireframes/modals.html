@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Device Portal — All Dialogs</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <style>body{background:#e5e7eb} [x-cloak]{display:none}</style>
+</head>
+<body class="p-8 space-y-10">
+
+  <div class="max-w-5xl mx-auto">
+    <h1 class="text-2xl font-bold text-gray-800 mb-1">Device Portal — All Dialogs</h1>
+    <p class="text-sm text-gray-500 mb-8">Static reference of all modals and dialogs. In the real app these appear as overlays.</p>
+
+    <!-- ─────────────────────────────────────────── -->
+    <!-- 1. FETCH STATUS DIALOG — Normal state        -->
+    <!-- ─────────────────────────────────────────── -->
+    <section>
+      <h2 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">1 · Fetch Status Dialog — Normal</h2>
+      <div class="bg-white rounded-2xl shadow-xl border border-gray-200 w-full max-w-md p-6">
+        <div class="flex items-center justify-between mb-5">
+          <div>
+            <h3 class="text-lg font-bold text-gray-900">Fetch Device Status</h3>
+            <p class="text-xs text-gray-400 mt-0.5">Calls ZedCloud API to update EVE version, SSH IPs and run state</p>
+          </div>
+          <button class="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div class="space-y-4">
+          <div>
+            <label class="block text-xs font-semibold text-gray-700 mb-1.5">Cluster</label>
+            <select class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option>hummingbird</option>
+              <option>alpha</option>
+              <option>canary</option>
+              <option>gmwtus</option>
+              <option>thor</option>
+              <option>prod</option>
+            </select>
+            <p class="text-xs text-gray-400 mt-1">Changes will update the device record</p>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-700 mb-1.5">Name in Cluster</label>
+            <input type="text" value="Andrew-cherry" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <p class="text-xs text-gray-400 mt-1">Correct if different from what's stored</p>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-700 mb-1.5">Bearer Token</label>
+            <div class="relative">
+              <input type="password" value="eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9" class="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-emerald-600 font-semibold">Saved ✓</span>
+            </div>
+            <p class="text-xs text-gray-400 mt-1">Your ZedCloud token for <em>hummingbird</em> · stored securely</p>
+          </div>
+        </div>
+        <div class="flex justify-end gap-3 mt-6">
+          <button class="px-4 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
+          <button class="px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            Fetch Status
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────────── -->
+    <!-- 2. FETCH STATUS — 403 Unauthorized           -->
+    <!-- ─────────────────────────────────────────── -->
+    <section>
+      <h2 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">2 · Fetch Status Dialog — 403 Unauthorized</h2>
+      <div class="bg-white rounded-2xl shadow-xl border border-gray-200 w-full max-w-md p-6">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h3 class="text-lg font-bold text-gray-900">Fetch Device Status</h3>
+            <p class="text-xs text-gray-400 mt-0.5">Calls ZedCloud API to update EVE version, SSH IPs and run state</p>
+          </div>
+          <button class="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <!-- Error banner -->
+        <div class="flex items-start gap-3 bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-4">
+          <svg class="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0"/></svg>
+          <p class="text-sm text-red-700 font-medium">Bearer token invalid or expired — please provide a new token.</p>
+        </div>
+        <div class="space-y-4">
+          <div>
+            <label class="block text-xs font-semibold text-gray-700 mb-1.5">Cluster</label>
+            <select class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option>hummingbird</option>
+              <option>alpha</option>
+              <option>canary</option>
+              <option>gmwtus</option>
+              <option>thor</option>
+              <option>prod</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-700 mb-1.5">Name in Cluster</label>
+            <input type="text" value="Andrew-cherry" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-700 mb-1.5">Bearer Token</label>
+            <input type="password" placeholder="Paste new bearer token…" class="w-full px-3 py-2 border border-red-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-red-400 bg-red-50">
+            <p class="text-xs text-red-500 mt-1">Previous token was not accepted by ZedCloud</p>
+          </div>
+        </div>
+        <div class="flex justify-end gap-3 mt-6">
+          <button class="px-4 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
+          <button class="px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700">Retry</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────────── -->
+    <!-- 3. RESERVE DIALOG — Device is unowned        -->
+    <!-- ─────────────────────────────────────────── -->
+    <section>
+      <h2 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">3 · Reserve Dialog — Device is available</h2>
+      <div class="bg-white rounded-2xl shadow-xl border border-gray-200 w-full max-w-sm p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-lg font-bold text-gray-900">Reserve Device</h3>
+          <button class="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div class="bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-3 mb-4 flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0"></span>
+          <p class="text-sm text-emerald-700 font-medium">canary-dev-01 is available</p>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-700 mb-1.5">Reserving as</label>
+          <div class="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg bg-gray-50">
+            <div class="w-6 h-6 rounded-full bg-rose-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">C</div>
+            <span class="text-sm text-gray-700 font-medium">Carol Martinez</span>
+            <span class="text-xs text-gray-400">· PLATFORM</span>
+          </div>
+        </div>
+        <div class="flex justify-end gap-3 mt-6">
+          <button class="px-4 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
+          <button class="px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700">Reserve Now</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────────── -->
+    <!-- 4. RESERVE DIALOG — Device already owned    -->
+    <!-- ─────────────────────────────────────────── -->
+    <section>
+      <h2 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">4 · Reserve Dialog — Device already reserved</h2>
+      <div class="bg-white rounded-2xl shadow-xl border border-gray-200 w-full max-w-sm p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-lg font-bold text-gray-900">Reserve Device</h3>
+          <button class="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div class="bg-orange-50 border border-orange-200 rounded-lg px-4 py-3 mb-4">
+          <p class="text-sm font-semibold text-orange-800">eve-node-01 is reserved by Alice Johnson</p>
+          <p class="text-xs text-orange-600 mt-1">An approval request will be sent to Alice. She has 3 hours to respond. Contact her directly to expedite.</p>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-700 mb-1.5">Requesting as</label>
+          <div class="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg bg-gray-50">
+            <div class="w-6 h-6 rounded-full bg-rose-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">C</div>
+            <span class="text-sm text-gray-700 font-medium">Carol Martinez</span>
+            <span class="text-xs text-gray-400">· PLATFORM</span>
+          </div>
+        </div>
+        <div class="flex justify-end gap-3 mt-6">
+          <button class="px-4 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
+          <button class="px-4 py-2 text-sm font-semibold text-white bg-orange-500 rounded-lg hover:bg-orange-600">Send Request</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────────── -->
+    <!-- 5. RESERVE DIALOG — Pending request exists  -->
+    <!-- ─────────────────────────────────────────── -->
+    <section>
+      <h2 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">5 · Reserve Dialog — Pending request already exists</h2>
+      <div class="bg-white rounded-2xl shadow-xl border border-gray-200 w-full max-w-sm p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-lg font-bold text-gray-900">Reserve Device</h3>
+          <button class="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div class="bg-amber-50 border border-amber-200 rounded-lg px-4 py-4 flex gap-3">
+          <svg class="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0"/></svg>
+          <div>
+            <p class="text-sm font-semibold text-amber-800">Carol Martinez has already requested this device</p>
+            <p class="text-xs text-amber-600 mt-1">Request expires in 2h 13m. Only one request can be pending at a time.</p>
+          </div>
+        </div>
+        <div class="flex justify-end mt-6">
+          <button class="px-4 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Close</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────────── -->
+    <!-- 6. EDIT DEVICE DIALOG                       -->
+    <!-- ─────────────────────────────────────────── -->
+    <section>
+      <h2 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">6 · Edit Device Dialog</h2>
+      <div class="bg-white rounded-2xl shadow-xl border border-gray-200 w-full max-w-lg p-6">
+        <div class="flex items-center justify-between mb-5">
+          <h3 class="text-lg font-bold text-gray-900">Edit Device</h3>
+          <button class="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div class="space-y-4">
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-semibold text-gray-700 mb-1.5">Name</label>
+              <input type="text" value="eve-node-01" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-700 mb-1.5">Name in Cluster</label>
+              <input type="text" value="Andrew-cherry" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-semibold text-gray-700 mb-1.5">Model</label>
+              <div class="relative" x-data="{
+                query: 'OptiPlex 7040',
+                open: false,
+                models: ['OptiPlex 7040', 'PowerEdge R740', 'PowerEdge R640', 'NUC12WSi7'],
+                get filtered() { return this.models.filter(m => m.toLowerCase().includes(this.query.toLowerCase())) },
+                get showCreate() { return this.query.trim() && !this.models.some(m => m.toLowerCase() === this.query.toLowerCase()) },
+                select(m) { this.query = m; this.open = false; }
+              }">
+                <input type="text"
+                       x-model="query"
+                       @focus="open = true"
+                       @click.outside="open = false"
+                       placeholder="Search or type to create…"
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <div x-show="open" x-cloak
+                     class="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-44 overflow-y-auto">
+                  <template x-for="m in filtered" :key="m">
+                    <button @click="select(m)"
+                            class="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                            x-text="m"></button>
+                  </template>
+                  <button x-show="showCreate"
+                          @click="models.push(query.trim()); select(query.trim())"
+                          class="w-full text-left px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 font-medium border-t border-gray-100">
+                    + Create "<span x-text="query"></span>"
+                  </button>
+                  <p x-show="!filtered.length && !showCreate"
+                     class="px-3 py-2 text-xs text-gray-400 italic">No models found</p>
+                </div>
+              </div>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-700 mb-1.5">Cluster</label>
+              <div class="flex gap-1">
+                <select class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option selected>hummingbird</option>
+                  <option>alpha</option>
+                  <option>canary</option>
+                </select>
+                <button class="px-2.5 border border-gray-300 rounded-lg text-blue-600 hover:bg-blue-50 font-bold text-base">+</button>
+              </div>
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-700 mb-1.5">Team</label>
+            <select class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="">— none —</option>
+              <option selected>PLATFORM</option>
+              <option>ST</option>
+              <option>EVE</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-700 mb-1.5">IDRAC IP</label>
+            <input type="text" value="192.168.1.10" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-semibold text-gray-700 mb-1.5">IDRAC Username</label>
+              <input type="text" value="root" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-700 mb-1.5">IDRAC Password</label>
+              <input type="password" placeholder="Leave blank to keep existing" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+          </div>
+          <div class="bg-gray-50 rounded-lg px-3 py-2 text-xs text-gray-500">
+            <span class="font-semibold">Read-only fields</span> (updated via Fetch Status): EVE Version · SSH IPs · Status
+          </div>
+        </div>
+        <div class="flex justify-end gap-3 mt-6">
+          <button class="px-4 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
+          <button class="px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700">Save Changes</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────────── -->
+    <!-- 7. FORCE ASSIGN DIALOG (Admin only)          -->
+    <!-- ─────────────────────────────────────────── -->
+    <section>
+      <h2 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">7 · Force Assign Dialog (Admin only)</h2>
+      <div class="bg-white rounded-2xl shadow-xl border border-gray-200 w-full max-w-sm p-6">
+        <div class="flex items-center justify-between mb-4">
+          <div class="flex items-center gap-2">
+            <h3 class="text-lg font-bold text-gray-900">Force Assign</h3>
+            <span class="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-semibold">Admin</span>
+          </div>
+          <button class="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div class="bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-4 space-y-1.5">
+          <p class="text-xs font-semibold text-red-700">This bypasses the approval flow and takes effect immediately.</p>
+          <p class="text-xs text-red-600">&#x2022; An email will be sent to <strong>Alice Johnson</strong> notifying them that the device has been reassigned.</p>
+          <p class="text-xs text-amber-700">&#x2022; If the selected user is not <strong>Carol Martinez</strong> (pending requester), Carol will also be emailed that their request was overridden by an admin.</p>
+        </div>
+        <div class="space-y-4">
+          <div>
+            <label class="block text-xs font-semibold text-gray-700 mb-1.5">Device</label>
+            <input type="text" value="eve-node-01" disabled class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 text-gray-500">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-700 mb-1.5">Current Owner</label>
+            <input type="text" value="Alice Johnson" disabled class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-gray-50 text-gray-500">
+          </div>
+          <div>
+            <div class="flex items-center justify-between mb-1.5">
+              <label class="block text-xs font-semibold text-gray-700">Assign to</label>
+              <span class="inline-flex items-center gap-1 text-xs text-amber-600 font-medium">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0"/>
+                </svg>
+                Carol has a pending request
+              </span>
+            </div>
+            <select class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+              <option value="" disabled>Select user…</option>
+              <option>Bob Smith (Networking)</option>
+              <option selected>Carol Martinez (Platform) — pending request</option>
+              <option>Charlie Brown (QA)</option>
+            </select>
+            <p class="text-xs text-gray-400 mt-1">Pre-selected based on pending request · change if needed</p>
+          </div>
+        </div>
+        <div class="flex justify-end gap-3 mt-6">
+          <button class="px-4 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
+          <button class="px-4 py-2 text-sm font-semibold text-white bg-purple-600 rounded-lg hover:bg-purple-700">Force Assign</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────────── -->
+    <!-- 8. ADD CLUSTER / ADD MODEL FORMS            -->
+    <!-- ─────────────────────────────────────────── -->
+    <section>
+      <h2 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">8 · Add Cluster (inline form)</h2>
+      <div class="max-w-sm">
+        <div class="bg-white rounded-2xl shadow-xl border border-gray-200 p-6">
+          <h3 class="text-base font-bold text-gray-900 mb-4">Add Cluster</h3>
+          <div class="space-y-3">
+            <div>
+              <label class="block text-xs font-semibold text-gray-700 mb-1.5">Cluster Name</label>
+              <input type="text" placeholder="e.g. staging" value="staging" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-700 mb-1.5">Hostname</label>
+              <input type="text" value="zedcontrol.staging.zededa.net" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <p class="text-xs text-gray-400 mt-1">Auto-suggested · edit if different</p>
+            </div>
+          </div>
+          <div class="flex justify-end gap-2 mt-4">
+            <button class="px-3 py-1.5 text-sm font-semibold text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
+            <button class="px-3 py-1.5 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700">Add</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="text-center text-xs text-gray-400 pt-4 pb-8">
+      Device Portal — Wireframe reference · See also:
+      <a href="index.html" class="text-blue-500 hover:underline">Device List</a> ·
+      <a href="confirm.html" class="text-blue-500 hover:underline">Confirm Reservation</a> ·
+      <a href="users.html" class="text-blue-500 hover:underline">Users</a>
+    </div>
+  </div>
+
+</body>
+</html>
