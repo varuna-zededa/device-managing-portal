@@ -225,6 +225,13 @@
               <input type="text" value="Andrew-cherry" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
             </div>
           </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-700 mb-1.5">Serial Number</label>
+            <div class="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg">
+              <span class="text-sm font-mono text-gray-800">J5GD4B2</span>
+              <span class="ml-auto text-xs text-gray-400 italic">unique · cannot be changed</span>
+            </div>
+          </div>
           <div class="grid grid-cols-2 gap-4">
             <div>
               <label class="block text-xs font-semibold text-gray-700 mb-1.5">Model</label>
@@ -302,6 +309,16 @@
             </div>
           </div>
 
+          <div x-data="{ condition: 'normal' }">
+            <label class="block text-xs font-semibold text-gray-700 mb-1.5">Condition</label>
+            <div class="flex gap-1.5 flex-wrap">
+              <button @click="condition='normal'" :class="condition==='normal'?'bg-gray-800 text-white':'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'" class="px-2.5 py-1 rounded-full text-xs font-semibold transition-colors">Normal</button>
+              <button @click="condition='out_of_order'" :class="condition==='out_of_order'?'bg-red-600 text-white':'bg-white text-red-600 border border-red-200 hover:bg-red-50'" class="px-2.5 py-1 rounded-full text-xs font-semibold transition-colors">Out of Order</button>
+              <button @click="condition='needs_repair'" :class="condition==='needs_repair'?'bg-yellow-500 text-white':'bg-white text-yellow-700 border border-yellow-200 hover:bg-yellow-50'" class="px-2.5 py-1 rounded-full text-xs font-semibold transition-colors">Needs Repair</button>
+              <button @click="condition='temporarily_leased'" :class="condition==='temporarily_leased'?'bg-violet-600 text-white':'bg-white text-violet-700 border border-violet-200 hover:bg-violet-50'" class="px-2.5 py-1 rounded-full text-xs font-semibold transition-colors">Temp. Leased</button>
+            </div>
+          </div>
+
           <div>
             <label class="block text-xs font-semibold text-gray-700 mb-1.5">IDRAC IP</label>
             <input type="text" value="192.168.1.10" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
@@ -318,6 +335,11 @@
           </div>
           <div class="bg-gray-50 rounded-lg px-3 py-2 text-xs text-gray-500">
             <span class="font-semibold">Read-only fields</span> (updated via Fetch Status): EVE Version · SSH IPs · Status
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-700 mb-1.5">Description <span class="text-gray-400 font-normal">(optional)</span></label>
+            <textarea rows="2" placeholder="Device capabilities, hardware notes, intended use…"
+                      class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none">32GB RAM, dual NIC — primary EVE stability test node</textarea>
           </div>
 
           <!-- Purpose / Comments -->
