@@ -17,6 +17,7 @@ code change.
 | Where are the SSH IPs? | SSH into another node to check; open ZedCloud | Fetch Status populates SSH IPs directly in the portal |
 | IDRAC access | Credentials in a shared doc or someone's head | Stored (encrypted) per device; IDRAC Console link in the table |
 | Device is broken / in repair | Engineers waste time trying to use it | Condition flag (Out of Order / Needs Repair) blocks reservation |
+| Managers unaware of hardware issues | No alert when a device breaks; issues go unnoticed | Email sent to all admins the moment any device is marked Out of Order |
 | Who had this device last month? | No record | Ownership history log; append-only |
 | Device capabilities unknown | Ask the owner; dig through specs | Description field + future structured capability data |
 
@@ -34,6 +35,55 @@ someone else owns it, an approval request is emailed to the current owner, who a
 via a link (no login needed). Admins can force-assign and set device condition flags. Live status
 (EVE version, SSH IPs, run state) is fetched on demand from the ZedCloud API using the engineer's
 personal bearer token, which is stored encrypted so they don't have to re-enter it each session.
+
+```
+┌─────────────┐
+│   /login    │  pick identity → stored in localStorage
+└──────┬──────┘
+       │
+       ▼
+┌──────────────────────────────────────────────────┐
+│                  Device Table                     │
+│  Name · Serial · Cluster · Owner · Status · ...  │  ← auto-refreshes every 15 min
+└──────┬───────────────────────────┬───────────────┘
+       │ click chevron             │ click action button
+       ▼                           ▼
+┌──────────────────┐   ┌───────────────────────────────────┐
+│   Expand Panel   │   │  Reserve      →  reservation flow  │
+│  ──────────────  │   │  Fetch Status →  ZedCloud API      │
+│  Info            │   │                 → EVE ver · SSH IPs│
+│  Connectivity    │   │  Edit / Delete / Force-Assign      │
+│  Description     │   └───────────────────────────────────┘
+└──────────────────┘
+```
+
+**Reservation flow:**
+
+```
+Reserve clicked
+      │
+      ├─ device free ───────────────────▶  transfer immediately; done
+      │
+      └─ device owned
+               │
+               ├─ request already pending ──▶  show blocked notice; no action
+               │
+               └─ no pending request
+                         │
+                         ▼
+                   create ReservationRequest (expires in 3h)
+                   email owner with /confirm/{token} link
+                         │
+                         ▼  owner opens link
+                    ┌─────────┐
+                    │ Approve │──▶  transfer to requester; notify both
+                    │ Reject  │──▶  close request; notify requester
+                    └─────────┘
+
+   Special cases:
+   · owner releases while request is pending  →  auto-approve to requester
+   · admin force-assign                       →  bypass flow; owner notified
+```
 
 ---
 
@@ -558,6 +608,12 @@ expanded detail row (Condition group). It is no longer part of the Edit Device d
 | temporarily_leased | `bg-violet-50` | `border-l-violet-400` | `bg-violet-100 text-violet-700` |
 
 **Out of Order — admin email content:**
+
+Sent immediately when any user sets a device to `out_of_order`. Admins (typically managers and
+lab leads) receive this so they are aware of the issue without having to discover it themselves,
+and can take action — arrange repair, communicate to the team, or update the condition once
+resolved.
+
 - To: all users with `user_type = admin`
 - Subject: `[Device Portal] Device out of order: {device.name}`
 - Body includes: name, lab + location detail, model, IDRAC IP, cluster, EVE version (if known)
