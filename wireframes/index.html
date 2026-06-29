@@ -125,17 +125,17 @@
           <button @click="filter='available'" :class="filter==='available'?'bg-emerald-600 text-white':'text-gray-500 hover:text-gray-800 hover:bg-gray-100'" class="px-3 py-1.5 rounded-md text-sm font-medium transition-colors">Available</button>
           <button @click="filter='reserved'" :class="filter==='reserved'?'bg-orange-500 text-white':'text-gray-500 hover:text-gray-800 hover:bg-gray-100'" class="px-3 py-1.5 rounded-md text-sm font-medium transition-colors">Reserved</button>
         </div>
-        <select x-model="filterTeam" class="px-3 py-2 border border-gray-200 bg-white rounded-lg text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-600">
-          <option value="">All Teams</option>
+        <select x-model="filterTeam" class="px-3 py-1.5 border border-gray-200 bg-white rounded-lg text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-600">
+          <option value="">Team: All</option>
           <option>ST</option><option>EVE</option><option>PLATFORM</option>
         </select>
-        <select x-model="filterLab" class="px-3 py-2 border border-gray-200 bg-white rounded-lg text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-600">
-          <option value="">All Labs</option>
+        <select x-model="filterLab" class="px-3 py-1.5 border border-gray-200 bg-white rounded-lg text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-600">
+          <option value="">Lab: All</option>
           <option>Bangalore Lab</option><option>Bangalore Office Space</option>
           <option>Berlin Lab</option><option>SanJose Lab</option><option>CoreSite Lab</option><option>Home Lab</option>
         </select>
-        <select x-model="filterCondition" class="px-3 py-2 border border-gray-200 bg-white rounded-lg text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-600">
-          <option value="">All Conditions</option>
+        <select x-model="filterCondition" class="px-3 py-1.5 border border-gray-200 bg-white rounded-lg text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-600">
+          <option value="">Condition: All</option>
           <option value="normal">Normal</option>
           <option value="out_of_order">Out of Order</option>
           <option value="needs_repair">Needs Repair</option>
