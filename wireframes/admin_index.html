@@ -112,7 +112,7 @@
     <div class="flex items-center justify-between mb-5">
       <div>
         <h1 class="text-2xl font-bold text-gray-900">Devices</h1>
-        <p class="text-sm text-gray-500 mt-0.5">6 devices &middot; 2 available</p>
+        <p class="text-sm text-gray-500 mt-0.5">7 devices &middot; 3 available</p>
       </div>
       <button @click="addDeviceOpen = true"
               class="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg shadow-sm">
@@ -191,8 +191,9 @@
                   <button @click="open = !open" @click.outside="open = false" class="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md">
                     <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4z"/></svg>
                   </button>
-                  <div x-show="open" x-cloak class="absolute right-0 mt-1 w-36 bg-white rounded-lg shadow-lg border border-gray-200 z-30 py-1">
+                  <div x-show="open" x-cloak class="absolute right-0 mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-30 py-1">
                     <button class="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50">Edit</button>
+                    <button class="w-full text-left px-3 py-2 text-xs text-gray-500 hover:bg-gray-50">Ownership History</button>
                     <button class="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50">Delete</button>
                   </div>
                 </div>
@@ -232,9 +233,11 @@
                   <button @click="open = !open" @click.outside="open = false" class="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md">
                     <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4z"/></svg>
                   </button>
-                  <div x-show="open" x-cloak class="absolute right-0 mt-1 w-36 bg-white rounded-lg shadow-lg border border-gray-200 z-30 py-1">
+                  <div x-show="open" x-cloak class="absolute right-0 mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-30 py-1">
                     <button class="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50">Edit</button>
                     <button class="w-full text-left px-3 py-2 text-xs text-indigo-600 hover:bg-indigo-50">Force Assign</button>
+                    <button class="w-full text-left px-3 py-2 text-xs text-gray-500 hover:bg-gray-50">Ownership History</button>
+                    <button class="w-full text-left px-3 py-2 text-xs text-gray-500 hover:bg-gray-50">Ownership History</button>
                     <button class="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50">Delete</button>
                   </div>
                 </div>
@@ -278,9 +281,11 @@
                   <button @click="open = !open" @click.outside="open = false" class="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md">
                     <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4z"/></svg>
                   </button>
-                  <div x-show="open" x-cloak class="absolute right-0 mt-1 w-36 bg-white rounded-lg shadow-lg border border-gray-200 z-30 py-1">
+                  <div x-show="open" x-cloak class="absolute right-0 mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-30 py-1">
                     <button class="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50">Edit</button>
                     <button class="w-full text-left px-3 py-2 text-xs text-indigo-600 hover:bg-indigo-50">Force Assign</button>
+                    <button class="w-full text-left px-3 py-2 text-xs text-gray-500 hover:bg-gray-50">Ownership History</button>
+                    <button class="w-full text-left px-3 py-2 text-xs text-gray-500 hover:bg-gray-50">Ownership History</button>
                     <button class="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50">Delete</button>
                   </div>
                 </div>
@@ -320,20 +325,61 @@
                   <button @click="open = !open" @click.outside="open = false" class="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md">
                     <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4z"/></svg>
                   </button>
-                  <div x-show="open" x-cloak class="absolute right-0 mt-1 w-36 bg-white rounded-lg shadow-lg border border-gray-200 z-30 py-1">
+                  <div x-show="open" x-cloak class="absolute right-0 mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-30 py-1">
                     <button class="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50">Edit</button>
                     <button class="w-full text-left px-3 py-2 text-xs text-indigo-600 hover:bg-indigo-50">Force Assign</button>
+                    <button class="w-full text-left px-3 py-2 text-xs text-gray-500 hover:bg-gray-50">Ownership History</button>
+                    <button class="w-full text-left px-3 py-2 text-xs text-gray-500 hover:bg-gray-50">Ownership History</button>
                     <button class="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50">Delete</button>
                   </div>
                 </div>
               </td>
             </tr>
 
-            <!-- Row 5: Available -->
-            <tr class="hover:bg-gray-50 transition-colors">
-              <td class="px-4 py-3 font-semibold text-gray-900 whitespace-nowrap">canary-dev-01</td>
+            <!-- Row 5: Out of Order — red highlight, UNAVAILABLE, Reserve disabled -->
+            <tr class="bg-red-50 border-l-4 border-l-red-500">
+              <td class="px-4 py-3 whitespace-nowrap">
+                <span class="font-semibold text-gray-900">blr-nuc-01</span>
+                <span class="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-red-100 text-red-700">Out of Order</span>
+              </td>
+              <td class="px-4 py-3 text-gray-600 whitespace-nowrap">NUC11TNBi7</td>
+              <td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700">hummingbird</span></td>
+              <td class="px-4 py-3 text-gray-400 italic">—</td>
+              <td class="px-4 py-3">
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">UNAVAILABLE</span>
+                <br><button disabled class="mt-1.5 px-2 py-0.5 text-xs font-semibold bg-gray-200 text-gray-400 rounded-md cursor-not-allowed">Reserve</button>
+              </td>
+              <td class="px-4 py-3 text-gray-400 text-xs italic">—</td>
+              <td class="px-4 py-3 text-gray-400 text-xs italic">—</td>
+              <td class="px-4 py-3">
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-500">
+                  <span class="w-1.5 h-1.5 rounded-full bg-gray-400"></span>Unknown
+                </span>
+                <br><button class="mt-1.5 text-xs text-blue-500 hover:text-blue-700 hover:underline">Refresh</button>
+              </td>
+              <td class="px-4 py-3 text-gray-400 text-xs italic">—</td>
+              <td class="px-4 py-3" x-data="{ open: false }">
+                <div class="relative inline-block">
+                  <button @click="open = !open" @click.outside="open = false" class="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4z"/></svg>
+                  </button>
+                  <div x-show="open" x-cloak class="absolute right-0 mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-30 py-1">
+                    <button class="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50">Edit</button>
+                    <button class="w-full text-left px-3 py-2 text-xs text-gray-500 hover:bg-gray-50">Ownership History</button>
+                    <button class="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50">Delete</button>
+                  </div>
+                </div>
+              </td>
+            </tr>
+
+            <!-- Row 6: Needs Repair — yellow highlight, reservable, owner preserved -->
+            <tr class="bg-yellow-50 border-l-4 border-l-yellow-400">
+              <td class="px-4 py-3 whitespace-nowrap">
+                <span class="font-semibold text-gray-900">alpha-nuc-03</span>
+                <span class="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-yellow-100 text-yellow-800">Needs Repair</span>
+              </td>
               <td class="px-4 py-3 text-gray-600 whitespace-nowrap">NUC12WSi7</td>
-              <td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700">canary</span></td>
+              <td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700">alpha</span></td>
               <td class="px-4 py-3 text-gray-400 italic">—</td>
               <td class="px-4 py-3">
                 <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600">Available</span>
@@ -353,26 +399,30 @@
                   <button @click="open = !open" @click.outside="open = false" class="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md">
                     <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4z"/></svg>
                   </button>
-                  <div x-show="open" x-cloak class="absolute right-0 mt-1 w-36 bg-white rounded-lg shadow-lg border border-gray-200 z-30 py-1">
+                  <div x-show="open" x-cloak class="absolute right-0 mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-30 py-1">
                     <button class="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50">Edit</button>
+                    <button class="w-full text-left px-3 py-2 text-xs text-gray-500 hover:bg-gray-50">Ownership History</button>
                     <button class="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50">Delete</button>
                   </div>
                 </div>
               </td>
             </tr>
 
-            <!-- Row 6: Available, Unknown (after 404) -->
-            <tr class="hover:bg-gray-50 transition-colors">
-              <td class="px-4 py-3 font-semibold text-gray-900 whitespace-nowrap">gmwtus-test-01</td>
+            <!-- Row 7: Temporarily Leased — violet highlight, UNAVAILABLE, Reserve disabled -->
+            <tr class="bg-violet-50 border-l-4 border-l-violet-400">
+              <td class="px-4 py-3 whitespace-nowrap">
+                <span class="font-semibold text-gray-900">sj-optiplex-01</span>
+                <span class="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-violet-100 text-violet-700">Temp. Leased</span>
+              </td>
               <td class="px-4 py-3 text-gray-600 whitespace-nowrap">OptiPlex 7040</td>
-              <td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700">gmwtus</span></td>
+              <td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700">thor</span></td>
               <td class="px-4 py-3 text-gray-400 italic">—</td>
               <td class="px-4 py-3">
-                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600">Available</span>
-                <br><button class="mt-1.5 px-2 py-0.5 text-xs font-semibold bg-blue-600 text-white rounded-md hover:bg-blue-700">Reserve</button>
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-violet-100 text-violet-700">UNAVAILABLE</span>
+                <br><button disabled class="mt-1.5 px-2 py-0.5 text-xs font-semibold bg-gray-200 text-gray-400 rounded-md cursor-not-allowed">Reserve</button>
               </td>
-              <td class="px-4 py-3 text-gray-400 text-xs italic">Unknown</td>
-              <td class="px-4 py-3 text-gray-400 text-xs italic">Unknown</td>
+              <td class="px-4 py-3 text-gray-400 text-xs italic">—</td>
+              <td class="px-4 py-3 text-gray-400 text-xs italic">—</td>
               <td class="px-4 py-3">
                 <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-500">
                   <span class="w-1.5 h-1.5 rounded-full bg-gray-400"></span>Unknown
@@ -385,8 +435,9 @@
                   <button @click="open = !open" @click.outside="open = false" class="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md">
                     <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4z"/></svg>
                   </button>
-                  <div x-show="open" x-cloak class="absolute right-0 mt-1 w-36 bg-white rounded-lg shadow-lg border border-gray-200 z-30 py-1">
+                  <div x-show="open" x-cloak class="absolute right-0 mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-30 py-1">
                     <button class="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50">Edit</button>
+                    <button class="w-full text-left px-3 py-2 text-xs text-gray-500 hover:bg-gray-50">Ownership History</button>
                     <button class="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50">Delete</button>
                   </div>
                 </div>
@@ -468,6 +519,33 @@
               <option>ST</option>
               <option>EVE</option>
               <option>PLATFORM</option>
+            </select>
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-semibold text-gray-700 mb-1.5">Lab <span class="text-gray-400 font-normal">(optional)</span></label>
+              <select class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="">— none —</option>
+                <option>Bangalore Lab</option>
+                <option>BLR - Office Space</option>
+                <option>Berlin Lab</option>
+                <option>SanJose Lab</option>
+                <option>CoreSite Lab</option>
+                <option>Home Lab</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-700 mb-1.5">Location Detail <span class="text-gray-400 font-normal">(optional)</span></label>
+              <input type="text" placeholder="e.g. Rack 3 · Shelf 2" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-700 mb-1.5">Condition <span class="text-gray-400 font-normal">(optional)</span></label>
+            <select class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="">— Normal —</option>
+              <option value="out_of_order">Out of Order</option>
+              <option value="needs_repair">Needs Repair</option>
+              <option value="temporarily_leased">Temporarily Leased</option>
             </select>
           </div>
           <div>

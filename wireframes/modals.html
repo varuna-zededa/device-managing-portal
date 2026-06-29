@@ -280,6 +280,43 @@
               <option>EVE</option>
             </select>
           </div>
+
+          <!-- Lab / Location -->
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-semibold text-gray-700 mb-1.5">Lab</label>
+              <select class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="">— none —</option>
+                <option selected>Bangalore Lab</option>
+                <option>BLR - Office Space</option>
+                <option>Berlin Lab</option>
+                <option>SanJose Lab</option>
+                <option>CoreSite Lab</option>
+                <option>Home Lab</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-700 mb-1.5">Location Detail</label>
+              <input type="text" value="Rack-B3, slot 4" placeholder="e.g. Rack-B3 slot 4, near printer…"
+                     class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+          </div>
+
+          <!-- Condition -->
+          <div>
+            <label class="block text-xs font-semibold text-gray-700 mb-1.5">Condition</label>
+            <select class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="" selected>— Normal —</option>
+              <option value="out_of_order">🔴 Out of Order</option>
+              <option value="needs_repair">🟡 Needs Repair</option>
+              <option value="temporarily_leased">🟣 Temporarily Leased to Other Team</option>
+            </select>
+            <p class="text-xs text-gray-400 mt-1">
+              Out of Order and Temporarily Leased clear the current owner and disable reservations.
+              Out of Order also emails all admins.
+            </p>
+          </div>
+
           <div>
             <label class="block text-xs font-semibold text-gray-700 mb-1.5">IDRAC IP</label>
             <input type="text" value="192.168.1.10" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
@@ -297,6 +334,48 @@
           <div class="bg-gray-50 rounded-lg px-3 py-2 text-xs text-gray-500">
             <span class="font-semibold">Read-only fields</span> (updated via Fetch Status): EVE Version · SSH IPs · Status
           </div>
+
+          <!-- Purpose / Comments -->
+          <div x-data="{ historyOpen: false }">
+            <div class="flex items-center justify-between mb-1.5">
+              <label class="block text-xs font-semibold text-gray-700">Purpose / Comments</label>
+              <button @click="historyOpen = !historyOpen"
+                      class="text-xs text-blue-500 hover:text-blue-700 hover:underline flex items-center gap-1">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0"/>
+                </svg>
+                <span x-text="historyOpen ? 'Hide history' : 'Show history (3)'"></span>
+              </button>
+            </div>
+            <textarea rows="2" placeholder="Describe how this device is being used…"
+                      class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none">feature testing for xyz</textarea>
+            <div class="flex justify-end mt-1">
+              <button class="text-xs px-2.5 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium">Save comment</button>
+            </div>
+
+            <!-- History panel -->
+            <div x-show="historyOpen" x-cloak class="mt-2 border border-gray-200 rounded-lg overflow-hidden">
+              <div class="bg-gray-50 px-3 py-1.5 border-b border-gray-200">
+                <p class="text-xs font-semibold text-gray-500">Comment history (last 10)</p>
+              </div>
+              <ul class="divide-y divide-gray-100">
+                <li class="px-3 py-2.5">
+                  <p class="text-sm text-gray-800">feature testing for xyz</p>
+                  <p class="text-xs text-gray-400 mt-0.5">Alice Johnson · 29 Jun 2026, 10:42 AM</p>
+                </li>
+                <li class="px-3 py-2.5">
+                  <p class="text-sm text-gray-800">regression tests</p>
+                  <p class="text-xs text-gray-400 mt-0.5">Alice Johnson · 27 Jun 2026, 3:15 PM</p>
+                </li>
+                <li class="px-3 py-2.5">
+                  <p class="text-sm text-gray-800">initial setup and burn-in</p>
+                  <p class="text-xs text-gray-400 mt-0.5">Alice Johnson · 20 Jun 2026, 9:00 AM</p>
+                </li>
+              </ul>
+            </div>
+            <p class="text-xs text-gray-400 mt-1">Cleared when ownership changes.</p>
+          </div>
+
         </div>
         <div class="flex justify-end gap-3 mt-6">
           <button class="px-4 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
@@ -383,6 +462,94 @@
             <button class="px-3 py-1.5 text-sm font-semibold text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
             <button class="px-3 py-1.5 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700">Add</button>
           </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────────── -->
+    <!-- 9. OWNERSHIP HISTORY MODAL (Admin only)     -->
+    <!-- ─────────────────────────────────────────── -->
+    <section>
+      <h2 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">9 · Ownership History (Admin only)</h2>
+      <div class="bg-white rounded-2xl shadow-xl border border-gray-200 w-full max-w-sm">
+        <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <div>
+            <h3 class="text-base font-bold text-gray-900">Ownership History</h3>
+            <p class="text-xs text-gray-400 mt-0.5">eve-node-01</p>
+          </div>
+          <button class="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <ul class="divide-y divide-gray-100 max-h-96 overflow-y-auto">
+
+          <!-- Entry 1 — current owner -->
+          <li class="px-5 py-3.5 flex gap-3 items-start">
+            <div class="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0 mt-0.5">A</div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-sm font-semibold text-gray-900">Alice Johnson</span>
+                <span class="text-xs bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-medium">Current owner</span>
+              </div>
+              <p class="text-xs text-gray-400 mt-0.5">Reserved by Alice Johnson · 27 Jun 2026, 3:15 PM</p>
+            </div>
+          </li>
+
+          <!-- Entry 2 — released -->
+          <li class="px-5 py-3.5 flex gap-3 items-start">
+            <div class="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 flex-shrink-0 mt-0.5">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-sm font-semibold text-gray-500">Available</span>
+                <span class="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded font-medium">Released</span>
+              </div>
+              <p class="text-xs text-gray-400 mt-0.5">Released by Bob Smith · 27 Jun 2026, 3:00 PM</p>
+            </div>
+          </li>
+
+          <!-- Entry 3 — previous owner -->
+          <li class="px-5 py-3.5 flex gap-3 items-start">
+            <div class="w-7 h-7 rounded-full bg-emerald-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0 mt-0.5">B</div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-sm font-semibold text-gray-900">Bob Smith</span>
+                <span class="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-medium">Reserved</span>
+              </div>
+              <p class="text-xs text-gray-400 mt-0.5">Reserved by Bob Smith · 20 Jun 2026, 9:05 AM</p>
+            </div>
+          </li>
+
+          <!-- Entry 4 — force assigned -->
+          <li class="px-5 py-3.5 flex gap-3 items-start">
+            <div class="w-7 h-7 rounded-full bg-violet-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0 mt-0.5">C</div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-sm font-semibold text-gray-900">Charlie Brown</span>
+                <span class="text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-medium">Force assigned</span>
+              </div>
+              <p class="text-xs text-gray-400 mt-0.5">Assigned by Alice Johnson (admin) · 15 Jun 2026, 2:30 PM</p>
+            </div>
+          </li>
+
+          <!-- Entry 5 — available at start -->
+          <li class="px-5 py-3.5 flex gap-3 items-start">
+            <div class="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 flex-shrink-0 mt-0.5">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-sm font-semibold text-gray-500">Available</span>
+                <span class="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded font-medium">Device added</span>
+              </div>
+              <p class="text-xs text-gray-400 mt-0.5">Added by Alice Johnson · 10 Jun 2026, 11:00 AM</p>
+            </div>
+          </li>
+
+        </ul>
+        <div class="px-5 py-3 border-t border-gray-100 bg-gray-50 rounded-b-2xl">
+          <p class="text-xs text-gray-400">Full history · oldest at bottom</p>
         </div>
       </div>
     </section>

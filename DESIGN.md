@@ -63,6 +63,9 @@ model                FK     → DeviceModel.id
 cluster_id           int    FK → Cluster.id
 team                 str    nullable; set on reserve
 owner_email          str    nullable; FK → User.email; set on reserve
+lab                  enum   nullable; Bangalore Lab | BLR - Office Space | Berlin Lab | SanJose Lab | CoreSite Lab | Home Lab
+location_detail      str    nullable; free text — exact spot inside lab (e.g. "Rack-B3, slot 4", "Near the printer")
+condition            enum   nullable (normal); out_of_order | needs_repair | temporarily_leased
 idrac_ip             str    nullable
 idrac_username       str    nullable
 idrac_password_enc   bytes  nullable; AES-encrypted
@@ -74,7 +77,7 @@ updated_at           datetime
 ```
 
 **Required on creation:** name, model, cluster_id, cluster_device_name
-**Optional on creation:** team, owner_email, idrac_ip, idrac_username, idrac_password
+**Optional on creation:** team, owner_email, lab, location_detail, idrac_ip, idrac_username, idrac_password
 
 ### User
 ```
@@ -104,6 +107,30 @@ token            str      unique random 32-byte hex token (for email approve/rej
 ```
 **Constraint:** at most one `status=pending` request per device at a time.
 
+### DeviceComment
+```
+id            int      PK auto
+device_id     int      FK → Device.id
+author_email  str      FK → User.email — who set the comment
+text          str      the purpose/comment text
+created_at    datetime
+```
+- Stores the last **10** comments per device (oldest pruned automatically on write)
+- Cleared entirely when ownership changes (reserve, release, force-assign, auto-approve)
+- Any logged-in user can add a comment, not just the owner
+
+### OwnershipHistory
+```
+id             int      PK auto
+device_id      int      FK → Device.id
+owner_email    str      nullable — null means device became available
+changed_by     str      FK → User.email — who triggered the change
+changed_at     datetime
+reason         enum     reserved | released | force_assigned | request_approved | request_expired
+```
+- Append-only; never deleted
+- Visible to admin only via API and UI
+
 ---
 
 ## API Surface
@@ -126,14 +153,26 @@ POST /api/models            any user; body: {name}
 ```
 GET    /api/devices          ?q=<search>&available=<true|false|all>
 POST   /api/devices          add; body: DeviceCreate
-PUT    /api/devices/{id}     update name, cluster_id, cluster_device_name, idrac fields
+PUT    /api/devices/{id}     update name, cluster_id, cluster_device_name, idrac fields, team
 DELETE /api/devices/{id}     admin only (X-User-Email header)
-POST   /api/devices/{id}/reserve       no body — requester identified via X-User-Email header
-POST   /api/devices/{id}/force-assign  admin only; body: {assignee_email}
-POST   /api/devices/{id}/release       owner or admin only (X-User-Email header)
-POST   /api/devices/{id}/status        body: {bearer_token}
-                                        uses Device.cluster_id + cluster_device_name
-                                        saves bearer_token to Vault, calls ZedCloud, updates device
+POST   /api/devices/{id}/reserve          no body — requester identified via X-User-Email header
+POST   /api/devices/{id}/force-assign     admin only; body: {assignee_email}
+POST   /api/devices/{id}/release          owner or admin only (X-User-Email header)
+POST   /api/devices/{id}/status           body: {bearer_token}
+                                          uses Device.cluster_id + cluster_device_name
+                                          saves bearer_token to Vault, calls ZedCloud, updates device
+```
+
+### Device Comments
+```
+GET  /api/devices/{id}/comments          list last 10 comments, newest first; any logged-in user
+POST /api/devices/{id}/comments          body: {text}; author from X-User-Email
+                                          auto-prunes to 10 entries after insert
+```
+
+### Device Ownership History
+```
+GET  /api/devices/{id}/ownership-history   admin only (X-User-Email header); full history, newest first
 ```
 
 ### Users
@@ -262,6 +301,10 @@ Admin force-assign (bypasses approval):
        requester also notified: "Your request for '{device}' was overridden by an admin"
   → If a pending request exists AND assignee = requester:
        pending request auto-approved; requester notified via normal approval email
+
+All ownership changes (reserve, release, force-assign, auto-approve, expiry with no change):
+  → Append row to OwnershipHistory
+  → Clear all DeviceComment rows for that device on any transfer of ownership
 ```
 
 ### Notifications
@@ -363,6 +406,58 @@ Admin UI shows a yellow warning banner if SMTP is not configured.
 - Django middleware intercepts the request, reads the verified header, calls `get_current_user()`
 - Login page replaced by SSO redirect — no schema or API changes needed
 - `django-allauth` or `python-social-auth` handles SAML/OIDC — both are well-documented for Django
+
+---
+
+## Device Condition Flags
+
+Any logged-in user can set or clear the condition via the Edit Device dialog.
+
+| Condition | Row highlight | Owner field | Reserve | Release | Email alert |
+|---|---|---|---|---|---|
+| `out_of_order` | Red row + red left border | Set to **UNAVAILABLE** | Disabled | Hidden | Yes — to all admins |
+| `needs_repair` | Yellow row + yellow left border | Unchanged | Normal | Normal | No |
+| `temporarily_leased` | Violet row + violet left border | Set to **UNAVAILABLE** | Disabled | Hidden | No |
+| *(cleared / normal)* | No highlight | Stays null — new reservation needed | Normal | Normal | No |
+
+**UI color tokens (Tailwind):**
+
+| Condition | Row bg | Left border | Badge |
+|---|---|---|---|
+| out_of_order | `bg-red-50` | `border-l-red-500` | `bg-red-100 text-red-700` |
+| needs_repair | `bg-yellow-50` | `border-l-yellow-400` | `bg-yellow-100 text-yellow-700` |
+| temporarily_leased | `bg-violet-50` | `border-l-violet-400` | `bg-violet-100 text-violet-700` |
+
+**Out of Order — admin email content:**
+- To: all users with `user_type = admin`
+- Subject: `[Device Portal] Device out of order: {device.name}`
+- Body includes: name, lab + location detail, model, IDRAC IP, cluster, EVE version (if known)
+- Does **not** include: owner history, comments
+
+**Condition rules:**
+- Setting `out_of_order` or `temporarily_leased` → set `owner_email = null`; append OwnershipHistory (`reason = condition_change`); expire any pending ReservationRequest
+- Clearing any condition → device becomes available (owner stays null; reserve normally)
+- `needs_repair` → no change to owner or reservations
+- Any user can set or clear the condition field
+
+---
+
+## Device Comments (Purpose / Usage)
+
+- Any logged-in user can set the purpose/comment on any device at any time
+- Editable via the **Edit Device** dialog — a textarea with a "Save" button and a collapsible history panel below it
+- On save: new `DeviceComment` row inserted; oldest row pruned if count exceeds 10
+- History shows: comment text + author name + timestamp, newest first
+- **On any ownership change** (reserve, release, force-assign, auto-approve): all comments for the device are deleted — the slate is cleared for the new owner
+
+---
+
+## Ownership History (Admin)
+
+- Every ownership change appends a row to `OwnershipHistory` — never edited or deleted
+- Fields recorded: new owner (null = released), who triggered it, timestamp, reason
+- Accessible via **"Ownership History"** option in the 3-dot Actions menu (admin view only)
+- Displayed in a modal: timeline list with owner avatar + name (or "Available"), triggered-by, reason badge, and timestamp
 
 ---
 
@@ -599,3 +694,8 @@ device-managing-portal/
 | 26 | User email input | Admin types username prefix only; "@zededa.com" is fixed suffix shown in the input field; stored as full email |
 | 28 | Team values | Fixed enum: ST, EVE, PLATFORM — rendered as a select dropdown, not free text |
 | 27 | Admin-only pages | Users page (`/users`) visible in nav only to Admin users |
+| 29 | Device comments | Any user can write; last 10 kept; cleared on ownership transfer |
+| 30 | Ownership history | Append-only; never deleted; admin-only via API and UI |
+| 31 | Device condition | Single enum (out_of_order / needs_repair / temporarily_leased / null); any user can set/clear |
+| 32 | Lab field | Fixed enum of 6 labs; free-text `location_detail` for exact spot inside lab |
+| 33 | Condition colors | out_of_order=red, needs_repair=yellow, temporarily_leased=violet (blue avoided — conflicts with primary action color) |
