@@ -63,7 +63,7 @@ model                FK     → DeviceModel.id
 cluster_id           int    FK → Cluster.id
 team                 str    nullable; set on reserve
 owner_email          str    nullable; FK → User.email; set on reserve
-lab                  enum   nullable; Bangalore Lab | BLR - Office Space | Berlin Lab | SanJose Lab | CoreSite Lab | Home Lab
+lab                  enum   nullable; Bangalore Lab | Bangalore Office Space | Berlin Lab | SanJose Lab | CoreSite Lab | Home Lab
 location_detail      str    nullable; free text — exact spot inside lab (e.g. "Rack-B3, slot 4", "Near the printer")
 condition            enum   nullable (normal); out_of_order | needs_repair | temporarily_leased
 idrac_ip             str    nullable
