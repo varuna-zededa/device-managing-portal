@@ -302,21 +302,6 @@
             </div>
           </div>
 
-          <!-- Condition -->
-          <div>
-            <label class="block text-xs font-semibold text-gray-700 mb-1.5">Condition</label>
-            <select class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-              <option value="" selected>— Normal —</option>
-              <option value="out_of_order">🔴 Out of Order</option>
-              <option value="needs_repair">🟡 Needs Repair</option>
-              <option value="temporarily_leased">🟣 Temporarily Leased to Other Team</option>
-            </select>
-            <p class="text-xs text-gray-400 mt-1">
-              Out of Order and Temporarily Leased clear the current owner and disable reservations.
-              Out of Order also emails all admins.
-            </p>
-          </div>
-
           <div>
             <label class="block text-xs font-semibold text-gray-700 mb-1.5">IDRAC IP</label>
             <input type="text" value="192.168.1.10" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
@@ -425,9 +410,9 @@
             </div>
             <select class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-purple-500">
               <option value="" disabled>Select user…</option>
-              <option>Bob Smith (Networking)</option>
-              <option selected>Carol Martinez (Platform) — pending request</option>
-              <option>Charlie Brown (QA)</option>
+              <option>Bob Smith (ST)</option>
+              <option selected>Carol Martinez (PLATFORM) — pending request</option>
+              <option>Charlie Brown (EVE)</option>
             </select>
             <p class="text-xs text-gray-400 mt-1">Pre-selected based on pending request · change if needed</p>
           </div>
@@ -440,7 +425,7 @@
     </section>
 
     <!-- ─────────────────────────────────────────── -->
-    <!-- 8. ADD CLUSTER / ADD MODEL FORMS            -->
+    <!-- 8. ADD CLUSTER (inline form)                 -->
     <!-- ─────────────────────────────────────────── -->
     <section>
       <h2 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">8 · Add Cluster (inline form)</h2>
@@ -467,10 +452,10 @@
     </section>
 
     <!-- ─────────────────────────────────────────── -->
-    <!-- 9. OWNERSHIP HISTORY MODAL (Admin only)     -->
+    <!-- 9. OWNERSHIP HISTORY MODAL                  -->
     <!-- ─────────────────────────────────────────── -->
     <section>
-      <h2 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">9 · Ownership History (Admin only)</h2>
+      <h2 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">9 · Ownership History</h2>
       <div class="bg-white rounded-2xl shadow-xl border border-gray-200 w-full max-w-sm">
         <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <div>
@@ -554,9 +539,57 @@
       </div>
     </section>
 
+    <!-- 10. COMMENT HISTORY MODAL                   -->
+    <!-- ─────────────────────────────────────────── -->
+    <section>
+      <h2 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">10 · Comment History</h2>
+      <div class="bg-white rounded-2xl shadow-xl border border-gray-200 w-full max-w-sm">
+        <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <div>
+            <h3 class="text-base font-bold text-gray-900">Comment History</h3>
+            <p class="text-xs text-gray-400 mt-0.5">eve-node-01</p>
+          </div>
+          <button class="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <ul class="divide-y divide-gray-100 max-h-96 overflow-y-auto">
+
+          <!-- Entry 1 — newest -->
+          <li class="px-5 py-3.5">
+            <p class="text-sm text-gray-800">feature testing for xyz</p>
+            <p class="text-xs text-gray-400 mt-1">Alice Johnson · 29 Jun 2026, 10:42 AM</p>
+          </li>
+
+          <!-- Entry 2 -->
+          <li class="px-5 py-3.5">
+            <p class="text-sm text-gray-800">regression tests — EVE LTS branch</p>
+            <p class="text-xs text-gray-400 mt-1">Bob Smith · 27 Jun 2026, 3:15 PM</p>
+          </li>
+
+          <!-- Entry 3 -->
+          <li class="px-5 py-3.5">
+            <p class="text-sm text-gray-800">stability soak — leave overnight</p>
+            <p class="text-xs text-gray-400 mt-1">Alice Johnson · 25 Jun 2026, 4:00 PM</p>
+          </li>
+
+          <!-- Entry 4 — oldest in window -->
+          <li class="px-5 py-3.5">
+            <p class="text-sm text-gray-800">initial setup and burn-in</p>
+            <p class="text-xs text-gray-400 mt-1">Alice Johnson · 20 Jun 2026, 9:00 AM</p>
+          </li>
+
+        </ul>
+        <div class="px-5 py-3 border-t border-gray-100 bg-gray-50 rounded-b-2xl">
+          <p class="text-xs text-gray-400">Last 10 entries · newest first · cleared on ownership transfer</p>
+        </div>
+      </div>
+    </section>
+
     <div class="text-center text-xs text-gray-400 pt-4 pb-8">
       Device Portal — Wireframe reference · See also:
       <a href="index.html" class="text-blue-500 hover:underline">Device List</a> ·
+      <a href="states.html" class="text-blue-500 hover:underline">Empty / Loading / Error</a> ·
       <a href="confirm.html" class="text-blue-500 hover:underline">Confirm Reservation</a> ·
       <a href="users.html" class="text-blue-500 hover:underline">Users</a>
     </div>

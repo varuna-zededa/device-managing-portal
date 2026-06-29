@@ -65,16 +65,21 @@ team                 str    nullable; set on reserve
 owner_email          str    nullable; FK → User.email; set on reserve
 lab                  enum   nullable; Bangalore Lab | Bangalore Office Space | Berlin Lab | SanJose Lab | CoreSite Lab | Home Lab
 location_detail      str    nullable; free text — exact spot inside lab (e.g. "Rack-B3, slot 4", "Near the printer")
-condition            enum   nullable (normal); out_of_order | needs_repair | temporarily_leased
+condition            enum   default 'normal' (NOT NULL); normal | out_of_order | needs_repair | temporarily_leased
 idrac_ip             str    nullable
 idrac_username       str    nullable
 idrac_password_enc   bytes  nullable; AES-encrypted
 eve_version          str    nullable; "Unknown" after 404
-ssh_ips              str    nullable; JSON array ["192.168.0.121", "10.244.244.1"]; "Unknown" after 404
+ssh_ips              json   nullable; JSONField — list ["192.168.0.121", "10.244.244.1"]; "Unknown" after 404
 status               str    nullable; "Unknown" after 404
+last_comment_text    str    nullable; denormalized cache of newest DeviceComment (for list view — avoids N+1)
+last_comment_by      str    nullable; author name of newest comment
+last_comment_at      datetime nullable
 created_at           datetime
 updated_at           datetime
 ```
+
+**Derived (not stored):** `is_available = (owner_email IS NULL) AND condition NOT IN (out_of_order, temporarily_leased)`. Used by both the Available/Reserved filter and the status badge — a device with a blocking condition is **never** "Available" even though it has no owner.
 
 **Required on creation:** name, model, cluster_id, cluster_device_name
 **Optional on creation:** team, owner_email, lab, location_detail, idrac_ip, idrac_username, idrac_password
@@ -90,10 +95,12 @@ user_type   enum  admin | team_member
 
 ### Vault  *(per-user ZedCloud bearer tokens)*
 ```
-user_email       str   PK (composite)
-cluster_id       int   PK (composite), FK → Cluster.id
+id               int   PK auto
+user_email       str   FK → User.email
+cluster_id       int   FK → Cluster.id
 bearer_token_enc bytes AES-encrypted ZedCloud API bearer token
 ```
+**Constraint:** `unique_together = (user_email, cluster_id)`. (Django <5.2 has no native composite PK, so use a surrogate `id` + uniqueness constraint rather than a true composite key.)
 
 ### ReservationRequest
 ```
@@ -118,6 +125,7 @@ created_at    datetime
 - Stores the last **10** comments per device (oldest pruned automatically on write)
 - Cleared entirely when ownership changes (reserve, release, force-assign, auto-approve)
 - Any logged-in user can add a comment, not just the owner
+- On write/clear, also update the denormalized `Device.last_comment_*` cache fields so the device list (which shows the newest comment per row) needs no per-row join
 
 ### OwnershipHistory
 ```
@@ -126,7 +134,7 @@ device_id      int      FK → Device.id
 owner_email    str      nullable — null means device became available
 changed_by     str      FK → User.email — who triggered the change
 changed_at     datetime
-reason         enum     reserved | released | force_assigned | request_approved | request_expired
+reason         enum     device_added | reserved | released | force_assigned | request_approved | request_expired | condition_change
 ```
 - Append-only; never deleted
 - Visible to admin only via API and UI
@@ -152,6 +160,10 @@ POST /api/models            any user; body: {name}
 ### Devices
 ```
 GET    /api/devices          ?q=<search>&available=<true|false|all>
+                            &team=<ST|EVE|PLATFORM>&lab=<lab name>
+                            &condition=<normal|out_of_order|needs_repair|temporarily_leased>
+                            q matches: name, model, cluster, owner name, eve_version, comment text
+                            team / lab / condition are exact-match filter selects (combinable)
 POST   /api/devices          add; body: DeviceCreate
 PUT    /api/devices/{id}     update name, cluster_id, cluster_device_name, idrac fields, team
 DELETE /api/devices/{id}     admin only (X-User-Email header)
@@ -333,23 +345,47 @@ Admin UI shows a yellow warning banner if SMTP is not configured.
 
 ## Device Table UI
 
-### Search & Filter
-- **Single search box** — debounced 300ms — matches against: Name, Model, Cluster name, Team, Owner (name), EVE-version (case-insensitive partial match)
-- **Available / Reserved / All** — chip toggle above the table
+> **Viewport scope:** Desktop-first, intentionally. This is an internal lab tool used from workstations; the table is not optimized for phone-width viewports (it horizontal-scrolls below ~`md`). A responsive card-on-mobile layout is explicitly out of scope unless the usage pattern changes.
 
-### Columns (left → right)
+### Search & Filter
+- **Single search box** — debounced 300ms — matches against: Name, Model, Cluster name, Owner (name), EVE-version, **last comment text** (case-insensitive partial match)
+- **Available / Reserved / All** — chip toggle (uses the derived `is_available` rule, so blocking-condition devices never count as Available)
+- **Team / Lab / Condition** — three exact-match filter selects beside the chip toggle; combinable with the search box and each other
+- When the search text matches a field that lives in the collapsed detail (Model, EVE Version, SSH IP), the matching row **auto-expands** so the hit is visible
+
+### Layout — collapsible rows
+The table shows a compact primary row per device; a **chevron** in the first column expands an inline detail panel below it. This keeps the common case scannable while still surfacing the full record on demand.
+
+**Primary row columns (left → right):**
 | Column | Notes |
 |---|---|
-| Name | Sortable |
-| Model | Sortable |
+| (chevron) | Expand / collapse toggle |
+| Name | Sortable; shows a colored condition badge (Out of Order / Needs Repair / Temp. Leased) when condition ≠ normal |
 | Cluster | Short name badge; sortable |
-| Team | Sortable |
-| Owner | Owner avatar + name; pending request notice ("⏱ {Requester} has requested · expires {time}"); inline Reserve / Release buttons (see role rules below) |
-| EVE Version | Sortable |
-| SSH IPs | All IPv4s from last status fetch |
-| Status | Color badge (Online=green, Offline=red, Unknown/blank=gray) + **"Refresh"** text link below |
-| IDRAC | "IDRAC Console ↗" link (opens `http://{idrac_ip}`); "Show IDRAC credentials" link below it; both blank if no `idrac_ip` set |
+| Owner | Owner avatar + name; pending request notice ("⏱ {Requester} requested · {time} left"); inline Reserve / Release buttons (role rules below). Available devices show an "Available" pill + Reserve; blocking-condition devices show "UNAVAILABLE" + disabled Reserve |
+| Status | Color badge (Online=green, Offline=red, Unknown/blank=gray) + **"Refresh"** link below |
+| Comment / Purpose | Newest comment (truncated, 2 lines), from the denormalized cache; "—" if none |
 | Actions | 3-dot dropdown only — contents vary by role (see below) |
+
+**Expanded detail panel (3 columns):**
+| Group | Fields |
+|---|---|
+| Hardware | Model · Team · Lab · Location Detail |
+| Network | EVE Version · SSH IPs · IDRAC (Console ↗ link + Show credentials) |
+| Condition | Inline pill selector (Normal / Out of Order / Needs Repair / Temp. Leased) + Save — **any logged-in user** can change it here (replaces the old Edit-modal dropdown) |
+
+Below the three groups, a single-line bar repeats the newest comment with author + timestamp.
+
+**Sortable columns:** Name, Cluster, Owner. (Model, Team, EVE Version moved into the detail panel and are no longer sortable column headers.)
+
+### List states (wireframed in `states.html`)
+| State | Behavior |
+|---|---|
+| Loading (initial fetch) | Shimmer skeleton rows + "Loading devices…" footer; replaces the table body only |
+| Empty (no devices at all) | Centered illustration + "No devices yet" + primary **Add Device** CTA |
+| No results (search/filter) | Centered "No devices match your filters" naming the active query + **Clear search & filters** button; the search/filter bar stays visible |
+| Load error (HTTP 5xx / network on first load) | Centered error card, reassures data is safe, **Retry** button |
+| Stale (background auto-refresh failed) | **Keep last-known rows**, dim them, and show an amber "Couldn't refresh — showing data from {n} min ago" banner with **Retry now** — never blank a populated table on a failed refresh |
 
 ### Owner Column — Reserve / Release Rules
 | Scenario | Member sees | Admin sees |
@@ -411,7 +447,7 @@ Admin UI shows a yellow warning banner if SMTP is not configured.
 
 ## Device Condition Flags
 
-Any logged-in user can set or clear the condition via the Edit Device dialog.
+Any logged-in user can set or clear the condition via the **inline pill selector** in the table's expanded detail row (Condition group). It is no longer part of the Edit Device dialog.
 
 | Condition | Row highlight | Owner field | Reserve | Release | Email alert |
 |---|---|---|---|---|---|
@@ -425,7 +461,7 @@ Any logged-in user can set or clear the condition via the Edit Device dialog.
 | Condition | Row bg | Left border | Badge |
 |---|---|---|---|
 | out_of_order | `bg-red-50` | `border-l-red-500` | `bg-red-100 text-red-700` |
-| needs_repair | `bg-yellow-50` | `border-l-yellow-400` | `bg-yellow-100 text-yellow-700` |
+| needs_repair | `bg-yellow-50` | `border-l-yellow-400` | `bg-yellow-100 text-yellow-800` |
 | temporarily_leased | `bg-violet-50` | `border-l-violet-400` | `bg-violet-100 text-violet-700` |
 
 **Out of Order — admin email content:**
@@ -679,9 +715,9 @@ device-managing-portal/
 | 11 | 404 from ZedCloud | Clear eve_version, ssh_ips, status, cluster_device_name → "Unknown" |
 | 12 | 403 from ZedCloud | Re-prompt in dialog; do not update Vault |
 | 13 | Auto-refresh | Every 15 minutes; pauses when tab is hidden |
-| 14 | Search UX | Single debounced (300ms) text box; matches all filterable fields |
+| 14 | Search UX | Single debounced (300ms) text box matches Name/Model/Cluster/Owner/EVE-version/Comment; enum fields (Team, Lab, Condition) are separate filter selects |
 | 15 | Availability filter | Available / Reserved / All chip toggle |
-| 16 | Sortable columns | Yes |
+| 16 | Sortable columns | Name, Cluster, Owner (Model/Team/EVE moved into the expand panel) |
 | 17 | Required fields | Name, Model, Cluster, Name-in-Cluster |
 | 18 | Cluster field | Dropdown (short name); backed by Cluster table in DB |
 | 19 | Cluster list management | Any user can add new cluster via UI; stored in DB |
@@ -696,6 +732,26 @@ device-managing-portal/
 | 27 | Admin-only pages | Users page (`/users`) visible in nav only to Admin users |
 | 29 | Device comments | Any user can write; last 10 kept; cleared on ownership transfer |
 | 30 | Ownership history | Append-only; never deleted; admin-only via API and UI |
-| 31 | Device condition | Single enum (out_of_order / needs_repair / temporarily_leased / null); any user can set/clear |
+| 31 | Device condition | Single enum (normal default / out_of_order / needs_repair / temporarily_leased); any user can set/clear via the inline pill selector in the table expand row (not the Edit modal) |
+| 34 | Table layout | Compact primary row + chevron-expand detail panel; secondary fields (Model/Team/Lab/Location/EVE/SSH/IDRAC) live in the expand panel |
+| 35 | Device list filters | Available/Reserved/All chip + Team/Lab/Condition exact-match selects, server-side via query params |
+| 36 | Latest comment in list | Denormalized onto Device (last_comment_text/by/at) to avoid an N+1 join when rendering the table |
+| 37 | "Available" semantics | Derived: owner is null AND condition not in (out_of_order, temporarily_leased) — blocking conditions are never Available |
+| 38 | Viewport scope | Desktop-first; internal workstation tool; responsive/mobile layout out of scope |
+| 39 | List states | Loading skeleton, empty, no-results, load-error, stale-after-refresh — wireframed in states.html |
 | 32 | Lab field | Fixed enum of 6 labs; free-text `location_detail` for exact spot inside lab |
 | 33 | Condition colors | out_of_order=red, needs_repair=yellow, temporarily_leased=violet (blue avoided — conflicts with primary action color) |
+
+---
+
+## Future Ideas
+
+Features not in scope for v1 but worth considering later:
+
+- **Device edit history** — field-level audit log for all changes to device records (admin-only); useful for tracing accidental changes to `cluster_device_name` or IDRAC IP
+- **SSO / LDAP login** — replace the user-picker dropdown with real authentication; the codebase is structured to support this with minimal changes
+- **Mobile / responsive layout** — current design is desktop-only; a read-only mobile view could be useful for quick status checks
+- **Bulk actions** — release or force-assign multiple devices at once (admin)
+- **Device tags** — free-form labels beyond the fixed Team/Lab enums for ad-hoc grouping
+- **SMTP setup wizard** — admin UI to configure and test email settings without touching `.env`
+- **Dark mode** — system-preference-aware theme toggle; Tailwind's `dark:` variant makes this straightforward once the color tokens are mapped
