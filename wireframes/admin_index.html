@@ -11,7 +11,7 @@
 <body class="bg-gray-100 min-h-screen" x-data="{
   userOpen: false,
   bellOpen: false,
-  addDeviceOpen: false,
+
   filter: 'all',
   filterTeam: '',
   filterLab: '',
@@ -117,13 +117,18 @@
         <h1 class="text-2xl font-bold text-gray-900">Devices</h1>
         <p class="text-sm text-gray-500 mt-0.5">7 devices &middot; 3 available</p>
       </div>
-      <button @click="addDeviceOpen = true"
-              class="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg shadow-sm">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-        </svg>
-        Add Device
-      </button>
+      <div class="flex items-center gap-2">
+        <button class="flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+          Export / Import
+        </button>
+        <button class="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg shadow-sm">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+          </svg>
+          Add Device
+        </button>
+      </div>
     </div>
 
     <div class="flex flex-col gap-3 mb-4">
@@ -131,7 +136,7 @@
         <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0"/>
         </svg>
-        <input type="text" placeholder="Search name, model, cluster, owner, EVE version, comment…"
+        <input type="text" placeholder="Search name, model, cluster, owner, EVE version, customer/partner, comment…"
                class="w-full pl-9 pr-4 py-2.5 border border-gray-200 bg-white rounded-lg text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
       </div>
       <div class="flex flex-wrap items-center gap-2">
@@ -154,6 +159,7 @@
           <option value="out_of_order">Out of Order</option>
           <option value="needs_repair">Needs Repair</option>
           <option value="temporarily_leased">Temp. Leased</option>
+          <option value="dedicated">Dedicated</option>
         </select>
       </div>
     </div>
@@ -167,6 +173,7 @@
               <th class="px-3 py-3 font-semibold text-gray-500 cursor-pointer hover:text-gray-800 whitespace-nowrap">Name <span class="text-gray-300 font-normal">↕</span></th>
               <th class="px-3 py-3 font-semibold text-gray-500 whitespace-nowrap">Serial No</th>
               <th class="px-3 py-3 font-semibold text-gray-500 cursor-pointer hover:text-gray-800 whitespace-nowrap">Cluster <span class="text-gray-300 font-normal">↕</span></th>
+              <th class="px-3 py-3 font-semibold text-gray-500 whitespace-nowrap">Name in Cluster</th>
               <th class="px-3 py-3 font-semibold text-gray-500 cursor-pointer hover:text-gray-800 whitespace-nowrap">Owner <span class="text-gray-300 font-normal">↕</span></th>
               <th class="px-3 py-3 font-semibold text-gray-500 whitespace-nowrap">Status</th>
               <th class="px-3 py-3 font-semibold text-gray-500">Comment / Purpose</th>
@@ -175,14 +182,15 @@
           </thead>
           <!-- Row 1: Alice's device — normal condition -->
           <tbody x-data="{ expanded: false, condition: 'normal' }" class="border-b border-gray-100">
-            <tr :class="condition==='out_of_order' ? 'bg-red-50 border-l-4 border-l-red-500' : condition==='needs_repair' ? 'bg-yellow-50 border-l-4 border-l-yellow-400' : condition==='temporarily_leased' ? 'bg-violet-50 border-l-4 border-l-violet-400' : 'hover:bg-gray-50'" class="transition-colors">
+            <tr :class="condition==='out_of_order' ? 'bg-red-50 border-l-4 border-l-red-500' : condition==='needs_repair' ? 'bg-yellow-50 border-l-4 border-l-yellow-400' : condition==='temporarily_leased' ? 'bg-violet-50 border-l-4 border-l-violet-400' : condition==='dedicated' ? 'bg-blue-50 border-l-4 border-l-blue-400' : 'hover:bg-gray-50'" class="transition-colors">
               <td class="pl-3 pr-1 py-3"><button @click="expanded=!expanded" class="text-gray-400 hover:text-gray-600 p-0.5 rounded"><svg :class="expanded?'rotate-90':''" class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg></button></td>
               <td class="px-3 py-3 whitespace-nowrap">
                 <span class="font-semibold text-gray-900">eve-node-01</span>
-                <template x-if="condition!=='normal'"><span :class="condition==='out_of_order'?'bg-red-100 text-red-700':condition==='needs_repair'?'bg-yellow-100 text-yellow-800':'bg-violet-100 text-violet-700'" class="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold" x-text="condition==='out_of_order'?'Out of Order':condition==='needs_repair'?'Needs Repair':'Temp. Leased'"></span></template>
+                <template x-if="condition!=='normal'"><span :class="condition==='out_of_order'?'bg-red-100 text-red-700':condition==='needs_repair'?'bg-yellow-100 text-yellow-800':condition==='dedicated'?'bg-blue-100 text-blue-700':'bg-violet-100 text-violet-700'" class="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold" x-text="condition==='out_of_order'?'Out of Order':condition==='needs_repair'?'Needs Repair':condition==='dedicated'?'Dedicated':'Temp. Leased'"></span></template>
               </td>
               <td class="px-3 py-3 whitespace-nowrap"><span class="text-xs font-mono text-gray-500">J5GD4B2</span></td>
               <td class="px-3 py-3"><span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700">hummingbird</span></td>
+              <td class="px-3 py-3 font-mono text-xs text-gray-700">Andrew-cherry</td>
               <td class="px-3 py-3">
                 <div class="flex items-center gap-1.5"><div class="w-6 h-6 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">A</div><span class="font-medium text-gray-900 text-sm">Alice Johnson</span><span class="text-xs text-blue-500">(you)</span></div>
                 <div class="flex gap-1 mt-1.5"><button class="px-2 py-0.5 text-xs font-medium bg-gray-50 text-gray-600 border border-gray-200 rounded-md hover:bg-gray-100">Release</button><button class="px-2 py-0.5 text-xs font-medium bg-orange-50 text-orange-700 border border-orange-200 rounded-md hover:bg-orange-100">Reserve</button></div>
@@ -191,26 +199,26 @@
               <td class="px-3 py-3 max-w-xs"><span class="text-xs text-gray-600 line-clamp-2">Running stability tests for sprint 42</span></td>
               <td class="px-3 py-3" x-data="{open:false}"><div class="relative inline-block"><button @click="open=!open" @click.outside="open=false" class="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4z"/></svg></button><div x-show="open" x-cloak class="absolute right-0 mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-30 py-1"><button class="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50">Edit</button><button class="w-full text-left px-3 py-2 text-xs text-gray-500 hover:bg-gray-50">Ownership History</button><button class="w-full text-left px-3 py-2 text-xs text-gray-500 hover:bg-gray-50">Comment History</button><button class="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50">Delete</button></div></div></td>
             </tr>
-            <tr x-show="expanded" x-cloak><td colspan="8" class="p-0 border-t border-gray-100">
-              <div class="pl-11 pr-6 pt-4 pb-3 grid grid-cols-3 gap-8 bg-gray-50">
-                <div><p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2.5">Info</p><dl class="space-y-1.5 text-xs"><div class="flex gap-2"><dt class="text-gray-400 w-16 flex-shrink-0">Model</dt><dd class="text-gray-700">OptiPlex 7040</dd></div><div class="flex gap-2"><dt class="text-gray-400 w-16 flex-shrink-0">Team</dt><dd class="text-gray-700">PLATFORM</dd></div><div class="flex gap-2"><dt class="text-gray-400 w-16 flex-shrink-0">Lab</dt><dd class="text-gray-700">Bangalore Lab</dd></div><div class="flex gap-2"><dt class="text-gray-400 w-16 flex-shrink-0">Location</dt><dd class="text-gray-700">Rack 3 · Shelf 2</dd></div><div class="flex gap-2"><dt class="text-gray-400 w-20 flex-shrink-0">EVE Version</dt><dd class="text-gray-700 font-mono break-all">0.0.0-eve-k-size-reporting-e30b9f85</dd></div></dl></div>
-                <div><p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2.5">Connectivity</p><dl class="space-y-1.5 text-xs"><div class="flex gap-2"><dt class="text-gray-400 w-20 flex-shrink-0">SSH IPs</dt><dd class="text-gray-700 font-mono">192.168.0.121<br>10.244.244.1</dd></div><div class="flex gap-2"><dt class="text-gray-400 w-20 flex-shrink-0">IDRAC</dt><dd><a href="#" class="text-blue-600 hover:underline text-xs">Console ↗</a><span class="mx-1.5 text-gray-300">·</span><a href="#" class="text-gray-400 hover:underline text-xs">Credentials</a></dd></div></dl></div>
-                
-                <div><p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2.5">Description</p><p class="text-xs text-gray-700 leading-relaxed">32GB RAM, dual NIC — primary EVE stability test node</p></div>
+            <tr x-show="expanded" x-cloak><td colspan="9" class="p-0 border-t border-gray-100">
+              <div class="pl-11 pr-6 py-4 grid grid-cols-3 gap-4 bg-gray-50">
+                <div class="rounded-lg border border-gray-200 bg-white overflow-hidden text-xs"><div class="px-3 py-1.5 bg-gray-50 border-b border-gray-100"><p class="font-semibold text-gray-400 uppercase tracking-wider">Identity</p></div><div class="px-3 divide-y divide-gray-100"><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Serial</span><span class="font-mono text-gray-700">J5GD4B2</span></div><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Model</span><span class="text-gray-700 text-right">OptiPlex 7040</span></div><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Customer / Partner</span><span class="text-gray-400 italic">—</span></div></div><div class="px-3 py-1.5 bg-gray-50 border-y border-gray-100"><p class="font-semibold text-gray-400 uppercase tracking-wider">Placement</p></div><div class="px-3 divide-y divide-gray-100"><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Team</span><span class="text-gray-700 text-right">PLATFORM</span></div><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Lab</span><span class="text-gray-700 text-right">Bangalore Lab</span></div><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Location</span><span class="text-gray-700 text-right">Rack 3 · Shelf 2</span></div></div></div>
+                <div class="rounded-lg border border-gray-200 bg-white overflow-hidden text-xs"><div class="px-3 py-1.5 bg-gray-50 border-b border-gray-100"><p class="font-semibold text-gray-400 uppercase tracking-wider">ZedCloud Status</p></div><div class="px-3 divide-y divide-gray-100"><div class="flex items-start justify-between py-2 gap-3"><span class="text-gray-400 flex-shrink-0">EVE Version</span><span class="font-mono text-gray-700 text-right break-all">0.0.0-eve-k-size-reporting-e30b9f85</span></div><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Last Refreshed</span><span class="text-gray-500">5 min ago</span></div></div><div class="px-3 py-1.5 bg-gray-50 border-y border-gray-100"><p class="font-semibold text-gray-400 uppercase tracking-wider">Connectivity</p></div><div class="px-3 divide-y divide-gray-100"><div class="flex items-center justify-between py-2 gap-2"><span class="font-mono text-gray-500 flex-shrink-0">eth0</span><span class="font-mono text-gray-700 text-right">aa:bb:cc:dd:ee:ff · 192.168.0.121</span></div><div class="flex items-center justify-between py-2 gap-2"><span class="font-mono text-gray-500 flex-shrink-0">eth1</span><span class="font-mono text-gray-700 text-right">00:11:22:33:44:55 · 10.244.244.1</span></div></div></div>
+                <div class="rounded-lg border border-gray-200 bg-white overflow-hidden text-xs"><div class="px-3 py-1.5 bg-gray-50 border-b border-gray-100"><p class="font-semibold text-gray-400 uppercase tracking-wider">IDRAC</p></div><div class="px-3 divide-y divide-gray-100"><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Console</span><a href="#" class="text-blue-600 hover:underline">Open ↗</a></div><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Credentials</span><a href="#" class="text-gray-500 hover:underline">View</a></div></div><div class="px-3 py-1.5 bg-gray-50 border-y border-gray-100"><p class="font-semibold text-gray-400 uppercase tracking-wider">Notes</p></div><div class="px-3 py-2.5"><p class="text-gray-700 leading-relaxed">32GB RAM, dual NIC — primary EVE stability test node</p></div></div>
               </div>
             </td></tr>
           </tbody>
 
           <!-- Row 2: Bob's device — normal condition -->
           <tbody x-data="{ expanded: false, condition: 'normal' }" class="border-b border-gray-100">
-            <tr :class="condition==='out_of_order'?'bg-red-50 border-l-4 border-l-red-500':condition==='needs_repair'?'bg-yellow-50 border-l-4 border-l-yellow-400':condition==='temporarily_leased'?'bg-violet-50 border-l-4 border-l-violet-400':'hover:bg-gray-50'" class="transition-colors">
+            <tr :class="condition==='out_of_order'?'bg-red-50 border-l-4 border-l-red-500':condition==='needs_repair'?'bg-yellow-50 border-l-4 border-l-yellow-400':condition==='temporarily_leased'?'bg-violet-50 border-l-4 border-l-violet-400':condition==='dedicated'?'bg-blue-50 border-l-4 border-l-blue-400':'hover:bg-gray-50'" class="transition-colors">
               <td class="pl-3 pr-1 py-3"><button @click="expanded=!expanded" class="text-gray-400 hover:text-gray-600 p-0.5 rounded"><svg :class="expanded?'rotate-90':''" class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg></button></td>
               <td class="px-3 py-3 whitespace-nowrap">
                 <span class="font-semibold text-gray-900">eve-node-02</span>
-                <template x-if="condition!=='normal'"><span :class="condition==='out_of_order'?'bg-red-100 text-red-700':condition==='needs_repair'?'bg-yellow-100 text-yellow-800':'bg-violet-100 text-violet-700'" class="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold" x-text="condition==='out_of_order'?'Out of Order':condition==='needs_repair'?'Needs Repair':'Temp. Leased'"></span></template>
+                <template x-if="condition!=='normal'"><span :class="condition==='out_of_order'?'bg-red-100 text-red-700':condition==='needs_repair'?'bg-yellow-100 text-yellow-800':condition==='dedicated'?'bg-blue-100 text-blue-700':'bg-violet-100 text-violet-700'" class="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold" x-text="condition==='out_of_order'?'Out of Order':condition==='needs_repair'?'Needs Repair':condition==='dedicated'?'Dedicated':'Temp. Leased'"></span></template>
               </td>
               <td class="px-3 py-3 whitespace-nowrap"><span class="text-xs font-mono text-gray-500">H7RF9K4</span></td>
               <td class="px-3 py-3"><span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700">alpha</span></td>
+              <td class="px-3 py-3 font-mono text-xs text-gray-700">Andrew-cherry</td>
               <td class="px-3 py-3">
                 <div class="flex items-center gap-1.5"><div class="w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">B</div><span class="font-medium text-gray-900 text-sm">Bob Smith</span></div>
                 <div class="flex gap-1 mt-1.5"><button class="px-2 py-0.5 text-xs font-medium bg-gray-50 text-gray-600 border border-gray-200 rounded-md hover:bg-gray-100">Release</button><button class="px-2 py-0.5 text-xs font-medium bg-orange-50 text-orange-700 border border-orange-200 rounded-md hover:bg-orange-100">Reserve</button></div>
@@ -219,26 +227,26 @@
               <td class="px-3 py-3 max-w-xs"><span class="text-xs text-gray-400 italic">—</span></td>
               <td class="px-3 py-3" x-data="{open:false}"><div class="relative inline-block"><button @click="open=!open" @click.outside="open=false" class="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4z"/></svg></button><div x-show="open" x-cloak class="absolute right-0 mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-30 py-1"><button class="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50">Edit</button><button class="w-full text-left px-3 py-2 text-xs text-indigo-600 hover:bg-indigo-50">Force Assign</button><button class="w-full text-left px-3 py-2 text-xs text-gray-500 hover:bg-gray-50">Ownership History</button><button class="w-full text-left px-3 py-2 text-xs text-gray-500 hover:bg-gray-50">Comment History</button><button class="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50">Delete</button></div></div></td>
             </tr>
-            <tr x-show="expanded" x-cloak><td colspan="8" class="p-0 border-t border-gray-100">
-              <div class="pl-11 pr-6 pt-4 pb-3 grid grid-cols-3 gap-8 bg-gray-50">
-                <div><p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2.5">Info</p><dl class="space-y-1.5 text-xs"><div class="flex gap-2"><dt class="text-gray-400 w-16 flex-shrink-0">Model</dt><dd class="text-gray-700">PowerEdge R740</dd></div><div class="flex gap-2"><dt class="text-gray-400 w-16 flex-shrink-0">Team</dt><dd class="text-gray-700">ST</dd></div><div class="flex gap-2"><dt class="text-gray-400 w-16 flex-shrink-0">Lab</dt><dd class="text-gray-400 italic">—</dd></div><div class="flex gap-2"><dt class="text-gray-400 w-16 flex-shrink-0">Location</dt><dd class="text-gray-400 italic">—</dd></div><div class="flex gap-2"><dt class="text-gray-400 w-20 flex-shrink-0">EVE Version</dt><dd class="text-gray-700 font-mono">0.0.0-master-abc12345</dd></div></dl></div>
-                <div><p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2.5">Connectivity</p><dl class="space-y-1.5 text-xs"><div class="flex gap-2"><dt class="text-gray-400 w-20 flex-shrink-0">SSH IPs</dt><dd class="text-gray-400 italic">—</dd></div><div class="flex gap-2"><dt class="text-gray-400 w-20 flex-shrink-0">IDRAC</dt><dd><a href="#" class="text-blue-600 hover:underline text-xs">Console ↗</a><span class="mx-1.5 text-gray-300">·</span><a href="#" class="text-gray-400 hover:underline text-xs">Credentials</a></dd></div></dl></div>
-                
-                <div><p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2.5">Description</p><p class="text-xs text-gray-400 italic">—</p></div>
+            <tr x-show="expanded" x-cloak><td colspan="9" class="p-0 border-t border-gray-100">
+              <div class="pl-11 pr-6 py-4 grid grid-cols-3 gap-4 bg-gray-50">
+                <div class="rounded-lg border border-gray-200 bg-white overflow-hidden text-xs"><div class="px-3 py-1.5 bg-gray-50 border-b border-gray-100"><p class="font-semibold text-gray-400 uppercase tracking-wider">Identity</p></div><div class="px-3 divide-y divide-gray-100"><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Serial</span><span class="font-mono text-gray-700">H7RF9K4</span></div><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Model</span><span class="text-gray-700 text-right">PowerEdge R740</span></div><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Customer / Partner</span><span class="text-gray-400 italic">—</span></div></div><div class="px-3 py-1.5 bg-gray-50 border-y border-gray-100"><p class="font-semibold text-gray-400 uppercase tracking-wider">Placement</p></div><div class="px-3 divide-y divide-gray-100"><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Team</span><span class="text-gray-700 text-right">ST</span></div><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Lab</span><span class="text-gray-400 italic">—</span></div><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Location</span><span class="text-gray-400 italic">—</span></div></div></div>
+                <div class="rounded-lg border border-gray-200 bg-white overflow-hidden text-xs"><div class="px-3 py-1.5 bg-gray-50 border-b border-gray-100"><p class="font-semibold text-gray-400 uppercase tracking-wider">ZedCloud Status</p></div><div class="px-3 divide-y divide-gray-100"><div class="flex items-start justify-between py-2 gap-3"><span class="text-gray-400 flex-shrink-0">EVE Version</span><span class="font-mono text-gray-700 text-right break-all">0.0.0-master-abc12345</span></div><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Last Refreshed</span><span class="text-gray-500">2 min ago</span></div></div><div class="px-3 py-1.5 bg-gray-50 border-y border-gray-100"><p class="font-semibold text-gray-400 uppercase tracking-wider">Connectivity</p></div><div class="px-3 divide-y divide-gray-100"><div class="py-2"><span class="text-gray-400 italic">—</span></div></div></div>
+                <div class="rounded-lg border border-gray-200 bg-white overflow-hidden text-xs"><div class="px-3 py-1.5 bg-gray-50 border-b border-gray-100"><p class="font-semibold text-gray-400 uppercase tracking-wider">IDRAC</p></div><div class="px-3 divide-y divide-gray-100"><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Console</span><a href="#" class="text-blue-600 hover:underline">Open ↗</a></div><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Credentials</span><a href="#" class="text-gray-500 hover:underline">View</a></div></div><div class="px-3 py-1.5 bg-gray-50 border-y border-gray-100"><p class="font-semibold text-gray-400 uppercase tracking-wider">Notes</p></div><div class="px-3 py-2.5"><p class="text-gray-400 italic">—</p></div></div>
               </div>
             </td></tr>
           </tbody>
 
           <!-- Row 3: Alice's device — pending request from Carol -->
           <tbody x-data="{ expanded: false, condition: 'normal', pending: true }" class="border-b border-gray-100">
-            <tr :class="pending&&condition==='normal'?'bg-amber-50/60 border-l-4 border-l-amber-400':condition==='out_of_order'?'bg-red-50 border-l-4 border-l-red-500':condition==='needs_repair'?'bg-yellow-50 border-l-4 border-l-yellow-400':condition==='temporarily_leased'?'bg-violet-50 border-l-4 border-l-violet-400':'hover:bg-gray-50'" class="transition-colors">
+            <tr :class="pending&&condition==='normal'?'bg-amber-50/60 border-l-4 border-l-amber-400':condition==='out_of_order'?'bg-red-50 border-l-4 border-l-red-500':condition==='needs_repair'?'bg-yellow-50 border-l-4 border-l-yellow-400':condition==='temporarily_leased'?'bg-violet-50 border-l-4 border-l-violet-400':condition==='dedicated'?'bg-blue-50 border-l-4 border-l-blue-400':'hover:bg-gray-50'" class="transition-colors">
               <td class="pl-3 pr-1 py-3"><button @click="expanded=!expanded" class="text-gray-400 hover:text-gray-600 p-0.5 rounded"><svg :class="expanded?'rotate-90':''" class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg></button></td>
               <td class="px-3 py-3 whitespace-nowrap">
                 <span class="font-semibold text-gray-900">Andrew-cherry</span>
-                <template x-if="condition!=='normal'"><span :class="condition==='out_of_order'?'bg-red-100 text-red-700':condition==='needs_repair'?'bg-yellow-100 text-yellow-800':'bg-violet-100 text-violet-700'" class="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold" x-text="condition==='out_of_order'?'Out of Order':condition==='needs_repair'?'Needs Repair':'Temp. Leased'"></span></template>
+                <template x-if="condition!=='normal'"><span :class="condition==='out_of_order'?'bg-red-100 text-red-700':condition==='needs_repair'?'bg-yellow-100 text-yellow-800':condition==='dedicated'?'bg-blue-100 text-blue-700':'bg-violet-100 text-violet-700'" class="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold" x-text="condition==='out_of_order'?'Out of Order':condition==='needs_repair'?'Needs Repair':condition==='dedicated'?'Dedicated':'Temp. Leased'"></span></template>
               </td>
               <td class="px-3 py-3 whitespace-nowrap"><span class="text-xs font-mono text-gray-500">B3NM6P1</span></td>
               <td class="px-3 py-3"><span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700">hummingbird</span></td>
+              <td class="px-3 py-3 font-mono text-xs text-gray-700">Andrew-cherry</td>
               <td class="px-3 py-3">
                 <div class="flex items-center gap-1.5"><div class="w-6 h-6 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">A</div><span class="font-medium text-gray-900 text-sm">Alice Johnson</span><span class="text-xs text-blue-500">(you)</span></div>
                 <p class="text-xs text-amber-600 mt-1 flex items-center gap-1"><svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0"/></svg>Carol Martinez requested · 2h 13m left</p>
@@ -248,26 +256,26 @@
               <td class="px-3 py-3 max-w-xs"><span class="text-xs text-gray-400 italic">—</span></td>
               <td class="px-3 py-3" x-data="{open:false}"><div class="relative inline-block"><button @click="open=!open" @click.outside="open=false" class="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4z"/></svg></button><div x-show="open" x-cloak class="absolute right-0 mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-30 py-1"><button class="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50">Edit</button><button class="w-full text-left px-3 py-2 text-xs text-indigo-600 hover:bg-indigo-50">Force Assign</button><button class="w-full text-left px-3 py-2 text-xs text-gray-500 hover:bg-gray-50">Ownership History</button><button class="w-full text-left px-3 py-2 text-xs text-gray-500 hover:bg-gray-50">Comment History</button><button class="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50">Delete</button></div></div></td>
             </tr>
-            <tr x-show="expanded" x-cloak><td colspan="8" class="p-0 border-t border-gray-100">
-              <div class="pl-11 pr-6 pt-4 pb-3 grid grid-cols-3 gap-8 bg-gray-50">
-                <div><p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2.5">Info</p><dl class="space-y-1.5 text-xs"><div class="flex gap-2"><dt class="text-gray-400 w-16 flex-shrink-0">Model</dt><dd class="text-gray-700">OptiPlex 7040</dd></div><div class="flex gap-2"><dt class="text-gray-400 w-16 flex-shrink-0">Team</dt><dd class="text-gray-700">PLATFORM</dd></div><div class="flex gap-2"><dt class="text-gray-400 w-16 flex-shrink-0">Lab</dt><dd class="text-gray-400 italic">—</dd></div><div class="flex gap-2"><dt class="text-gray-400 w-16 flex-shrink-0">Location</dt><dd class="text-gray-400 italic">—</dd></div><div class="flex gap-2"><dt class="text-gray-400 w-20 flex-shrink-0">EVE Version</dt><dd class="text-gray-700 font-mono break-all">0.0.0-eve-k-size-reporting-e30b9f85</dd></div></dl></div>
-                <div><p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2.5">Connectivity</p><dl class="space-y-1.5 text-xs"><div class="flex gap-2"><dt class="text-gray-400 w-20 flex-shrink-0">SSH IPs</dt><dd class="text-gray-700 font-mono">192.168.0.121<br>10.244.244.1</dd></div><div class="flex gap-2"><dt class="text-gray-400 w-20 flex-shrink-0">IDRAC</dt><dd class="text-gray-400 italic">—</dd></div></dl></div>
-                
-                <div><p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2.5">Description</p><p class="text-xs text-gray-400 italic">—</p></div>
+            <tr x-show="expanded" x-cloak><td colspan="9" class="p-0 border-t border-gray-100">
+              <div class="pl-11 pr-6 py-4 grid grid-cols-3 gap-4 bg-gray-50">
+                <div class="rounded-lg border border-gray-200 bg-white overflow-hidden text-xs"><div class="px-3 py-1.5 bg-gray-50 border-b border-gray-100"><p class="font-semibold text-gray-400 uppercase tracking-wider">Identity</p></div><div class="px-3 divide-y divide-gray-100"><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Serial</span><span class="font-mono text-gray-700">B3NM6P1</span></div><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Model</span><span class="text-gray-700 text-right">OptiPlex 7040</span></div><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Customer / Partner</span><span class="text-gray-400 italic">—</span></div></div><div class="px-3 py-1.5 bg-gray-50 border-y border-gray-100"><p class="font-semibold text-gray-400 uppercase tracking-wider">Placement</p></div><div class="px-3 divide-y divide-gray-100"><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Team</span><span class="text-gray-700 text-right">PLATFORM</span></div><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Lab</span><span class="text-gray-400 italic">—</span></div><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Location</span><span class="text-gray-400 italic">—</span></div></div></div>
+                <div class="rounded-lg border border-gray-200 bg-white overflow-hidden text-xs"><div class="px-3 py-1.5 bg-gray-50 border-b border-gray-100"><p class="font-semibold text-gray-400 uppercase tracking-wider">ZedCloud Status</p></div><div class="px-3 divide-y divide-gray-100"><div class="flex items-start justify-between py-2 gap-3"><span class="text-gray-400 flex-shrink-0">EVE Version</span><span class="font-mono text-gray-700 text-right break-all">0.0.0-eve-k-size-reporting-e30b9f85</span></div><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Last Refreshed</span><span class="text-gray-500">5 min ago</span></div></div><div class="px-3 py-1.5 bg-gray-50 border-y border-gray-100"><p class="font-semibold text-gray-400 uppercase tracking-wider">Connectivity</p></div><div class="px-3 divide-y divide-gray-100"><div class="flex items-center justify-between py-2 gap-2"><span class="font-mono text-gray-500 flex-shrink-0">eth0</span><span class="font-mono text-gray-700 text-right">aa:bb:cc:dd:ee:ff · 192.168.0.121</span></div><div class="flex items-center justify-between py-2 gap-2"><span class="font-mono text-gray-500 flex-shrink-0">eth1</span><span class="font-mono text-gray-700 text-right">00:11:22:33:44:55 · 10.244.244.1</span></div></div></div>
+                <div class="rounded-lg border border-gray-200 bg-white overflow-hidden text-xs"><div class="px-3 py-1.5 bg-gray-50 border-b border-gray-100"><p class="font-semibold text-gray-400 uppercase tracking-wider">IDRAC</p></div><div class="px-3 divide-y divide-gray-100"><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Console</span><span class="text-gray-400 italic">—</span></div><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Credentials</span><span class="text-gray-400 italic">—</span></div></div><div class="px-3 py-1.5 bg-gray-50 border-y border-gray-100"><p class="font-semibold text-gray-400 uppercase tracking-wider">Notes</p></div><div class="px-3 py-2.5"><p class="text-gray-400 italic">—</p></div></div>
               </div>
             </td></tr>
           </tbody>
 
           <!-- Row 4: Charlie's device — normal condition -->
           <tbody x-data="{ expanded: false, condition: 'normal' }" class="border-b border-gray-100">
-            <tr :class="condition==='out_of_order'?'bg-red-50 border-l-4 border-l-red-500':condition==='needs_repair'?'bg-yellow-50 border-l-4 border-l-yellow-400':condition==='temporarily_leased'?'bg-violet-50 border-l-4 border-l-violet-400':'hover:bg-gray-50'" class="transition-colors">
+            <tr :class="condition==='out_of_order'?'bg-red-50 border-l-4 border-l-red-500':condition==='needs_repair'?'bg-yellow-50 border-l-4 border-l-yellow-400':condition==='temporarily_leased'?'bg-violet-50 border-l-4 border-l-violet-400':condition==='dedicated'?'bg-blue-50 border-l-4 border-l-blue-400':'hover:bg-gray-50'" class="transition-colors">
               <td class="pl-3 pr-1 py-3"><button @click="expanded=!expanded" class="text-gray-400 hover:text-gray-600 p-0.5 rounded"><svg :class="expanded?'rotate-90':''" class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg></button></td>
               <td class="px-3 py-3 whitespace-nowrap">
                 <span class="font-semibold text-gray-900">thor-node-01</span>
-                <template x-if="condition!=='normal'"><span :class="condition==='out_of_order'?'bg-red-100 text-red-700':condition==='needs_repair'?'bg-yellow-100 text-yellow-800':'bg-violet-100 text-violet-700'" class="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold" x-text="condition==='out_of_order'?'Out of Order':condition==='needs_repair'?'Needs Repair':'Temp. Leased'"></span></template>
+                <template x-if="condition!=='normal'"><span :class="condition==='out_of_order'?'bg-red-100 text-red-700':condition==='needs_repair'?'bg-yellow-100 text-yellow-800':condition==='dedicated'?'bg-blue-100 text-blue-700':'bg-violet-100 text-violet-700'" class="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold" x-text="condition==='out_of_order'?'Out of Order':condition==='needs_repair'?'Needs Repair':condition==='dedicated'?'Dedicated':'Temp. Leased'"></span></template>
               </td>
               <td class="px-3 py-3 whitespace-nowrap"><span class="text-xs font-mono text-gray-500">C9KT2W8</span></td>
               <td class="px-3 py-3"><span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700">thor</span></td>
+              <td class="px-3 py-3 font-mono text-xs text-gray-700">Andrew-cherry</td>
               <td class="px-3 py-3">
                 <div class="flex items-center gap-1.5"><div class="w-6 h-6 rounded-full bg-violet-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">C</div><span class="font-medium text-gray-900 text-sm">Charlie Brown</span></div>
                 <div class="flex gap-1 mt-1.5"><button class="px-2 py-0.5 text-xs font-medium bg-gray-50 text-gray-600 border border-gray-200 rounded-md hover:bg-gray-100">Release</button><button class="px-2 py-0.5 text-xs font-medium bg-orange-50 text-orange-700 border border-orange-200 rounded-md hover:bg-orange-100">Reserve</button></div>
@@ -276,87 +284,112 @@
               <td class="px-3 py-3 max-w-xs"><span class="text-xs text-gray-600 line-clamp-2">EVE LTS regression suite</span></td>
               <td class="px-3 py-3" x-data="{open:false}"><div class="relative inline-block"><button @click="open=!open" @click.outside="open=false" class="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4z"/></svg></button><div x-show="open" x-cloak class="absolute right-0 mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-30 py-1"><button class="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50">Edit</button><button class="w-full text-left px-3 py-2 text-xs text-indigo-600 hover:bg-indigo-50">Force Assign</button><button class="w-full text-left px-3 py-2 text-xs text-gray-500 hover:bg-gray-50">Ownership History</button><button class="w-full text-left px-3 py-2 text-xs text-gray-500 hover:bg-gray-50">Comment History</button><button class="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50">Delete</button></div></div></td>
             </tr>
-            <tr x-show="expanded" x-cloak><td colspan="8" class="p-0 border-t border-gray-100">
-              <div class="pl-11 pr-6 pt-4 pb-3 grid grid-cols-3 gap-8 bg-gray-50">
-                <div><p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2.5">Info</p><dl class="space-y-1.5 text-xs"><div class="flex gap-2"><dt class="text-gray-400 w-16 flex-shrink-0">Model</dt><dd class="text-gray-700">PowerEdge R640</dd></div><div class="flex gap-2"><dt class="text-gray-400 w-16 flex-shrink-0">Team</dt><dd class="text-gray-700">EVE</dd></div><div class="flex gap-2"><dt class="text-gray-400 w-16 flex-shrink-0">Lab</dt><dd class="text-gray-700">Berlin Lab</dd></div><div class="flex gap-2"><dt class="text-gray-400 w-16 flex-shrink-0">Location</dt><dd class="text-gray-700">Rack 7</dd></div><div class="flex gap-2"><dt class="text-gray-400 w-20 flex-shrink-0">EVE Version</dt><dd class="text-gray-700 font-mono">9.9.9-lts-k-amd64</dd></div></dl></div>
-                <div><p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2.5">Connectivity</p><dl class="space-y-1.5 text-xs"><div class="flex gap-2"><dt class="text-gray-400 w-20 flex-shrink-0">SSH IPs</dt><dd class="text-gray-700 font-mono">10.0.0.50</dd></div><div class="flex gap-2"><dt class="text-gray-400 w-20 flex-shrink-0">IDRAC</dt><dd><a href="#" class="text-blue-600 hover:underline text-xs">Console ↗</a><span class="mx-1.5 text-gray-300">·</span><a href="#" class="text-gray-400 hover:underline text-xs">Credentials</a></dd></div></dl></div>
-                
-                <div><p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2.5">Description</p><p class="text-xs text-gray-700 leading-relaxed">64GB RAM, 10GbE — EVE LTS regression suite</p></div>
+            <tr x-show="expanded" x-cloak><td colspan="9" class="p-0 border-t border-gray-100">
+              <div class="pl-11 pr-6 py-4 grid grid-cols-3 gap-4 bg-gray-50">
+                <div class="rounded-lg border border-gray-200 bg-white overflow-hidden text-xs"><div class="px-3 py-1.5 bg-gray-50 border-b border-gray-100"><p class="font-semibold text-gray-400 uppercase tracking-wider">Identity</p></div><div class="px-3 divide-y divide-gray-100"><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Serial</span><span class="font-mono text-gray-700">C9KT2W8</span></div><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Model</span><span class="text-gray-700 text-right">PowerEdge R640</span></div><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Customer / Partner</span><span class="text-gray-400 italic">—</span></div></div><div class="px-3 py-1.5 bg-gray-50 border-y border-gray-100"><p class="font-semibold text-gray-400 uppercase tracking-wider">Placement</p></div><div class="px-3 divide-y divide-gray-100"><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Team</span><span class="text-gray-700 text-right">EVE</span></div><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Lab</span><span class="text-gray-700 text-right">Berlin Lab</span></div><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Location</span><span class="text-gray-700 text-right">Rack 7</span></div></div></div>
+                <div class="rounded-lg border border-gray-200 bg-white overflow-hidden text-xs"><div class="px-3 py-1.5 bg-gray-50 border-b border-gray-100"><p class="font-semibold text-gray-400 uppercase tracking-wider">ZedCloud Status</p></div><div class="px-3 divide-y divide-gray-100"><div class="flex items-start justify-between py-2 gap-3"><span class="text-gray-400 flex-shrink-0">EVE Version</span><span class="font-mono text-gray-700 text-right break-all">9.9.9-lts-k-amd64</span></div><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Last Refreshed</span><span class="text-gray-500">5 min ago</span></div></div><div class="px-3 py-1.5 bg-gray-50 border-y border-gray-100"><p class="font-semibold text-gray-400 uppercase tracking-wider">Connectivity</p></div><div class="px-3 divide-y divide-gray-100"><div class="flex items-center justify-between py-2 gap-2"><span class="font-mono text-gray-500 flex-shrink-0">eth0</span><span class="font-mono text-gray-700 text-right">aa:bb:cc:dd:ee:ff · 10.0.0.50</span></div></div></div>
+                <div class="rounded-lg border border-gray-200 bg-white overflow-hidden text-xs"><div class="px-3 py-1.5 bg-gray-50 border-b border-gray-100"><p class="font-semibold text-gray-400 uppercase tracking-wider">IDRAC</p></div><div class="px-3 divide-y divide-gray-100"><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Console</span><a href="#" class="text-blue-600 hover:underline">Open ↗</a></div><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Credentials</span><a href="#" class="text-gray-500 hover:underline">View</a></div></div><div class="px-3 py-1.5 bg-gray-50 border-y border-gray-100"><p class="font-semibold text-gray-400 uppercase tracking-wider">Notes</p></div><div class="px-3 py-2.5"><p class="text-gray-700 leading-relaxed">64GB RAM, 10GbE — EVE LTS regression suite</p></div></div>
               </div>
             </td></tr>
           </tbody>
 
           <!-- Row 5: Out of Order -->
           <tbody x-data="{ expanded: false, condition: 'out_of_order' }" class="border-b border-gray-100">
-            <tr :class="condition==='out_of_order'?'bg-red-50 border-l-4 border-l-red-500':condition==='needs_repair'?'bg-yellow-50 border-l-4 border-l-yellow-400':condition==='temporarily_leased'?'bg-violet-50 border-l-4 border-l-violet-400':'hover:bg-gray-50'" class="transition-colors">
+            <tr :class="condition==='out_of_order'?'bg-red-50 border-l-4 border-l-red-500':condition==='needs_repair'?'bg-yellow-50 border-l-4 border-l-yellow-400':condition==='temporarily_leased'?'bg-violet-50 border-l-4 border-l-violet-400':condition==='dedicated'?'bg-blue-50 border-l-4 border-l-blue-400':'hover:bg-gray-50'" class="transition-colors">
               <td class="pl-3 pr-1 py-3"><button @click="expanded=!expanded" class="text-gray-400 hover:text-gray-600 p-0.5 rounded"><svg :class="expanded?'rotate-90':''" class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg></button></td>
               <td class="px-3 py-3 whitespace-nowrap">
                 <span class="font-semibold text-gray-900">blr-nuc-01</span>
-                <template x-if="condition!=='normal'"><span :class="condition==='out_of_order'?'bg-red-100 text-red-700':condition==='needs_repair'?'bg-yellow-100 text-yellow-800':'bg-violet-100 text-violet-700'" class="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold" x-text="condition==='out_of_order'?'Out of Order':condition==='needs_repair'?'Needs Repair':'Temp. Leased'"></span></template>
+                <template x-if="condition!=='normal'"><span :class="condition==='out_of_order'?'bg-red-100 text-red-700':condition==='needs_repair'?'bg-yellow-100 text-yellow-800':condition==='dedicated'?'bg-blue-100 text-blue-700':'bg-violet-100 text-violet-700'" class="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold" x-text="condition==='out_of_order'?'Out of Order':condition==='needs_repair'?'Needs Repair':condition==='dedicated'?'Dedicated':'Temp. Leased'"></span></template>
               </td>
               <td class="px-3 py-3 whitespace-nowrap"><span class="text-xs font-mono text-gray-500">BTBT123456</span></td>
               <td class="px-3 py-3"><span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700">hummingbird</span></td>
+              <td class="px-3 py-3 font-mono text-xs text-gray-400 italic">—</td>
               <td class="px-3 py-3"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">UNAVAILABLE</span><br><button disabled class="mt-1.5 px-2 py-0.5 text-xs font-semibold bg-gray-200 text-gray-400 rounded-md cursor-not-allowed">Reserve</button></td>
               <td class="px-3 py-3"><span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-500"><span class="w-1.5 h-1.5 rounded-full bg-gray-400"></span>Unknown</span><br><button class="mt-1.5 text-xs text-blue-500 hover:underline">Refresh</button></td>
               <td class="px-3 py-3 max-w-xs"><span class="text-xs text-gray-600 line-clamp-2">Sent to repair shop</span></td>
               <td class="px-3 py-3" x-data="{open:false}"><div class="relative inline-block"><button @click="open=!open" @click.outside="open=false" class="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4z"/></svg></button><div x-show="open" x-cloak class="absolute right-0 mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-30 py-1"><button class="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50">Edit</button><button class="w-full text-left px-3 py-2 text-xs text-gray-500 hover:bg-gray-50">Ownership History</button><button class="w-full text-left px-3 py-2 text-xs text-gray-500 hover:bg-gray-50">Comment History</button><button class="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50">Delete</button></div></div></td>
             </tr>
-            <tr x-show="expanded" x-cloak><td colspan="8" class="p-0 border-t border-gray-100">
-              <div class="pl-11 pr-6 pt-4 pb-3 grid grid-cols-3 gap-8 bg-gray-50">
-                <div><p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2.5">Info</p><dl class="space-y-1.5 text-xs"><div class="flex gap-2"><dt class="text-gray-400 w-16 flex-shrink-0">Model</dt><dd class="text-gray-700">NUC11TNBi7</dd></div><div class="flex gap-2"><dt class="text-gray-400 w-16 flex-shrink-0">Team</dt><dd class="text-gray-400 italic">—</dd></div><div class="flex gap-2"><dt class="text-gray-400 w-16 flex-shrink-0">Lab</dt><dd class="text-gray-700">Bangalore Lab</dd></div><div class="flex gap-2"><dt class="text-gray-400 w-16 flex-shrink-0">Location</dt><dd class="text-gray-700">Rack 1</dd></div><div class="flex gap-2"><dt class="text-gray-400 w-20 flex-shrink-0">EVE Version</dt><dd class="text-gray-400 italic">—</dd></div></dl></div>
-                <div><p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2.5">Connectivity</p><dl class="space-y-1.5 text-xs"><div class="flex gap-2"><dt class="text-gray-400 w-20 flex-shrink-0">SSH IPs</dt><dd class="text-gray-400 italic">—</dd></div><div class="flex gap-2"><dt class="text-gray-400 w-20 flex-shrink-0">IDRAC</dt><dd class="text-gray-400 italic">—</dd></div></dl></div>
-                
-                <div><p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2.5">Description</p><p class="text-xs text-gray-400 italic">—</p></div>
+            <tr x-show="expanded" x-cloak><td colspan="9" class="p-0 border-t border-gray-100">
+              <div class="pl-11 pr-6 py-4 grid grid-cols-3 gap-4 bg-gray-50">
+                <div class="rounded-lg border border-gray-200 bg-white overflow-hidden text-xs"><div class="px-3 py-1.5 bg-gray-50 border-b border-gray-100"><p class="font-semibold text-gray-400 uppercase tracking-wider">Identity</p></div><div class="px-3 divide-y divide-gray-100"><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Serial</span><span class="font-mono text-gray-700">BTBT123456</span></div><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Model</span><span class="text-gray-700 text-right">NUC11TNBi7</span></div><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Customer / Partner</span><span class="text-gray-400 italic">—</span></div></div><div class="px-3 py-1.5 bg-gray-50 border-y border-gray-100"><p class="font-semibold text-gray-400 uppercase tracking-wider">Placement</p></div><div class="px-3 divide-y divide-gray-100"><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Team</span><span class="text-gray-400 italic">—</span></div><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Lab</span><span class="text-gray-700 text-right">Bangalore Lab</span></div><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Location</span><span class="text-gray-700 text-right">Rack 1</span></div></div></div>
+                <div class="rounded-lg border border-gray-200 bg-white overflow-hidden text-xs"><div class="px-3 py-1.5 bg-gray-50 border-b border-gray-100"><p class="font-semibold text-gray-400 uppercase tracking-wider">ZedCloud Status</p></div><div class="px-3 divide-y divide-gray-100"><div class="flex items-start justify-between py-2 gap-3"><span class="text-gray-400 flex-shrink-0">EVE Version</span><span class="text-gray-400 italic">—</span></div><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Last Refreshed</span><span class="text-gray-400 italic">—</span></div></div><div class="px-3 py-1.5 bg-gray-50 border-y border-gray-100"><p class="font-semibold text-gray-400 uppercase tracking-wider">Connectivity</p></div><div class="px-3 divide-y divide-gray-100"><div class="py-2"><span class="text-gray-400 italic">—</span></div></div></div>
+                <div class="rounded-lg border border-gray-200 bg-white overflow-hidden text-xs"><div class="px-3 py-1.5 bg-gray-50 border-b border-gray-100"><p class="font-semibold text-gray-400 uppercase tracking-wider">IDRAC</p></div><div class="px-3 divide-y divide-gray-100"><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Console</span><span class="text-gray-400 italic">—</span></div><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Credentials</span><span class="text-gray-400 italic">—</span></div></div><div class="px-3 py-1.5 bg-gray-50 border-y border-gray-100"><p class="font-semibold text-gray-400 uppercase tracking-wider">Notes</p></div><div class="px-3 py-2.5"><p class="text-gray-400 italic">—</p></div></div>
               </div>
             </td></tr>
           </tbody>
 
           <!-- Row 6: Needs Repair -->
           <tbody x-data="{ expanded: false, condition: 'needs_repair' }" class="border-b border-gray-100">
-            <tr :class="condition==='out_of_order'?'bg-red-50 border-l-4 border-l-red-500':condition==='needs_repair'?'bg-yellow-50 border-l-4 border-l-yellow-400':condition==='temporarily_leased'?'bg-violet-50 border-l-4 border-l-violet-400':'hover:bg-gray-50'" class="transition-colors">
+            <tr :class="condition==='out_of_order'?'bg-red-50 border-l-4 border-l-red-500':condition==='needs_repair'?'bg-yellow-50 border-l-4 border-l-yellow-400':condition==='temporarily_leased'?'bg-violet-50 border-l-4 border-l-violet-400':condition==='dedicated'?'bg-blue-50 border-l-4 border-l-blue-400':'hover:bg-gray-50'" class="transition-colors">
               <td class="pl-3 pr-1 py-3"><button @click="expanded=!expanded" class="text-gray-400 hover:text-gray-600 p-0.5 rounded"><svg :class="expanded?'rotate-90':''" class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg></button></td>
               <td class="px-3 py-3 whitespace-nowrap">
                 <span class="font-semibold text-gray-900">alpha-nuc-03</span>
-                <template x-if="condition!=='normal'"><span :class="condition==='out_of_order'?'bg-red-100 text-red-700':condition==='needs_repair'?'bg-yellow-100 text-yellow-800':'bg-violet-100 text-violet-700'" class="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold" x-text="condition==='out_of_order'?'Out of Order':condition==='needs_repair'?'Needs Repair':'Temp. Leased'"></span></template>
+                <template x-if="condition!=='normal'"><span :class="condition==='out_of_order'?'bg-red-100 text-red-700':condition==='needs_repair'?'bg-yellow-100 text-yellow-800':condition==='dedicated'?'bg-blue-100 text-blue-700':'bg-violet-100 text-violet-700'" class="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold" x-text="condition==='out_of_order'?'Out of Order':condition==='needs_repair'?'Needs Repair':condition==='dedicated'?'Dedicated':'Temp. Leased'"></span></template>
               </td>
               <td class="px-3 py-3 whitespace-nowrap"><span class="text-xs font-mono text-gray-500">BTBT789012</span></td>
               <td class="px-3 py-3"><span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700">alpha</span></td>
+              <td class="px-3 py-3 font-mono text-xs text-gray-400 italic">—</td>
               <td class="px-3 py-3"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600">Available</span><br><button class="mt-1.5 px-2 py-0.5 text-xs font-semibold bg-blue-600 text-white rounded-md hover:bg-blue-700">Reserve</button></td>
               <td class="px-3 py-3"><span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-500"><span class="w-1.5 h-1.5 rounded-full bg-gray-400"></span>Unknown</span><br><button class="mt-1.5 text-xs text-blue-500 hover:underline">Refresh</button></td>
               <td class="px-3 py-3 max-w-xs"><span class="text-xs text-gray-600 line-clamp-2">Fan replaced, needs burn-in test</span></td>
               <td class="px-3 py-3" x-data="{open:false}"><div class="relative inline-block"><button @click="open=!open" @click.outside="open=false" class="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4z"/></svg></button><div x-show="open" x-cloak class="absolute right-0 mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-30 py-1"><button class="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50">Edit</button><button class="w-full text-left px-3 py-2 text-xs text-gray-500 hover:bg-gray-50">Ownership History</button><button class="w-full text-left px-3 py-2 text-xs text-gray-500 hover:bg-gray-50">Comment History</button><button class="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50">Delete</button></div></div></td>
             </tr>
-            <tr x-show="expanded" x-cloak><td colspan="8" class="p-0 border-t border-gray-100">
-              <div class="pl-11 pr-6 pt-4 pb-3 grid grid-cols-3 gap-8 bg-gray-50">
-                <div><p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2.5">Info</p><dl class="space-y-1.5 text-xs"><div class="flex gap-2"><dt class="text-gray-400 w-16 flex-shrink-0">Model</dt><dd class="text-gray-700">NUC12WSi7</dd></div><div class="flex gap-2"><dt class="text-gray-400 w-16 flex-shrink-0">Team</dt><dd class="text-gray-400 italic">—</dd></div><div class="flex gap-2"><dt class="text-gray-400 w-16 flex-shrink-0">Lab</dt><dd class="text-gray-700">Bangalore Lab</dd></div><div class="flex gap-2"><dt class="text-gray-400 w-16 flex-shrink-0">Location</dt><dd class="text-gray-700">Rack 1</dd></div><div class="flex gap-2"><dt class="text-gray-400 w-20 flex-shrink-0">EVE Version</dt><dd class="text-gray-400 italic">—</dd></div></dl></div>
-                <div><p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2.5">Connectivity</p><dl class="space-y-1.5 text-xs"><div class="flex gap-2"><dt class="text-gray-400 w-20 flex-shrink-0">SSH IPs</dt><dd class="text-gray-400 italic">—</dd></div><div class="flex gap-2"><dt class="text-gray-400 w-20 flex-shrink-0">IDRAC</dt><dd class="text-gray-400 italic">—</dd></div></dl></div>
-                
-                <div><p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2.5">Description</p><p class="text-xs text-gray-700 leading-relaxed">Fan replaced — needs burn-in test before use</p></div>
+            <tr x-show="expanded" x-cloak><td colspan="9" class="p-0 border-t border-gray-100">
+              <div class="pl-11 pr-6 py-4 grid grid-cols-3 gap-4 bg-gray-50">
+                <div class="rounded-lg border border-gray-200 bg-white overflow-hidden text-xs"><div class="px-3 py-1.5 bg-gray-50 border-b border-gray-100"><p class="font-semibold text-gray-400 uppercase tracking-wider">Identity</p></div><div class="px-3 divide-y divide-gray-100"><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Serial</span><span class="font-mono text-gray-700">BTBT789012</span></div><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Model</span><span class="text-gray-700 text-right">NUC12WSi7</span></div><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Customer / Partner</span><span class="text-gray-400 italic">—</span></div></div><div class="px-3 py-1.5 bg-gray-50 border-y border-gray-100"><p class="font-semibold text-gray-400 uppercase tracking-wider">Placement</p></div><div class="px-3 divide-y divide-gray-100"><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Team</span><span class="text-gray-400 italic">—</span></div><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Lab</span><span class="text-gray-700 text-right">Bangalore Lab</span></div><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Location</span><span class="text-gray-700 text-right">Rack 1</span></div></div></div>
+                <div class="rounded-lg border border-gray-200 bg-white overflow-hidden text-xs"><div class="px-3 py-1.5 bg-gray-50 border-b border-gray-100"><p class="font-semibold text-gray-400 uppercase tracking-wider">ZedCloud Status</p></div><div class="px-3 divide-y divide-gray-100"><div class="flex items-start justify-between py-2 gap-3"><span class="text-gray-400 flex-shrink-0">EVE Version</span><span class="text-gray-400 italic">—</span></div><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Last Refreshed</span><span class="text-gray-400 italic">—</span></div></div><div class="px-3 py-1.5 bg-gray-50 border-y border-gray-100"><p class="font-semibold text-gray-400 uppercase tracking-wider">Connectivity</p></div><div class="px-3 divide-y divide-gray-100"><div class="py-2"><span class="text-gray-400 italic">—</span></div></div></div>
+                <div class="rounded-lg border border-gray-200 bg-white overflow-hidden text-xs"><div class="px-3 py-1.5 bg-gray-50 border-b border-gray-100"><p class="font-semibold text-gray-400 uppercase tracking-wider">IDRAC</p></div><div class="px-3 divide-y divide-gray-100"><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Console</span><span class="text-gray-400 italic">—</span></div><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Credentials</span><span class="text-gray-400 italic">—</span></div></div><div class="px-3 py-1.5 bg-gray-50 border-y border-gray-100"><p class="font-semibold text-gray-400 uppercase tracking-wider">Notes</p></div><div class="px-3 py-2.5"><p class="text-gray-700 leading-relaxed">Fan replaced — needs burn-in test before use</p></div></div>
               </div>
             </td></tr>
           </tbody>
 
           <!-- Row 7: Temporarily Leased -->
           <tbody x-data="{ expanded: false, condition: 'temporarily_leased' }" class="border-b border-gray-100">
-            <tr :class="condition==='out_of_order'?'bg-red-50 border-l-4 border-l-red-500':condition==='needs_repair'?'bg-yellow-50 border-l-4 border-l-yellow-400':condition==='temporarily_leased'?'bg-violet-50 border-l-4 border-l-violet-400':'hover:bg-gray-50'" class="transition-colors">
+            <tr :class="condition==='out_of_order'?'bg-red-50 border-l-4 border-l-red-500':condition==='needs_repair'?'bg-yellow-50 border-l-4 border-l-yellow-400':condition==='temporarily_leased'?'bg-violet-50 border-l-4 border-l-violet-400':condition==='dedicated'?'bg-blue-50 border-l-4 border-l-blue-400':'hover:bg-gray-50'" class="transition-colors">
               <td class="pl-3 pr-1 py-3"><button @click="expanded=!expanded" class="text-gray-400 hover:text-gray-600 p-0.5 rounded"><svg :class="expanded?'rotate-90':''" class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg></button></td>
               <td class="px-3 py-3 whitespace-nowrap">
                 <span class="font-semibold text-gray-900">sj-optiplex-01</span>
-                <template x-if="condition!=='normal'"><span :class="condition==='out_of_order'?'bg-red-100 text-red-700':condition==='needs_repair'?'bg-yellow-100 text-yellow-800':'bg-violet-100 text-violet-700'" class="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold" x-text="condition==='out_of_order'?'Out of Order':condition==='needs_repair'?'Needs Repair':'Temp. Leased'"></span></template>
+                <template x-if="condition!=='normal'"><span :class="condition==='out_of_order'?'bg-red-100 text-red-700':condition==='needs_repair'?'bg-yellow-100 text-yellow-800':condition==='dedicated'?'bg-blue-100 text-blue-700':'bg-violet-100 text-violet-700'" class="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold" x-text="condition==='out_of_order'?'Out of Order':condition==='needs_repair'?'Needs Repair':condition==='dedicated'?'Dedicated':'Temp. Leased'"></span></template>
               </td>
               <td class="px-3 py-3 whitespace-nowrap"><span class="text-xs font-mono text-gray-500">J5GD8X9</span></td>
               <td class="px-3 py-3"><span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700">thor</span></td>
+              <td class="px-3 py-3 font-mono text-xs text-gray-400 italic">—</td>
               <td class="px-3 py-3"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-violet-100 text-violet-700">UNAVAILABLE</span><br><button disabled class="mt-1.5 px-2 py-0.5 text-xs font-semibold bg-gray-200 text-gray-400 rounded-md cursor-not-allowed">Reserve</button></td>
               <td class="px-3 py-3"><span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-500"><span class="w-1.5 h-1.5 rounded-full bg-gray-400"></span>Unknown</span><br><button class="mt-1.5 text-xs text-blue-500 hover:underline">Refresh</button></td>
               <td class="px-3 py-3 max-w-xs"><span class="text-xs text-gray-600 line-clamp-2">Loaned to SJ office through end of July</span></td>
               <td class="px-3 py-3" x-data="{open:false}"><div class="relative inline-block"><button @click="open=!open" @click.outside="open=false" class="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4z"/></svg></button><div x-show="open" x-cloak class="absolute right-0 mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-30 py-1"><button class="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50">Edit</button><button class="w-full text-left px-3 py-2 text-xs text-gray-500 hover:bg-gray-50">Ownership History</button><button class="w-full text-left px-3 py-2 text-xs text-gray-500 hover:bg-gray-50">Comment History</button><button class="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50">Delete</button></div></div></td>
             </tr>
-            <tr x-show="expanded" x-cloak><td colspan="8" class="p-0 border-t border-gray-100">
-              <div class="pl-11 pr-6 pt-4 pb-3 grid grid-cols-3 gap-8 bg-gray-50">
-                <div><p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2.5">Info</p><dl class="space-y-1.5 text-xs"><div class="flex gap-2"><dt class="text-gray-400 w-16 flex-shrink-0">Model</dt><dd class="text-gray-700">OptiPlex 7040</dd></div><div class="flex gap-2"><dt class="text-gray-400 w-16 flex-shrink-0">Team</dt><dd class="text-gray-400 italic">—</dd></div><div class="flex gap-2"><dt class="text-gray-400 w-16 flex-shrink-0">Lab</dt><dd class="text-gray-700">SanJose Lab</dd></div><div class="flex gap-2"><dt class="text-gray-400 w-16 flex-shrink-0">Location</dt><dd class="text-gray-700">Building A</dd></div><div class="flex gap-2"><dt class="text-gray-400 w-20 flex-shrink-0">EVE Version</dt><dd class="text-gray-400 italic">—</dd></div></dl></div>
-                <div><p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2.5">Connectivity</p><dl class="space-y-1.5 text-xs"><div class="flex gap-2"><dt class="text-gray-400 w-20 flex-shrink-0">SSH IPs</dt><dd class="text-gray-400 italic">—</dd></div><div class="flex gap-2"><dt class="text-gray-400 w-20 flex-shrink-0">IDRAC</dt><dd class="text-gray-400 italic">—</dd></div></dl></div>
-                
-                <div><p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2.5">Description</p><p class="text-xs text-gray-700 leading-relaxed">Loaned to SJ office — EVE build testing</p></div>
+            <tr x-show="expanded" x-cloak><td colspan="9" class="p-0 border-t border-gray-100">
+              <div class="pl-11 pr-6 py-4 grid grid-cols-3 gap-4 bg-gray-50">
+                <div class="rounded-lg border border-gray-200 bg-white overflow-hidden text-xs"><div class="px-3 py-1.5 bg-gray-50 border-b border-gray-100"><p class="font-semibold text-gray-400 uppercase tracking-wider">Identity</p></div><div class="px-3 divide-y divide-gray-100"><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Serial</span><span class="font-mono text-gray-700">J5GD8X9</span></div><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Model</span><span class="text-gray-700 text-right">OptiPlex 7040</span></div><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Customer / Partner</span><span class="text-gray-400 italic">—</span></div></div><div class="px-3 py-1.5 bg-gray-50 border-y border-gray-100"><p class="font-semibold text-gray-400 uppercase tracking-wider">Placement</p></div><div class="px-3 divide-y divide-gray-100"><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Team</span><span class="text-gray-400 italic">—</span></div><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Lab</span><span class="text-gray-700 text-right">SanJose Lab</span></div><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Location</span><span class="text-gray-700 text-right">Building A</span></div></div></div>
+                <div class="rounded-lg border border-gray-200 bg-white overflow-hidden text-xs"><div class="px-3 py-1.5 bg-gray-50 border-b border-gray-100"><p class="font-semibold text-gray-400 uppercase tracking-wider">ZedCloud Status</p></div><div class="px-3 divide-y divide-gray-100"><div class="flex items-start justify-between py-2 gap-3"><span class="text-gray-400 flex-shrink-0">EVE Version</span><span class="text-gray-400 italic">—</span></div><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Last Refreshed</span><span class="text-gray-400 italic">—</span></div></div><div class="px-3 py-1.5 bg-gray-50 border-y border-gray-100"><p class="font-semibold text-gray-400 uppercase tracking-wider">Connectivity</p></div><div class="px-3 divide-y divide-gray-100"><div class="py-2"><span class="text-gray-400 italic">—</span></div></div></div>
+                <div class="rounded-lg border border-gray-200 bg-white overflow-hidden text-xs"><div class="px-3 py-1.5 bg-gray-50 border-b border-gray-100"><p class="font-semibold text-gray-400 uppercase tracking-wider">IDRAC</p></div><div class="px-3 divide-y divide-gray-100"><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Console</span><span class="text-gray-400 italic">—</span></div><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Credentials</span><span class="text-gray-400 italic">—</span></div></div><div class="px-3 py-1.5 bg-gray-50 border-y border-gray-100"><p class="font-semibold text-gray-400 uppercase tracking-wider">Notes</p></div><div class="px-3 py-2.5"><p class="text-gray-700 leading-relaxed">Loaned to SJ office — EVE build testing</p></div></div>
+              </div>
+            </td></tr>
+          </tbody>
+          <!-- Row 8: Dedicated -->
+          <tbody x-data="{ expanded: false, condition: 'dedicated' }" class="border-b border-gray-100">
+            <tr :class="condition==='out_of_order'?'bg-red-50 border-l-4 border-l-red-500':condition==='needs_repair'?'bg-yellow-50 border-l-4 border-l-yellow-400':condition==='temporarily_leased'?'bg-violet-50 border-l-4 border-l-violet-400':condition==='dedicated'?'bg-blue-50 border-l-4 border-l-blue-400':'hover:bg-gray-50'" class="transition-colors">
+              <td class="pl-3 pr-1 py-3"><button @click="expanded=!expanded" class="text-gray-400 hover:text-gray-600 p-0.5 rounded"><svg :class="expanded?'rotate-90':''" class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg></button></td>
+              <td class="px-3 py-3 whitespace-nowrap">
+                <span class="font-semibold text-gray-900">blr-dedicated-01</span>
+                <template x-if="condition!=='normal'"><span :class="condition==='out_of_order'?'bg-red-100 text-red-700':condition==='needs_repair'?'bg-yellow-100 text-yellow-800':condition==='dedicated'?'bg-blue-100 text-blue-700':'bg-violet-100 text-violet-700'" class="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold" x-text="condition==='out_of_order'?'Out of Order':condition==='needs_repair'?'Needs Repair':condition==='dedicated'?'Dedicated':'Temp. Leased'"></span></template>
+              </td>
+              <td class="px-3 py-3 whitespace-nowrap"><span class="text-xs font-mono text-gray-500">D4XK7M2</span></td>
+              <td class="px-3 py-3"><span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700">hummingbird</span></td>
+              <td class="px-3 py-3 font-mono text-xs text-gray-700">blr-dedicated-01</td>
+              <td class="px-3 py-3">
+                <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">ST</span>
+              </td>
+              <td class="px-3 py-3"><span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Online</span><br><button class="mt-1.5 text-xs text-blue-500 hover:underline">Refresh</button></td>
+              <td class="px-3 py-3 max-w-xs"><span class="text-xs text-gray-600 line-clamp-2">Reserved exclusively for ST team</span></td>
+              <td class="px-3 py-3" x-data="{open:false}"><div class="relative inline-block"><button @click="open=!open" @click.outside="open=false" class="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4zm0 6a2 2 0 110-4 2 2 0 010 4z"/></svg></button><div x-show="open" x-cloak class="absolute right-0 mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-30 py-1"><button class="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50">Edit</button><button class="w-full text-left px-3 py-2 text-xs text-gray-500 hover:bg-gray-50">Ownership History</button><button class="w-full text-left px-3 py-2 text-xs text-gray-500 hover:bg-gray-50">Comment History</button><button class="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50">Delete</button></div></div></td>
+            </tr>
+            <tr x-show="expanded" x-cloak><td colspan="9" class="p-0 border-t border-gray-100">
+              <div class="pl-11 pr-6 py-4 grid grid-cols-3 gap-4 bg-gray-50">
+                <div class="rounded-lg border border-gray-200 bg-white overflow-hidden text-xs"><div class="px-3 py-1.5 bg-gray-50 border-b border-gray-100"><p class="font-semibold text-gray-400 uppercase tracking-wider">Identity</p></div><div class="px-3 divide-y divide-gray-100"><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Serial</span><span class="font-mono text-gray-700">D4XK7M2</span></div><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Model</span><span class="text-gray-700 text-right">NUC12WSi7</span></div><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Customer / Partner</span><span class="text-gray-400 italic">—</span></div></div><div class="px-3 py-1.5 bg-gray-50 border-y border-gray-100"><p class="font-semibold text-gray-400 uppercase tracking-wider">Placement</p></div><div class="px-3 divide-y divide-gray-100"><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Team</span><span class="text-gray-700 text-right">ST</span></div><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Lab</span><span class="text-gray-700 text-right">Bangalore Lab</span></div><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Location</span><span class="text-gray-700 text-right">Rack 2</span></div></div></div>
+                <div class="rounded-lg border border-gray-200 bg-white overflow-hidden text-xs"><div class="px-3 py-1.5 bg-gray-50 border-b border-gray-100"><p class="font-semibold text-gray-400 uppercase tracking-wider">ZedCloud Status</p></div><div class="px-3 divide-y divide-gray-100"><div class="flex items-start justify-between py-2 gap-3"><span class="text-gray-400 flex-shrink-0">EVE Version</span><span class="font-mono text-gray-700 text-right break-all">9.9.9-lts-k-amd64</span></div><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Last Refreshed</span><span class="text-gray-500">5 min ago</span></div></div><div class="px-3 py-1.5 bg-gray-50 border-y border-gray-100"><p class="font-semibold text-gray-400 uppercase tracking-wider">Connectivity</p></div><div class="px-3 divide-y divide-gray-100"><div class="flex items-center justify-between py-2 gap-2"><span class="font-mono text-gray-500 flex-shrink-0">eth0</span><span class="font-mono text-gray-700 text-right">aa:bb:cc:dd:ee:ff · 10.0.1.55</span></div></div></div>
+                <div class="rounded-lg border border-gray-200 bg-white overflow-hidden text-xs"><div class="px-3 py-1.5 bg-gray-50 border-b border-gray-100"><p class="font-semibold text-gray-400 uppercase tracking-wider">IDRAC</p></div><div class="px-3 divide-y divide-gray-100"><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Console</span><span class="text-gray-400 italic">—</span></div><div class="flex items-center justify-between py-2 gap-2"><span class="text-gray-400 flex-shrink-0">Credentials</span><span class="text-gray-400 italic">—</span></div></div><div class="px-3 py-1.5 bg-gray-50 border-y border-gray-100"><p class="font-semibold text-gray-400 uppercase tracking-wider">Notes</p></div><div class="px-3 py-2.5"><p class="text-gray-700 leading-relaxed">Dedicated to ST team — not reservable by other teams</p></div></div>
               </div>
             </td></tr>
           </tbody>
@@ -368,130 +401,6 @@
       </div>
     </div>
   </main>
-
-  <!-- Add Device Modal (same as member view) -->
-  <div x-show="addDeviceOpen" x-cloak class="fixed inset-0 z-50 overflow-y-auto">
-    <div class="flex items-center justify-center min-h-screen px-4 py-8">
-      <div class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm" @click="addDeviceOpen = false"></div>
-      <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg">
-        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <h2 class="text-lg font-bold text-gray-900">Add Device</h2>
-          <button @click="addDeviceOpen = false" class="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-          </button>
-        </div>
-        <div class="px-6 py-5 space-y-4">
-          <div class="grid grid-cols-2 gap-4">
-            <div>
-              <label class="block text-xs font-semibold text-gray-700 mb-1.5">Name <span class="text-red-500">*</span></label>
-              <input type="text" placeholder="e.g. eve-node-07" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-            </div>
-            <div>
-              <label class="block text-xs font-semibold text-gray-700 mb-1.5">Name in Cluster <span class="text-red-500">*</span></label>
-              <input type="text" placeholder="e.g. Andrew-cherry" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-            </div>
-          </div>
-          <div x-data="{ dup: false }">
-            <div class="flex items-center justify-between mb-1.5">
-              <label class="block text-xs font-semibold text-gray-700">Serial Number <span class="text-red-500">*</span></label>
-              <button @click="dup = !dup" class="text-xs text-gray-400 hover:text-gray-600 underline decoration-dotted">[demo duplicate error]</button>
-            </div>
-            <input type="text" :class="dup ? 'border-red-400 ring-2 ring-red-200' : 'border-gray-300 focus:ring-blue-500'" placeholder="e.g. J5GD4B2" class="w-full px-3 py-2 rounded-lg text-sm focus:outline-none focus:ring-2 border">
-            <p x-show="dup" x-cloak class="mt-1 text-xs text-red-600 flex items-center gap-1">
-              <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0"/></svg>
-              Serial number already exists. Each device must have a unique serial number.
-            </p>
-          </div>
-          <div class="grid grid-cols-2 gap-4">
-            <div>
-              <label class="block text-xs font-semibold text-gray-700 mb-1.5">Model <span class="text-red-500">*</span></label>
-              <div class="relative" x-data="{
-                query: '', open: false,
-                models: ['OptiPlex 7040', 'PowerEdge R740', 'PowerEdge R640', 'NUC12WSi7'],
-                get filtered() { return this.models.filter(m => m.toLowerCase().includes(this.query.toLowerCase())) },
-                get showCreate() { return this.query.trim() && !this.models.some(m => m.toLowerCase() === this.query.toLowerCase()) },
-                select(m) { this.query = m; this.open = false; }
-              }">
-                <input type="text" x-model="query" @focus="open = true" @click.outside="open = false"
-                       placeholder="Search or type to create…"
-                       class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <div x-show="open" x-cloak class="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-44 overflow-y-auto">
-                  <template x-for="m in filtered" :key="m">
-                    <button @click="select(m)" class="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50" x-text="m"></button>
-                  </template>
-                  <button x-show="showCreate" @click="models.push(query.trim()); select(query.trim())"
-                          class="w-full text-left px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 font-medium border-t border-gray-100">
-                    + Create "<span x-text="query"></span>"
-                  </button>
-                </div>
-              </div>
-            </div>
-            <div>
-              <label class="block text-xs font-semibold text-gray-700 mb-1.5">Cluster <span class="text-red-500">*</span></label>
-              <div class="flex gap-1">
-                <select class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-                  <option value="">Select cluster…</option>
-                  <option>hummingbird</option><option>alpha</option><option>canary</option>
-                  <option>gmwtus</option><option>thor</option><option>prod</option>
-                </select>
-                <button class="px-2.5 border border-gray-300 rounded-lg text-blue-600 hover:bg-blue-50 font-bold text-base" title="Add new cluster">+</button>
-              </div>
-            </div>
-          </div>
-          <div>
-            <label class="block text-xs font-semibold text-gray-700 mb-1.5">Team</label>
-            <select class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-              <option value="" disabled selected>Select team…</option>
-              <option>ST</option>
-              <option>EVE</option>
-              <option>PLATFORM</option>
-            </select>
-          </div>
-          <div class="grid grid-cols-2 gap-4">
-            <div>
-              <label class="block text-xs font-semibold text-gray-700 mb-1.5">Lab <span class="text-gray-400 font-normal">(optional)</span></label>
-              <select class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <option value="">— none —</option>
-                <option>Bangalore Lab</option>
-                <option>Bangalore Office Space</option>
-                <option>Berlin Lab</option>
-                <option>SanJose Lab</option>
-                <option>CoreSite Lab</option>
-                <option>Home Lab</option>
-              </select>
-            </div>
-            <div>
-              <label class="block text-xs font-semibold text-gray-700 mb-1.5">Location Detail <span class="text-gray-400 font-normal">(optional)</span></label>
-              <input type="text" placeholder="e.g. Rack 3 · Shelf 2" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-            </div>
-          </div>
-          <div>
-            <label class="block text-xs font-semibold text-gray-700 mb-1.5">Description <span class="text-gray-400 font-normal">(optional)</span></label>
-            <textarea rows="2" placeholder="Device capabilities, hardware notes, intended use…" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"></textarea>
-          </div>
-          <div>
-            <label class="block text-xs font-semibold text-gray-700 mb-1.5">IDRAC IP <span class="text-gray-400 font-normal">(optional)</span></label>
-            <input type="text" placeholder="e.g. 192.168.1.10" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-          </div>
-          <div class="grid grid-cols-2 gap-4">
-            <div>
-              <label class="block text-xs font-semibold text-gray-700 mb-1.5">IDRAC Username <span class="text-gray-400 font-normal">(optional)</span></label>
-              <input type="text" placeholder="root" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-            </div>
-            <div>
-              <label class="block text-xs font-semibold text-gray-700 mb-1.5">IDRAC Password <span class="text-gray-400 font-normal">(optional)</span></label>
-              <input type="password" placeholder="••••••••" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-            </div>
-          </div>
-          <p class="text-xs text-gray-400 bg-gray-50 rounded-lg px-3 py-2">EVE version, SSH IPs and status are populated later via <strong>Fetch Status</strong>.</p>
-        </div>
-        <div class="flex justify-end gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50 rounded-b-2xl">
-          <button @click="addDeviceOpen = false" class="px-4 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
-          <button class="px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700">Add Device</button>
-        </div>
-      </div>
-    </div>
-  </div>
 
 </body>
 </html>
