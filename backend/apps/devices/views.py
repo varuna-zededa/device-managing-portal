@@ -2,6 +2,7 @@ import logging
 import secrets
 from datetime import timedelta
 
+from django.db import transaction
 from django.utils import timezone
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -174,25 +175,26 @@ class DeviceDetailView(APIView):
 
 class DeviceReserveView(APIView):
     def post(self, request, pk):
-        try:
-            device = Device.objects.get(pk=pk)
-        except Device.DoesNotExist:
-            return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
-
         requester_email = _get_user_email(request)
         if not requester_email:
             return Response({'error': 'X-User-Email header required'}, status=status.HTTP_400_BAD_REQUEST)
 
-        if device.is_available:
-            device.owner_email = requester_email
-            device.save(update_fields=['owner_email', 'updated_at'])
-            OwnershipHistory.objects.create(
-                device=device,
-                owner_email=requester_email,
-                changed_by=requester_email,
-                reason='reserved',
-            )
-            return Response(DeviceSerializer(device).data)
+        with transaction.atomic():
+            try:
+                device = Device.objects.select_for_update().get(pk=pk)
+            except Device.DoesNotExist:
+                return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+
+            if device.is_available:
+                device.owner_email = requester_email
+                device.save(update_fields=['owner_email', 'updated_at'])
+                OwnershipHistory.objects.create(
+                    device=device,
+                    owner_email=requester_email,
+                    changed_by=requester_email,
+                    reason='reserved',
+                )
+                return Response(DeviceSerializer(device).data)
 
         existing = ReservationRequest.objects.filter(device=device, status='pending').first()
         if existing:
@@ -235,7 +237,7 @@ class DeviceReserveView(APIView):
             logger.debug(str(e))
 
         email_utils.send_reservation_request(device, requester_user or requester_email, owner_user or device.owner_email, token)
-        return Response({'message': 'Reservation request sent to device owner', 'token': token}, status=status.HTTP_202_ACCEPTED)
+        return Response({'message': 'Reservation request sent to device owner'}, status=status.HTTP_202_ACCEPTED)
 
 
 class DeviceForceAssignView(APIView):
@@ -397,7 +399,7 @@ class DeviceStatusView(APIView):
                 device.eve_version = 'Unknown'
                 device.device_connectivity = None
                 device.status = 'Unknown'
-                device.save(update_fields=['cluster', 'cluster_device_name', 'eve_version', 'device_connectivity', 'status', 'updated_at'])
+                device.save(update_fields=['eve_version', 'device_connectivity', 'status', 'updated_at'])
                 return Response(DeviceSerializer(device).data)
             elif e.response.status_code == 403:
                 return Response({'error': 'Bearer token invalid or expired'}, status=status.HTTP_403_FORBIDDEN)

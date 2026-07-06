@@ -31,6 +31,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
+    'middleware.LatencyMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -90,7 +91,10 @@ if not EMAIL_HOST:
 
 PORTAL_BASE_URL = env('PORTAL_BASE_URL', default='http://localhost:80')
 
-CORS_ALLOW_ALL_ORIGINS = True
+if DEBUG:
+    CORS_ALLOW_ALL_ORIGINS = True
+else:
+    CORS_ALLOWED_ORIGINS = env.list('CORS_ALLOWED_ORIGINS', default=[])
 CORS_ALLOW_HEADERS = list(__import__('corsheaders.defaults', fromlist=['default_headers']).default_headers) + ['x-user-email']
 
 REST_FRAMEWORK = {

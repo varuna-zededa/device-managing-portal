@@ -7,7 +7,7 @@ class ReservationRequestSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ReservationRequest
-        fields = ['id', 'device', 'device_name', 'requester_email', 'requested_at', 'expires_at', 'status', 'token']
+        fields = ['id', 'device', 'device_name', 'requester_email', 'requested_at', 'expires_at', 'status']
 
 
 class DeviceCommentSerializer(serializers.ModelSerializer):
