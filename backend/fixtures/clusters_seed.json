@@ -1,0 +1,50 @@
+[
+  {
+    "model": "clusters.cluster",
+    "pk": 1,
+    "fields": {
+      "name": "hummingbird",
+      "host": "zedcontrol.hummingbird.zededa.net"
+    }
+  },
+  {
+    "model": "clusters.cluster",
+    "pk": 2,
+    "fields": {
+      "name": "alpha",
+      "host": "zedcontrol.alpha.zededa.net"
+    }
+  },
+  {
+    "model": "clusters.cluster",
+    "pk": 3,
+    "fields": {
+      "name": "canary",
+      "host": "zedcontrol.canary.zededa.net"
+    }
+  },
+  {
+    "model": "clusters.cluster",
+    "pk": 4,
+    "fields": {
+      "name": "gmwtus",
+      "host": "zedcontrol.gmwtus.zededa.net"
+    }
+  },
+  {
+    "model": "clusters.cluster",
+    "pk": 5,
+    "fields": {
+      "name": "thor",
+      "host": "zedcontrol.thor.zededa.net"
+    }
+  },
+  {
+    "model": "clusters.cluster",
+    "pk": 6,
+    "fields": {
+      "name": "prod",
+      "host": "zedcontrol.zededa.net"
+    }
+  }
+]
