@@ -12,9 +12,9 @@ def _send(subject, body, recipients):
     if not getattr(settings, 'EMAIL_HOST', ''):
         return
     try:
-        send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, recipients, fail_silently=True)
+        send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, recipients, fail_silently=False)
     except Exception as e:
-        logger.debug(str(e))
+        logger.warning('Failed to send email to %s: %s', recipients, e)
 
 
 def send_reservation_request(device, requester, owner, token):
