@@ -2,16 +2,18 @@ import csv
 import io
 import json
 import logging
-from datetime import date
+from datetime import date, timedelta
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from django.http import HttpResponse
+from django.utils import timezone
 from apps.devices.models import Device
 from apps.devices.serializers import DeviceSerializer
 from apps.clusters.models import Cluster
 from apps.device_models.models import DeviceModel
 from apps.users.models import PortalUser
+from .models import RequestLog
 
 logger = logging.getLogger(__name__)
 
@@ -179,3 +181,75 @@ def _parse_json(uploaded_file):
     if isinstance(data, list):
         return data
     return data.get('results', data.get('devices', []))
+
+
+def _percentile(sorted_values, pct):
+    if not sorted_values:
+        return 0
+    k = (len(sorted_values) - 1) * pct / 100
+    lo, hi = int(k), min(int(k) + 1, len(sorted_values) - 1)
+    return round(sorted_values[lo] + (sorted_values[hi] - sorted_values[lo]) * (k - lo))
+
+
+class LatencyView(APIView):
+    SLOW_THRESHOLD_MS = 1000
+    SLOW_LIMIT = 20
+    RETENTION_DAYS = 30
+
+    def get(self, request):
+        user_email = _get_user_email(request)
+        if not _is_admin(user_email):
+            return Response({'error': 'Admin only'}, status=status.HTTP_403_FORBIDDEN)
+
+        now = timezone.now()
+        window_24h = now - timedelta(hours=24)
+        window_7d = now - timedelta(days=7)
+
+        logs_7d = list(
+            RequestLog.objects.filter(timestamp__gte=window_7d)
+            .values('method', 'path', 'duration_ms', 'status_code', 'timestamp')
+            .order_by('timestamp')
+        )
+
+        # Group by method+path
+        groups: dict[tuple, list[int]] = {}
+        counts_24h: dict[tuple, int] = {}
+        for row in logs_7d:
+            key = (row['method'], row['path'])
+            groups.setdefault(key, []).append(row['duration_ms'])
+            if row['timestamp'] >= window_24h:
+                counts_24h[key] = counts_24h.get(key, 0) + 1
+
+        summary = []
+        for (method, path), durations in sorted(groups.items()):
+            durations.sort()
+            summary.append({
+                'method': method,
+                'path': path,
+                'count_7d': len(durations),
+                'count_24h': counts_24h.get((method, path), 0),
+                'p50_ms': _percentile(durations, 50),
+                'p95_ms': _percentile(durations, 95),
+                'p99_ms': _percentile(durations, 99),
+                'max_ms': durations[-1],
+            })
+
+        # Sort summary by p95 descending so slowest endpoints appear first
+        summary.sort(key=lambda r: r['p95_ms'], reverse=True)
+
+        slow = list(
+            RequestLog.objects.filter(
+                timestamp__gte=window_7d,
+                duration_ms__gte=self.SLOW_THRESHOLD_MS,
+            )
+            .values('method', 'path', 'status_code', 'duration_ms', 'timestamp')
+            .order_by('-duration_ms')[:self.SLOW_LIMIT]
+        )
+
+        return Response({
+            'summary': summary,
+            'slow_requests': slow,
+            'retention_days': self.RETENTION_DAYS,
+            'slow_threshold_ms': self.SLOW_THRESHOLD_MS,
+            'total_7d': len(logs_7d),
+        })
