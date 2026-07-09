@@ -1,13 +1,30 @@
 import logging
+from django.db import transaction
+from django.utils import timezone
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from .models import ReservationRequest, OwnershipHistory
-from .serializers import ReservationRequestSerializer
+from .serializers import ReservationRequestSerializer, PendingReservationSerializer
+from apps.devices.models import Device
 from apps.users.models import PortalUser
 from utils import email as email_utils
 
+_UNAVAILABLE_CONDITIONS = ('out_of_order', 'temporarily_leased', 'dedicated')
+
 logger = logging.getLogger(__name__)
+
+
+def _is_admin(email):
+    if not email:
+        return False
+    try:
+        return PortalUser.objects.get(email=email).user_type == 'admin'
+    except PortalUser.DoesNotExist:
+        return False
+    except Exception as e:
+        logger.warning(str(e))
+        return False
 
 
 def _get_user_email(request):
@@ -22,7 +39,7 @@ class PendingReservationsView(APIView):
         reservations = ReservationRequest.objects.filter(
             device__owner_email=user_email, status='pending'
         ).select_related('device').order_by('-requested_at')
-        serializer = ReservationRequestSerializer(reservations, many=True)
+        serializer = PendingReservationSerializer(reservations, many=True)
         return Response(serializer.data)
 
 
@@ -52,7 +69,7 @@ class ReservationDetailView(APIView):
         except PortalUser.DoesNotExist:
             pass
         except Exception as e:
-            logger.debug(str(e))
+            logger.warning(str(e))
 
         return Response({
             'device_name': reservation.device.name,
@@ -64,26 +81,46 @@ class ReservationDetailView(APIView):
 
 class ReservationApproveView(APIView):
     def post(self, request, token):
-        try:
-            reservation = ReservationRequest.objects.select_related('device').get(token=token)
-        except ReservationRequest.DoesNotExist:
-            return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+        user_email = _get_user_email(request)
 
-        if reservation.status != 'pending':
-            return Response({'error': f'Reservation is already {reservation.status}'}, status=status.HTTP_400_BAD_REQUEST)
+        with transaction.atomic():
+            try:
+                reservation = ReservationRequest.objects.select_for_update().select_related('device').get(token=token)
+            except ReservationRequest.DoesNotExist:
+                return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        device = reservation.device
-        old_owner = device.owner_email
-        device.owner_email = reservation.requester_email
-        device.save(update_fields=['owner_email', 'updated_at'])
+            if reservation.status != 'pending':
+                return Response({'error': f'Reservation is already {reservation.status}'}, status=status.HTTP_400_BAD_REQUEST)
 
-        reservation.status = 'approved'
-        reservation.save(update_fields=['status'])
+            if reservation.expires_at < timezone.now():
+                reservation.status = 'expired'
+                reservation.save(update_fields=['status'])
+                return Response({'error': 'Reservation request has expired'}, status=status.HTTP_410_GONE)
+
+            device = Device.objects.select_for_update().get(pk=reservation.device_id)
+
+            # C2: if caller identity is known, verify they are the owner or an admin
+            if user_email and user_email != device.owner_email and not _is_admin(user_email):
+                return Response({'error': 'Only the device owner can approve this request'}, status=status.HTTP_403_FORBIDDEN)
+
+            # C3: re-check device is still reservable
+            if device.condition in _UNAVAILABLE_CONDITIONS:
+                reservation.status = 'expired'
+                reservation.save(update_fields=['status'])
+                return Response({'error': 'Device is no longer available for reservation'}, status=status.HTTP_409_CONFLICT)
+
+            old_owner = device.owner_email
+            device.owner_email = reservation.requester_email
+            device.reserved_at = timezone.now()
+            device.save(update_fields=['owner_email', 'reserved_at', 'updated_at'])
+
+            reservation.status = 'approved'
+            reservation.save(update_fields=['status'])
 
         OwnershipHistory.objects.create(
             device=device,
             owner_email=reservation.requester_email,
-            changed_by=old_owner or 'system',
+            changed_by=old_owner or user_email or 'email_link',
             reason='request_approved',
         )
 
@@ -93,6 +130,8 @@ class ReservationApproveView(APIView):
 
 class ReservationRejectView(APIView):
     def post(self, request, token):
+        user_email = _get_user_email(request)
+
         try:
             reservation = ReservationRequest.objects.select_related('device').get(token=token)
         except ReservationRequest.DoesNotExist:
@@ -100,6 +139,10 @@ class ReservationRejectView(APIView):
 
         if reservation.status != 'pending':
             return Response({'error': f'Reservation is already {reservation.status}'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # C2: if caller identity is known, verify they are the owner or an admin
+        if user_email and user_email != reservation.device.owner_email and not _is_admin(user_email):
+            return Response({'error': 'Only the device owner can reject this request'}, status=status.HTTP_403_FORBIDDEN)
 
         reservation.status = 'rejected'
         reservation.save(update_fields=['status'])

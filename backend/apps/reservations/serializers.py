@@ -10,6 +10,13 @@ class ReservationRequestSerializer(serializers.ModelSerializer):
         fields = ['id', 'device', 'device_name', 'requester_email', 'requested_at', 'expires_at', 'status']
 
 
+class PendingReservationSerializer(ReservationRequestSerializer):
+    """Extends the base serializer with token — used only for the owner-facing pending list."""
+
+    class Meta(ReservationRequestSerializer.Meta):
+        fields = ReservationRequestSerializer.Meta.fields + ['token']
+
+
 class DeviceCommentSerializer(serializers.ModelSerializer):
     class Meta:
         model = DeviceComment
