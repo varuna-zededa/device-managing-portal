@@ -5,6 +5,11 @@ import { CheckCircle, XCircle, Clock } from 'lucide-react'
 import { getReservationByToken, approveReservation, rejectReservation } from '@/api/reservations'
 import { Button } from '@/components/ui/button'
 
+function apiErrorMessage(err: unknown): string {
+  const resp = (err as { response?: { data?: { error?: string; detail?: string } } })?.response
+  return resp?.data?.error ?? resp?.data?.detail ?? (err as Error)?.message ?? 'Something went wrong'
+}
+
 export default function ConfirmReservationPage() {
   const { token } = useParams<{ token: string }>()
   const [result, setResult] = useState<'approved' | 'rejected' | null>(null)
@@ -28,7 +33,7 @@ export default function ConfirmReservationPage() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="animate-pulse text-muted-foreground">Loading...</div>
+        <div className="animate-pulse text-foreground">Loading...</div>
       </div>
     )
   }
@@ -39,7 +44,7 @@ export default function ConfirmReservationPage() {
         <div className="text-center space-y-2">
           <XCircle className="w-12 h-12 text-destructive mx-auto" />
           <h1 className="text-xl font-semibold">Invalid Request</h1>
-          <p className="text-muted-foreground">This reservation link is invalid or has expired.</p>
+          <p className="text-foreground">This reservation link is invalid or has expired.</p>
         </div>
       </div>
     )
@@ -51,7 +56,7 @@ export default function ConfirmReservationPage() {
         <div className="text-center space-y-2">
           <CheckCircle className="w-12 h-12 text-status-online mx-auto" />
           <h1 className="text-xl font-semibold">Reservation Approved</h1>
-          <p className="text-muted-foreground">{data.requester_name} has been assigned {data.device_name}.</p>
+          <p className="text-foreground">{data.requester_name} has been assigned {data.device_name}.</p>
         </div>
       </div>
     )
@@ -61,9 +66,9 @@ export default function ConfirmReservationPage() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <div className="text-center space-y-2">
-          <XCircle className="w-12 h-12 text-muted-foreground mx-auto" />
+          <XCircle className="w-12 h-12 text-destructive mx-auto" />
           <h1 className="text-xl font-semibold">Reservation Rejected</h1>
-          <p className="text-muted-foreground">The request has been rejected.</p>
+          <p className="text-foreground">The request has been rejected.</p>
         </div>
       </div>
     )
@@ -73,10 +78,10 @@ export default function ConfirmReservationPage() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <div className="text-center space-y-2">
-          <Clock className="w-12 h-12 text-muted-foreground mx-auto" />
+          <Clock className="w-12 h-12 text-foreground mx-auto" />
           <h1 className="text-xl font-semibold">Already Resolved</h1>
-          <p className="text-muted-foreground">This request has already been resolved or expired.</p>
-          <p className="text-sm text-muted-foreground capitalize">Status: {data.status}</p>
+          <p className="text-foreground">This request has already been resolved or expired.</p>
+          <p className="text-sm text-foreground capitalize">Status: {data.status}</p>
         </div>
       </div>
     )
@@ -107,7 +112,7 @@ export default function ConfirmReservationPage() {
 
         {(approveMutation.error || rejectMutation.error) && (
           <p className="text-sm text-destructive">
-            {(approveMutation.error as Error)?.message ?? (rejectMutation.error as Error)?.message}
+            {apiErrorMessage(approveMutation.error ?? rejectMutation.error)}
           </p>
         )}
 
