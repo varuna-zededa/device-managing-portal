@@ -8,12 +8,15 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 
-from .models import Device, CONDITION_CHOICES
+from django.db.models import Q
+
+from .models import Device, LAB_CHOICES, CONDITION_CHOICES
 from .serializers import DeviceSerializer, DeviceCreateSerializer
 from apps.clusters.models import Cluster
 from apps.device_models.models import DeviceModel
 from apps.reservations.models import ReservationRequest, DeviceComment, OwnershipHistory
-from apps.users.models import PortalUser
+from apps.reservations.serializers import DeviceCommentSerializer, OwnershipHistorySerializer
+from apps.users.models import TEAM_CHOICES, PortalUser
 from apps.vault.models import Vault
 from utils.crypto import encrypt, decrypt
 from utils import email as email_utils
@@ -36,7 +39,7 @@ def _is_admin(email):
     except PortalUser.DoesNotExist:
         return False
     except Exception as e:
-        logger.debug(str(e))
+        logger.warning(str(e))
         return False
 
 
@@ -91,13 +94,11 @@ class DeviceListCreateView(APIView):
         if available == 'true':
             qs = qs.filter(owner_email__isnull=True).exclude(condition__in=UNAVAILABLE_CONDITIONS)
         elif available == 'false':
-            from django.db.models import Q
             qs = qs.filter(
                 Q(owner_email__isnull=False) | Q(condition__in=UNAVAILABLE_CONDITIONS)
             )
 
         if q:
-            from django.db.models import Q
             owner_emails = list(
                 PortalUser.objects.filter(name__icontains=q).values_list('email', flat=True)
             )
@@ -122,6 +123,10 @@ class DeviceListCreateView(APIView):
         serializer = DeviceCreateSerializer(data=request.data)
         if serializer.is_valid():
             device = serializer.save()
+            idrac_password = request.data.get('idrac_password', '').strip()
+            if idrac_password:
+                device.idrac_password_enc = encrypt(idrac_password)
+                device.save(update_fields=['idrac_password_enc', 'updated_at'])
             user_email = _get_user_email(request)
             OwnershipHistory.objects.create(
                 device=device,
@@ -159,6 +164,10 @@ class DeviceDetailView(APIView):
         if serializer.is_valid():
             _handle_condition_change(device, new_condition, old_condition, user_email)
             serializer.save()
+            idrac_password = request.data.get('idrac_password', '').strip()
+            if idrac_password:
+                device.idrac_password_enc = encrypt(idrac_password)
+                device.save(update_fields=['idrac_password_enc', 'updated_at'])
             return Response(DeviceSerializer(device).data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -187,7 +196,8 @@ class DeviceReserveView(APIView):
 
             if device.is_available:
                 device.owner_email = requester_email
-                device.save(update_fields=['owner_email', 'updated_at'])
+                device.reserved_at = timezone.now()
+                device.save(update_fields=['owner_email', 'reserved_at', 'updated_at'])
                 OwnershipHistory.objects.create(
                     device=device,
                     owner_email=requester_email,
@@ -205,9 +215,9 @@ class DeviceReserveView(APIView):
             except PortalUser.DoesNotExist:
                 pass
             except Exception as e:
-                logger.debug(str(e))
+                logger.warning(str(e))
             return Response(
-                {'error': 'A pending request already exists', 'requester': requester_name, 'requester_email': existing.requester_email},
+                {'error': 'A pending request already exists', 'requester': requester_name, 'requester_email': existing.requester_email, 'expires_at': existing.expires_at},
                 status=status.HTTP_409_CONFLICT,
             )
 
@@ -226,7 +236,7 @@ class DeviceReserveView(APIView):
         except PortalUser.DoesNotExist:
             pass
         except Exception as e:
-            logger.debug(str(e))
+            logger.warning(str(e))
 
         requester_user = None
         try:
@@ -234,7 +244,7 @@ class DeviceReserveView(APIView):
         except PortalUser.DoesNotExist:
             pass
         except Exception as e:
-            logger.debug(str(e))
+            logger.warning(str(e))
 
         email_utils.send_reservation_request(device, requester_user or requester_email, owner_user or device.owner_email, token)
         return Response({'message': 'Reservation request sent to device owner'}, status=status.HTTP_202_ACCEPTED)
@@ -257,7 +267,8 @@ class DeviceForceAssignView(APIView):
 
         displaced_owner = device.owner_email
         device.owner_email = assignee_email
-        device.save(update_fields=['owner_email', 'updated_at'])
+        device.reserved_at = timezone.now()
+        device.save(update_fields=['owner_email', 'reserved_at', 'updated_at'])
 
         OwnershipHistory.objects.create(
             device=device,
@@ -280,7 +291,7 @@ class DeviceForceAssignView(APIView):
             except PortalUser.DoesNotExist:
                 pass
             except Exception as e:
-                logger.debug(str(e))
+                logger.warning(str(e))
             email_utils.send_force_assign_notice(device, displaced_owner, assignee_name)
 
         return Response(DeviceSerializer(device).data)
@@ -297,13 +308,14 @@ class DeviceReleaseView(APIView):
         except Device.DoesNotExist:
             return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        if device.owner_email != user_email and not _is_admin(user_email):
-            return Response({'error': 'Only the owner or an admin can release a device'}, status=status.HTTP_403_FORBIDDEN)
+        if device.owner_email != user_email:
+            return Response({'error': 'Only the owner can release a device'}, status=status.HTTP_403_FORBIDDEN)
 
         pending = ReservationRequest.objects.filter(device=device, status='pending').order_by('requested_at').first()
         if pending:
             device.owner_email = pending.requester_email
-            device.save(update_fields=['owner_email', 'updated_at'])
+            device.reserved_at = timezone.now()
+            device.save(update_fields=['owner_email', 'reserved_at', 'updated_at'])
             pending.status = 'approved'
             pending.save(update_fields=['status'])
             OwnershipHistory.objects.create(
@@ -315,7 +327,8 @@ class DeviceReleaseView(APIView):
             email_utils.send_reservation_approved(device, pending.requester_email)
         else:
             device.owner_email = None
-            device.save(update_fields=['owner_email', 'updated_at'])
+            device.reserved_at = None
+            device.save(update_fields=['owner_email', 'reserved_at', 'updated_at'])
             OwnershipHistory.objects.create(
                 device=device,
                 owner_email=None,
@@ -336,6 +349,7 @@ class DeviceStatusView(APIView):
         bearer_token = request.data.get('bearer_token', '').strip()
         cluster_id = request.data.get('cluster_id')
         cluster_device_name = request.data.get('cluster_device_name', '').strip()
+        user_email = _get_user_email(request)
 
         if cluster_id:
             try:
@@ -344,19 +358,10 @@ class DeviceStatusView(APIView):
             except Cluster.DoesNotExist:
                 return Response({'error': 'Cluster not found'}, status=status.HTTP_400_BAD_REQUEST)
             except Exception as e:
-                logger.debug(str(e))
+                logger.warning(str(e))
 
         if cluster_device_name:
             device.cluster_device_name = cluster_device_name
-
-        if bearer_token and device.cluster:
-            token_enc = encrypt(bearer_token)
-            user_email = _get_user_email(request)
-            Vault.objects.update_or_create(
-                user_email=user_email,
-                cluster=device.cluster,
-                defaults={'bearer_token_enc': token_enc},
-            )
 
         if not device.cluster:
             return Response({'error': 'Device has no cluster assigned'}, status=status.HTTP_400_BAD_REQUEST)
@@ -366,14 +371,13 @@ class DeviceStatusView(APIView):
 
         resolved_token = bearer_token
         if not resolved_token:
-            user_email = _get_user_email(request)
             try:
                 vault = Vault.objects.get(user_email=user_email, cluster=device.cluster)
                 resolved_token = decrypt(bytes(vault.bearer_token_enc))
             except Vault.DoesNotExist:
                 return Response({'error': 'No bearer token provided and none stored in vault'}, status=status.HTTP_400_BAD_REQUEST)
             except Exception as e:
-                logger.debug(str(e))
+                logger.warning(str(e))
                 return Response({'error': 'Failed to retrieve stored token'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         try:
@@ -383,10 +387,17 @@ class DeviceStatusView(APIView):
                 bearer_token=resolved_token,
                 device=device,
             )
+            if bearer_token:
+                Vault.objects.update_or_create(
+                    user_email=user_email,
+                    cluster=device.cluster,
+                    defaults={'bearer_token_enc': encrypt(bearer_token)},
+                )
             device.eve_version = eve_version
             device.device_connectivity = device_connectivity
             device.status = dev_status
-            device.save(update_fields=['cluster', 'cluster_device_name', 'eve_version', 'device_connectivity', 'status', 'updated_at'])
+            device.status_fetched_at = timezone.now()
+            device.save(update_fields=['cluster', 'cluster_device_name', 'eve_version', 'device_connectivity', 'status', 'status_fetched_at', 'updated_at'])
             return Response(DeviceSerializer(device).data)
 
         except SerialMismatchError as e:
@@ -395,24 +406,29 @@ class DeviceStatusView(APIView):
                 status=status.HTTP_409_CONFLICT,
             )
         except httpx.HTTPStatusError as e:
-            if e.response.status_code == 404:
+            code = e.response.status_code
+            if code == 404:
                 device.eve_version = 'Unknown'
                 device.device_connectivity = None
                 device.status = 'Unknown'
-                device.save(update_fields=['eve_version', 'device_connectivity', 'status', 'updated_at'])
+                device.status_fetched_at = timezone.now()
+                device.save(update_fields=['eve_version', 'device_connectivity', 'status', 'status_fetched_at', 'updated_at'])
                 return Response(DeviceSerializer(device).data)
-            elif e.response.status_code == 403:
+            if code in (401, 403):
                 return Response({'error': 'Bearer token invalid or expired'}, status=status.HTTP_403_FORBIDDEN)
-            raise
+            logger.exception('ZedCloud HTTP error %s for device %s', code, device.name)
+            return Response(
+                {'error': f'ZedCloud returned HTTP {code}'},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
         except Exception as e:
-            logger.debug(str(e))
-            return Response({'error': 'Failed to fetch device status'}, status=status.HTTP_502_BAD_GATEWAY)
+            logger.exception('Failed to fetch status for device %s', device.name)
+            return Response({'error': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
 
 
 class DeviceCommentListCreateView(APIView):
     def get(self, request, pk):
         comments = DeviceComment.objects.filter(device_id=pk).order_by('-created_at')[:10]
-        from apps.reservations.serializers import DeviceCommentSerializer
         serializer = DeviceCommentSerializer(comments, many=True)
         return Response(serializer.data)
 
@@ -438,7 +454,6 @@ class DeviceCommentListCreateView(APIView):
         device.last_comment_at = comment.created_at
         device.save(update_fields=['last_comment_text', 'last_comment_by', 'last_comment_at', 'updated_at'])
 
-        from apps.reservations.serializers import DeviceCommentSerializer
         return Response(DeviceCommentSerializer(comment).data, status=status.HTTP_201_CREATED)
 
 
@@ -448,6 +463,14 @@ class DeviceOwnershipHistoryView(APIView):
         if not _is_admin(user_email):
             return Response({'error': 'Admin only'}, status=status.HTTP_403_FORBIDDEN)
         history = OwnershipHistory.objects.filter(device_id=pk).order_by('-changed_at')
-        from apps.reservations.serializers import OwnershipHistorySerializer
         serializer = OwnershipHistorySerializer(history, many=True)
         return Response(serializer.data)
+
+
+class ChoicesView(APIView):
+    def get(self, request):
+        return Response({
+            'labs': [c[0] for c in LAB_CHOICES],
+            'teams': [c[0] for c in TEAM_CHOICES],
+            'conditions': [c[0] for c in CONDITION_CHOICES],
+        })
