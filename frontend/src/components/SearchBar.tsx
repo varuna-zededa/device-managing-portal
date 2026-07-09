@@ -67,7 +67,7 @@ export function SearchBar({ value, onChange }: SearchBarProps) {
           value={inputVal}
           onChange={(e) => setInputVal(e.target.value)}
           placeholder="Search by name, model, cluster, owner, EVE version, comment..."
-          className="w-full h-9 pl-9 pr-3 rounded-md border border-input bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+          className="w-full h-9 pl-9 pr-3 rounded-md border border-input bg-background text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         />
       </div>
 

@@ -140,9 +140,9 @@ export default function UsersPage() {
                     <button
                       onClick={() => openEdit(u)}
                       className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-accent transition-opacity"
-                      title="Edit user"
+                      aria-label="Edit user"
                     >
-                      <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
+                      <Pencil className="w-3.5 h-3.5 text-muted-foreground" aria-hidden="true" />
                     </button>
                   </td>
                 </tr>

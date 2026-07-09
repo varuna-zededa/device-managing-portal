@@ -213,8 +213,8 @@ export function DeviceFormModal({ device, open, onOpenChange }: DeviceFormModalP
                           placeholder="Select model..."
                         />
                       </FormControl>
-                      <Button type="button" variant="outline" size="icon" className="shrink-0" onClick={() => setAddModelOpen(true)}>
-                        <Plus className="w-4 h-4" />
+                      <Button type="button" variant="outline" size="icon" className="shrink-0" aria-label="Add model" onClick={() => setAddModelOpen(true)}>
+                        <Plus className="w-4 h-4" aria-hidden="true" />
                       </Button>
                     </div>
                     <FormMessage />
@@ -250,8 +250,8 @@ export function DeviceFormModal({ device, open, onOpenChange }: DeviceFormModalP
                           hintBelow
                         />
                       </FormControl>
-                      <Button type="button" variant="outline" size="icon" className="shrink-0" onClick={() => setAddClusterOpen(true)}>
-                        <Plus className="w-4 h-4" />
+                      <Button type="button" variant="outline" size="icon" className="shrink-0" aria-label="Add cluster" onClick={() => setAddClusterOpen(true)}>
+                        <Plus className="w-4 h-4" aria-hidden="true" />
                       </Button>
                     </div>
                     <FormMessage />
