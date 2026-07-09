@@ -3,12 +3,24 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
+# Source: libs/zmsg/zcommon/zcommon.proto — enum RunState, device-applicable values only
 STATUS_MAP = {
-    'RUN_STATE_ONLINE': 'Online',
-    'RUN_STATE_OFFLINE': 'Offline',
-    'RUN_STATE_HALTING': 'Halting',
-    'RUN_STATE_SUSPENDED': 'Suspended',
-    'RUN_STATE_UNKNOWN': 'Unknown',
+    'RUN_STATE_ONLINE': 'Online',                           # 1
+    'RUN_STATE_HALTED': 'Halted',                           # 2
+    'RUN_STATE_REBOOTING': 'Rebooting',                     # 4
+    'RUN_STATE_OFFLINE': 'Offline',                         # 5
+    'RUN_STATE_UNKNOWN': 'Unknown',                         # 6
+    'RUN_STATE_UNPROVISIONED': 'Unprovisioned',             # 7
+    'RUN_STATE_PROVISIONED': 'Provisioned',                 # 8
+    'RUN_STATE_SUSPECT': 'Suspect',                         # 9
+    'RUN_STATE_DOWNLOADING': 'Downloading',                 # 10
+    'RUN_STATE_RESTARTING': 'Restarting',                   # 11
+    'RUN_STATE_BOOTING': 'Booting',                         # 18
+    'RUN_STATE_MAINTENANCE_MODE': 'Maintenance',            # 19
+    'RUN_STATE_BASEOS_UPDATING': 'BaseOS Updating',         # 21
+    'RUN_STATE_PREPARING_POWEROFF': 'Preparing Poweroff',   # 22
+    'RUN_STATE_POWERING_OFF': 'Powering Off',               # 23
+    'RUN_STATE_PREPARED_POWEROFF': 'Prepared Poweroff',     # 24
 }
 
 
