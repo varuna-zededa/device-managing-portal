@@ -133,7 +133,7 @@ class ImportView(APIView):
                 defaults = {}
                 for field in ('name', 'description', 'team', 'owner_email', 'lab',
                               'location_detail', 'condition', 'idrac_ip', 'eve_version', 'status'):
-                    if row.get(field) is not None:
+                    if row.get(field) not in (None, ''):
                         defaults[field] = row[field]
                 if model_obj:
                     defaults['model'] = model_obj

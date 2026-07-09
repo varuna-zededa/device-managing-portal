@@ -2,6 +2,7 @@ import re
 import time
 import random
 import logging
+from datetime import timedelta
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
@@ -42,8 +43,6 @@ class LatencyMiddleware:
 
     def _record(self, method, path, status_code, duration_ms):
         from apps.admin_tools.models import RequestLog
-        from django.utils import timezone as tz
-        from datetime import timedelta
 
         normalized = _normalize_path(path)
         RequestLog.objects.create(
@@ -51,10 +50,10 @@ class LatencyMiddleware:
             path=normalized,
             status_code=status_code,
             duration_ms=duration_ms,
-            timestamp=tz.now(),
+            timestamp=timezone.now(),
         )
 
         # Probabilistic pruning: ~1% of requests trigger cleanup
         if random.random() < 0.01:
-            cutoff = tz.now() - timedelta(days=self.RETENTION_DAYS)
+            cutoff = timezone.now() - timedelta(days=self.RETENTION_DAYS)
             RequestLog.objects.filter(timestamp__lt=cutoff).delete()
