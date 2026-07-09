@@ -19,7 +19,10 @@ export interface Device {
   eve_version: string | null
   device_connectivity: Array<{ ip: string; mac: string; interface_name: string }> | null
   status: string | null
+  status_fetched_at: string | null
+  reserved_at: string | null
   is_available: boolean
+  pending_requester_email: string | null
   last_comment_text: string | null
   last_comment_by: string | null
   last_comment_at: string | null
@@ -73,9 +76,13 @@ export async function deleteDevice(id: number): Promise<void> {
   await client.delete(`/devices/${id}/`)
 }
 
-export async function reserveDevice(id: number): Promise<unknown> {
+export type ReserveResult = { immediate: true } | { immediate: false; message: string }
+
+export async function reserveDevice(id: number): Promise<ReserveResult> {
   const res = await client.post(`/devices/${id}/reserve/`)
-  return res.data
+  return res.data?.message
+    ? { immediate: false, message: res.data.message }
+    : { immediate: true }
 }
 
 export async function releaseDevice(id: number): Promise<unknown> {
