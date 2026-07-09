@@ -1,8 +1,10 @@
 from django.contrib import admin
 from django.urls import path, include
+from apps.devices.views import ChoicesView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('api/choices/', ChoicesView.as_view()),
     path('api/clusters/', include('apps.clusters.urls')),
     path('api/models/', include('apps.device_models.urls')),
     path('api/devices/', include('apps.devices.urls')),
