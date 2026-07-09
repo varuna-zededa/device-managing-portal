@@ -1,7 +1,7 @@
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { createModel, type DeviceModel } from '@/api/models'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -30,6 +30,7 @@ interface AddModelModalProps {
 }
 
 export function AddModelModal({ open, onOpenChange, onCreated }: AddModelModalProps) {
+  const qc = useQueryClient()
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: { name: '', customer_partner_name: '' },
@@ -38,6 +39,7 @@ export function AddModelModal({ open, onOpenChange, onCreated }: AddModelModalPr
   const mutation = useMutation({
     mutationFn: (values: FormValues) => createModel(values),
     onSuccess: (model) => {
+      qc.setQueryData<DeviceModel[]>(['models'], (old = []) => [...old, model])
       toast.success(`Model "${model.name}" created`)
       onCreated(model)
       onOpenChange(false)
@@ -60,7 +62,7 @@ export function AddModelModal({ open, onOpenChange, onCreated }: AddModelModalPr
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Model Name</FormLabel>
-                  <FormControl><Input placeholder="e.g. Dell R750" {...field} /></FormControl>
+                  <FormControl><Input placeholder="e.g. Dell R750" {...field} spellCheck={false} autoComplete="off" /></FormControl>
                   <FormMessage />
                 </FormItem>
               )}

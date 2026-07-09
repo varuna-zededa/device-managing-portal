@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { createCluster, type Cluster } from '@/api/clusters'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -26,6 +26,7 @@ interface AddClusterModalProps {
 }
 
 export function AddClusterModal({ open, onOpenChange, onCreated }: AddClusterModalProps) {
+  const qc = useQueryClient()
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: { name: '', host: '' },
@@ -45,6 +46,7 @@ export function AddClusterModal({ open, onOpenChange, onCreated }: AddClusterMod
   const mutation = useMutation({
     mutationFn: (values: FormValues) => createCluster(values),
     onSuccess: (cluster) => {
+      qc.setQueryData<Cluster[]>(['clusters'], (old = []) => [...old, cluster])
       toast.success(`Cluster "${cluster.name}" created`)
       onCreated(cluster)
       onOpenChange(false)
@@ -67,7 +69,7 @@ export function AddClusterModal({ open, onOpenChange, onCreated }: AddClusterMod
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Name</FormLabel>
-                  <FormControl><Input placeholder="e.g. staging" {...field} /></FormControl>
+                  <FormControl><Input placeholder="e.g. staging" {...field} spellCheck={false} autoComplete="off" /></FormControl>
                   <FormMessage />
                 </FormItem>
               )}
@@ -78,7 +80,7 @@ export function AddClusterModal({ open, onOpenChange, onCreated }: AddClusterMod
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Host</FormLabel>
-                  <FormControl><Input placeholder="zedcontrol.example.zededa.net" {...field} /></FormControl>
+                  <FormControl><Input placeholder="zedcontrol.example.zededa.net" {...field} spellCheck={false} autoComplete="url" /></FormControl>
                   <FormMessage />
                 </FormItem>
               )}

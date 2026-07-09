@@ -1,17 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 import { Search } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import { cn } from '@/lib/utils'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { getChoices } from '@/api/choices'
 
-const LABS = ['SJ-Lab', 'NY-Lab', 'UK-Lab', 'DE-Lab', 'SG-Lab', 'IN-Lab']
-const TEAMS = ['ST', 'EVE', 'PLATFORM']
-const CONDITIONS = [
-  { value: 'normal', label: 'Normal' },
-  { value: 'out_of_order', label: 'Out of Order' },
-  { value: 'needs_repair', label: 'Needs Repair' },
-  { value: 'temporarily_leased', label: 'Temporarily Leased' },
-  { value: 'dedicated', label: 'Dedicated' },
-]
+const CONDITION_LABELS: Record<string, string> = {
+  normal: 'Normal',
+  out_of_order: 'Out of Order',
+  needs_repair: 'Needs Repair',
+  temporarily_leased: 'Temporarily Leased',
+  dedicated: 'Dedicated',
+}
 
 export interface SearchParams {
   q?: string
@@ -29,6 +29,16 @@ interface SearchBarProps {
 export function SearchBar({ value, onChange }: SearchBarProps) {
   const [inputVal, setInputVal] = useState(value.q ?? '')
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const { data: choices } = useQuery({
+    queryKey: ['choices'],
+    queryFn: getChoices,
+    staleTime: Infinity,
+  })
+
+  const labs = choices?.labs ?? []
+  const teams = choices?.teams ?? []
+  const conditions = choices?.conditions ?? []
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
@@ -56,7 +66,7 @@ export function SearchBar({ value, onChange }: SearchBarProps) {
           type="text"
           value={inputVal}
           onChange={(e) => setInputVal(e.target.value)}
-          placeholder="Search devices..."
+          placeholder="Search by name, model, cluster, owner, EVE version, comment..."
           className="w-full h-9 pl-9 pr-3 rounded-md border border-input bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
         />
       </div>
@@ -71,7 +81,7 @@ export function SearchBar({ value, onChange }: SearchBarProps) {
               'px-3 h-9 text-sm transition-colors',
               activeAvail === chip.key
                 ? 'bg-primary text-primary-foreground'
-                : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+                : 'text-foreground hover:bg-accent hover:text-accent-foreground',
             )}
           >
             {chip.label}
@@ -88,7 +98,7 @@ export function SearchBar({ value, onChange }: SearchBarProps) {
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="all">All Teams</SelectItem>
-          {TEAMS.map((t) => (
+          {teams.map((t) => (
             <SelectItem key={t} value={t}>{t}</SelectItem>
           ))}
         </SelectContent>
@@ -98,12 +108,12 @@ export function SearchBar({ value, onChange }: SearchBarProps) {
         value={value.lab ?? 'all'}
         onValueChange={(v) => onChange({ ...value, lab: v === 'all' ? undefined : v })}
       >
-        <SelectTrigger className="h-9 w-32 text-sm">
+        <SelectTrigger className="h-9 w-40 text-sm">
           <SelectValue placeholder="Lab" />
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="all">All Labs</SelectItem>
-          {LABS.map((l) => (
+          {labs.map((l) => (
             <SelectItem key={l} value={l}>{l}</SelectItem>
           ))}
         </SelectContent>
@@ -118,8 +128,8 @@ export function SearchBar({ value, onChange }: SearchBarProps) {
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="all">All Conditions</SelectItem>
-          {CONDITIONS.map((c) => (
-            <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+          {conditions.map((c) => (
+            <SelectItem key={c} value={c}>{CONDITION_LABELS[c] ?? c}</SelectItem>
           ))}
         </SelectContent>
       </Select>

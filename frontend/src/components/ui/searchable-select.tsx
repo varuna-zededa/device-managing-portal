@@ -37,6 +37,7 @@ export interface SearchableSelectProps {
   onSearchChange?: (query: string) => void;
   isSearching?: boolean;
   groupTabs?: readonly string[];
+  hintBelow?: boolean;
 }
 
 export function SearchableSelect({
@@ -53,6 +54,7 @@ export function SearchableSelect({
   onSearchChange,
   isSearching = false,
   groupTabs,
+  hintBelow = false,
 }: SearchableSelectProps) {
   const [open, setOpen] = React.useState(false);
   const [search, setSearch] = React.useState("");
@@ -176,6 +178,7 @@ export function SearchableSelect({
           onHighlight={setHighlightedIndex}
           isSearching={isSearching}
           emptyMessage={emptyMessage}
+          hintBelow={hintBelow}
           onSelect={(v) => { onValueChange(v); setOpen(false); }}
         />
       </PopoverContent>
@@ -191,6 +194,7 @@ function VirtualizedList({
   onHighlight,
   isSearching,
   emptyMessage,
+  hintBelow,
   onSelect,
 }: {
   listboxId: string;
@@ -200,6 +204,7 @@ function VirtualizedList({
   onHighlight: (index: number) => void;
   isSearching: boolean;
   emptyMessage: string;
+  hintBelow?: boolean;
   onSelect: (value: string) => void;
 }) {
   const parentRef = React.useRef<HTMLDivElement>(null);
@@ -218,7 +223,7 @@ function VirtualizedList({
   const virtualizer = useVirtualizer({
     count: options.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 36,
+    estimateSize: () => hintBelow ? 52 : 36,
     overscan: 8,
   });
 
@@ -270,9 +275,20 @@ function VirtualizedList({
               <Check
                 className={cn("w-4 h-4 shrink-0", value === option.value ? "opacity-100 text-primary" : "opacity-0")}
               />
-              <TruncatingTitleLabel label={option.label} />
-              {option.hint && (
-                <span className="ml-auto shrink-0 text-xs text-muted-foreground/50">{option.hint}</span>
+              {hintBelow ? (
+                <div className="flex flex-col min-w-0 flex-1">
+                  <span className="truncate">{option.label}</span>
+                  {option.hint && (
+                    <span className="text-xs text-muted-foreground/60 truncate">{option.hint}</span>
+                  )}
+                </div>
+              ) : (
+                <>
+                  <TruncatingTitleLabel label={option.label} />
+                  {option.hint && (
+                    <span className="ml-auto shrink-0 text-xs text-muted-foreground/50">{option.hint}</span>
+                  )}
+                </>
               )}
             </button>
           );

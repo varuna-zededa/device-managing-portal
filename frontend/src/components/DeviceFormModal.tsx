@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -8,6 +8,7 @@ import { createDevice, updateDevice, type Device } from '@/api/devices'
 import { getModels } from '@/api/models'
 import { getClusters } from '@/api/clusters'
 import { getUsers } from '@/api/users'
+import { getChoices } from '@/api/choices'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog'
@@ -21,10 +22,22 @@ import { AddModelModal } from '@/components/AddModelModal'
 import { AddClusterModal } from '@/components/AddClusterModal'
 import { toast } from '@/components/ui/sonner'
 import { useUser } from '@/context/UserContext'
+import { cn } from '@/lib/utils'
 
-const LABS = ['SJ-Lab', 'NY-Lab', 'UK-Lab', 'DE-Lab', 'SG-Lab', 'IN-Lab']
-const TEAMS = ['ST', 'EVE', 'PLATFORM']
-const CONDITIONS = ['normal', 'out_of_order', 'needs_repair', 'temporarily_leased', 'dedicated']
+const CONDITION_LABELS: Record<string, string> = {
+  normal: 'Normal',
+  out_of_order: 'Out of Order',
+  needs_repair: 'Needs Repair',
+  temporarily_leased: 'Temporarily Leased',
+  dedicated: 'Dedicated',
+}
+
+const CONDITION_COLORS: Record<string, string> = {
+  out_of_order: 'text-red-400',
+  needs_repair: 'text-yellow-400',
+  temporarily_leased: 'text-violet-400',
+  dedicated: 'text-blue-400',
+}
 
 const schema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -60,37 +73,75 @@ export function DeviceFormModal({ device, open, onOpenChange }: DeviceFormModalP
   const qc = useQueryClient()
   const [addModelOpen, setAddModelOpen] = useState(false)
   const [addClusterOpen, setAddClusterOpen] = useState(false)
+  const clusterNameEditedRef = useRef(false)
 
   const { data: models = [] } = useQuery({ queryKey: ['models'], queryFn: getModels })
   const { data: clusters = [] } = useQuery({ queryKey: ['clusters'], queryFn: getClusters })
   const { data: users = [] } = useQuery({ queryKey: ['users'], queryFn: getUsers, enabled: isAdmin })
+  const { data: choices } = useQuery({ queryKey: ['choices'], queryFn: getChoices, staleTime: Infinity })
+
+  const labs = choices?.labs ?? []
+  const teams = choices?.teams ?? []
+  const conditions = choices?.conditions ?? []
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
-      name: device?.name ?? '',
-      serial_number: device?.serial_number ?? '',
-      model_id: device?.model?.id?.toString() ?? '',
-      cluster_id: device?.cluster?.id?.toString() ?? '',
-      cluster_device_name: device?.cluster_device_name ?? '',
-      lab: device?.lab ?? '',
-      team: device?.team ?? '',
-      description: device?.description ?? '',
-      location_detail: device?.location_detail ?? '',
-      condition: device?.condition ?? 'normal',
-      idrac_ip: device?.idrac_ip ?? '',
-      idrac_username: device?.idrac_username ?? '',
+      name: '',
+      serial_number: '',
+      model_id: '',
+      cluster_id: '',
+      cluster_device_name: '',
+      lab: '',
+      team: '',
+      description: '',
+      location_detail: '',
+      condition: 'normal',
+      idrac_ip: '',
+      idrac_username: '',
       idrac_password: '',
-      owner_email: device?.owner_email ?? '',
+      owner_email: '',
     },
   })
 
+  // Reset form with fresh values each time the dialog opens
+  useEffect(() => {
+    if (open) {
+      clusterNameEditedRef.current = false
+      form.reset({
+        name: device?.name ?? '',
+        serial_number: device?.serial_number ?? '',
+        model_id: device?.model?.id?.toString() ?? '',
+        cluster_id: device?.cluster?.id?.toString() ?? '',
+        cluster_device_name: device?.cluster_device_name ?? '',
+        lab: device?.lab ?? '',
+        team: device?.team ?? '',
+        description: device?.description ?? '',
+        location_detail: device?.location_detail ?? '',
+        condition: device?.condition ?? 'normal',
+        idrac_ip: device?.idrac_ip ?? '',
+        idrac_username: device?.idrac_username ?? '',
+        idrac_password: '',
+        owner_email: device?.owner_email ?? '',
+      })
+    }
+  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-populate Name in Cluster from Name (unless user has manually edited it)
+  const nameValue = form.watch('name')
+  useEffect(() => {
+    if (!clusterNameEditedRef.current) {
+      form.setValue('cluster_device_name', nameValue, { shouldDirty: false })
+    }
+  }, [nameValue]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const mutation = useMutation({
     mutationFn: (values: FormValues) => {
+      const { model_id, cluster_id, ...rest } = values
       const payload: Record<string, unknown> = {
-        ...values,
-        model_id: parseInt(values.model_id),
-        cluster_id: values.cluster_id ? parseInt(values.cluster_id) : null,
+        ...rest,
+        model: parseInt(model_id),
+        cluster: cluster_id ? parseInt(cluster_id) : null,
       }
       if (!payload.idrac_password) delete payload.idrac_password
       return isEdit ? updateDevice(device!.id, payload) : createDevice(payload)
@@ -111,7 +162,7 @@ export function DeviceFormModal({ device, open, onOpenChange }: DeviceFormModalP
 
   const clusterOptions = clusters.map((c) => ({
     value: c.id.toString(),
-    label: c.name,
+    label: c.name.charAt(0).toUpperCase() + c.name.slice(1),
     hint: c.host,
   }))
 
@@ -142,7 +193,7 @@ export function DeviceFormModal({ device, open, onOpenChange }: DeviceFormModalP
                   <FormItem>
                     <FormLabel>Serial Number *</FormLabel>
                     <FormControl>
-                      <Input {...field} disabled={isEdit} className="font-mono" />
+                      <Input {...field} disabled={isEdit} className="font-mono" spellCheck={false} autoComplete="off" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -151,10 +202,10 @@ export function DeviceFormModal({ device, open, onOpenChange }: DeviceFormModalP
 
               <div className="grid grid-cols-2 gap-4">
                 <FormField control={form.control} name="model_id" render={({ field }) => (
-                  <FormItem>
+                  <FormItem className="min-w-0">
                     <FormLabel>Model *</FormLabel>
-                    <div className="flex gap-1">
-                      <FormControl>
+                    <div className="flex gap-1 min-w-0">
+                      <FormControl className="min-w-0 flex-1">
                         <SearchableSelect
                           options={modelOptions}
                           value={field.value}
@@ -162,7 +213,7 @@ export function DeviceFormModal({ device, open, onOpenChange }: DeviceFormModalP
                           placeholder="Select model..."
                         />
                       </FormControl>
-                      <Button type="button" variant="outline" size="icon" onClick={() => setAddModelOpen(true)}>
+                      <Button type="button" variant="outline" size="icon" className="shrink-0" onClick={() => setAddModelOpen(true)}>
                         <Plus className="w-4 h-4" />
                       </Button>
                     </div>
@@ -177,7 +228,7 @@ export function DeviceFormModal({ device, open, onOpenChange }: DeviceFormModalP
                         <SelectTrigger><SelectValue placeholder="Select lab..." /></SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {LABS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                        {labs.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -187,18 +238,19 @@ export function DeviceFormModal({ device, open, onOpenChange }: DeviceFormModalP
 
               <div className="grid grid-cols-2 gap-4">
                 <FormField control={form.control} name="cluster_id" render={({ field }) => (
-                  <FormItem>
+                  <FormItem className="min-w-0">
                     <FormLabel>Cluster</FormLabel>
-                    <div className="flex gap-1">
-                      <FormControl>
+                    <div className="flex gap-1 min-w-0">
+                      <FormControl className="min-w-0 flex-1">
                         <SearchableSelect
                           options={clusterOptions}
                           value={field.value}
                           onValueChange={field.onChange}
                           placeholder="Select cluster..."
+                          hintBelow
                         />
                       </FormControl>
-                      <Button type="button" variant="outline" size="icon" onClick={() => setAddClusterOpen(true)}>
+                      <Button type="button" variant="outline" size="icon" className="shrink-0" onClick={() => setAddClusterOpen(true)}>
                         <Plus className="w-4 h-4" />
                       </Button>
                     </div>
@@ -208,7 +260,18 @@ export function DeviceFormModal({ device, open, onOpenChange }: DeviceFormModalP
                 <FormField control={form.control} name="cluster_device_name" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Name in Cluster</FormLabel>
-                    <FormControl><Input {...field} className="font-mono" /></FormControl>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        className="font-mono"
+                        spellCheck={false}
+                        autoComplete="off"
+                        onChange={(e) => {
+                          clusterNameEditedRef.current = true
+                          field.onChange(e)
+                        }}
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -223,7 +286,7 @@ export function DeviceFormModal({ device, open, onOpenChange }: DeviceFormModalP
                         <SelectTrigger><SelectValue placeholder="Select team..." /></SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {TEAMS.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                        {teams.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -237,8 +300,10 @@ export function DeviceFormModal({ device, open, onOpenChange }: DeviceFormModalP
                         <SelectTrigger><SelectValue /></SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {CONDITIONS.map((c) => (
-                          <SelectItem key={c} value={c}>{c.replace(/_/g, ' ')}</SelectItem>
+                        {conditions.map((c) => (
+                          <SelectItem key={c} value={c} className={cn(CONDITION_COLORS[c])}>
+                            {CONDITION_LABELS[c] ?? c}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -267,14 +332,14 @@ export function DeviceFormModal({ device, open, onOpenChange }: DeviceFormModalP
                 <FormField control={form.control} name="idrac_ip" render={({ field }) => (
                   <FormItem>
                     <FormLabel>IDRAC IP</FormLabel>
-                    <FormControl><Input {...field} /></FormControl>
+                    <FormControl><Input {...field} spellCheck={false} autoComplete="off" /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
                 <FormField control={form.control} name="idrac_username" render={({ field }) => (
                   <FormItem>
                     <FormLabel>IDRAC Username</FormLabel>
-                    <FormControl><Input {...field} /></FormControl>
+                    <FormControl><Input {...field} spellCheck={false} autoComplete="username" /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -283,7 +348,7 @@ export function DeviceFormModal({ device, open, onOpenChange }: DeviceFormModalP
               <FormField control={form.control} name="idrac_password" render={({ field }) => (
                 <FormItem>
                   <FormLabel>IDRAC Password {isEdit && <span className="text-muted-foreground font-normal">(leave blank to keep current)</span>}</FormLabel>
-                  <FormControl><Input type="password" {...field} /></FormControl>
+                  <FormControl><Input type="password" {...field} autoComplete="new-password" /></FormControl>
                   <FormMessage />
                 </FormItem>
               )} />
