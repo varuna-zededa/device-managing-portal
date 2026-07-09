@@ -1,5 +1,6 @@
-import { useState, useMemo } from 'react'
+import React, { useState, useMemo, Fragment } from 'react'
 import { ChevronRight, MoreHorizontal, RefreshCw, Clock, ExternalLink } from 'lucide-react'
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { releaseDevice, deleteDevice, type Device } from '@/api/devices'
 import { useUser } from '@/context/UserContext'
@@ -23,12 +24,91 @@ import { OwnershipHistoryModal } from '@/components/OwnershipHistoryModal'
 import { DeviceFormModal } from '@/components/DeviceFormModal'
 import { toast } from '@/components/ui/sonner'
 
+// ── Column ordering ──────────────────────────────────────────────────────────
+
+const REORDERABLE_COLS = [
+  'name', 'serial', 'cluster', 'clusterName', 'team', 'lab', 'owner', 'status', 'comment',
+] as const
+type ColId = typeof REORDERABLE_COLS[number]
+const COL_ORDER_KEY = 'col-order-devices'
+
+function loadColOrder(): ColId[] {
+  try {
+    const stored = localStorage.getItem(COL_ORDER_KEY)
+    if (stored) {
+      const parsed: string[] = JSON.parse(stored)
+      const valid = parsed.filter((id): id is ColId =>
+        (REORDERABLE_COLS as readonly string[]).includes(id),
+      )
+      const missing = REORDERABLE_COLS.filter(id => !valid.includes(id))
+      return [...valid, ...missing]
+    }
+  } catch {}
+  return [...REORDERABLE_COLS]
+}
+
+// ── Sort ─────────────────────────────────────────────────────────────────────
+
 type SortKey = 'name' | 'cluster' | 'owner' | null
 type SortDir = 'asc' | 'desc'
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
 function initials(name: string) {
   return name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()
 }
+
+function timeAgo(iso: string | null): string {
+  if (!iso) return '—'
+  const secs = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
+  if (secs < 60) return 'just now'
+
+  const p = (n: number, unit: string) => `${n} ${unit}${n === 1 ? '' : 's'}`
+  const mins = Math.floor(secs / 60)
+  if (mins < 60) return `${p(mins, 'min')} ago`
+
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${p(hrs, 'hr')} ago`
+
+  const days = Math.floor(hrs / 24)
+  if (days < 7) {
+    const remHrs = hrs % 24
+    const parts = [p(days, 'day')]
+    if (remHrs > 0) parts.push(p(remHrs, 'hr'))
+    return `${parts.join(', ')} ago`
+  }
+
+  if (days < 30) {
+    const weeks = Math.floor(days / 7)
+    const remDays = days % 7
+    const parts = [p(weeks, 'week')]
+    if (remDays > 0) parts.push(p(remDays, 'day'))
+    return `${parts.join(', ')} ago`
+  }
+
+  if (days < 365) {
+    const months = Math.floor(days / 30)
+    const remDays = days % 30
+    const weeks = Math.floor(remDays / 7)
+    const finalDays = remDays % 7
+    const parts = [p(months, 'month')]
+    if (weeks > 0) parts.push(p(weeks, 'week'))
+    if (finalDays > 0) parts.push(p(finalDays, 'day'))
+    return `${parts.join(', ')} ago`
+  }
+
+  const years = Math.floor(days / 365)
+  const remAfterYears = days % 365
+  const months = Math.floor(remAfterYears / 30)
+  const remAfterMonths = remAfterYears % 30
+  const weeks = Math.floor(remAfterMonths / 7)
+  const parts = [p(years, 'year')]
+  if (months > 0) parts.push(p(months, 'month'))
+  if (weeks > 0) parts.push(p(weeks, 'week'))
+  return `${parts.join(', ')} ago`
+}
+
+// ── Style maps ───────────────────────────────────────────────────────────────
 
 const CONDITION_STYLES: Record<string, string> = {
   out_of_order: 'border-l-4 border-l-red-500 bg-red-50/10',
@@ -44,38 +124,51 @@ const CONDITION_BADGE_STYLES: Record<string, string> = {
   dedicated: 'bg-blue-400/20 text-blue-400 border-blue-400/30',
 }
 
+const STATUS_BADGE: Record<string, string> = {
+  Online:               'bg-badge-online-bg text-badge-online-fg border-badge-online-border',
+  Suspect:              'bg-badge-warning-bg text-badge-warning-fg border-badge-warning-border',
+  Maintenance:          'bg-badge-warning-bg text-badge-warning-fg border-badge-warning-border',
+  'Preparing Poweroff': 'bg-badge-warning-bg text-badge-warning-fg border-badge-warning-border',
+  'Powering Off':       'bg-badge-warning-bg text-badge-warning-fg border-badge-warning-border',
+  'Prepared Poweroff':  'bg-badge-warning-bg text-badge-warning-fg border-badge-warning-border',
+  Rebooting:            'bg-badge-info-bg text-badge-info-fg border-badge-info-border',
+  Downloading:          'bg-badge-info-bg text-badge-info-fg border-badge-info-border',
+  Restarting:           'bg-badge-info-bg text-badge-info-fg border-badge-info-border',
+  Booting:              'bg-badge-info-bg text-badge-info-fg border-badge-info-border',
+  'BaseOS Updating':    'bg-badge-info-bg text-badge-info-fg border-badge-info-border',
+  Provisioned:          'bg-badge-provisioned-bg text-badge-provisioned-fg border-badge-provisioned-border',
+  Offline:              'bg-badge-neutral-bg text-badge-neutral-fg border-badge-neutral-border',
+  Halted:               'bg-badge-neutral-bg text-badge-neutral-fg border-badge-neutral-border',
+  Unprovisioned:        'bg-badge-neutral-bg text-badge-neutral-fg border-badge-neutral-border',
+}
+
+// ── Sub-components ───────────────────────────────────────────────────────────
+
 function StatusBadge({ status }: { status: string | null }) {
   if (!status || status === 'Unknown') {
     return <span className="text-xs text-muted-foreground">Unknown</span>
   }
-  if (status === 'Online') {
-    return <Badge className="bg-badge-online-bg text-badge-online-fg border-badge-online-border text-xs">Online</Badge>
-  }
-  if (status === 'Offline') {
-    return <Badge className="bg-badge-error-bg text-badge-error-fg border-badge-error-border text-xs">Offline</Badge>
-  }
+  const cls = STATUS_BADGE[status]
+  if (cls) return <Badge className={`${cls} text-xs`}>{status}</Badge>
   return <Badge variant="outline" className="text-xs">{status}</Badge>
 }
 
 function ExpandPanel({ device }: { device: Device }) {
   return (
     <tr>
-      <td colSpan={9} className="p-0 bg-muted/30">
+      <td colSpan={11} className="p-0 bg-muted/30">
         <div className="grid grid-cols-3 gap-4 p-4 border-b border-border">
           {/* Card 1: Identity + Placement */}
           <div className="bg-card rounded-md border border-border p-4 space-y-4">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Identity</p>
-              <CopyableField label="Serial" value={device.serial_number} mono />
+              <p className="text-xs font-semibold uppercase tracking-wider text-foreground mb-2">Identity</p>
               <CopyableField label="Model" value={device.model.name} />
               {device.model.customer_partner_name && (
                 <CopyableField label="Customer / Partner" value={device.model.customer_partner_name} />
               )}
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Placement</p>
-              {device.team && <CopyableField label="Team" value={device.team} />}
-              <CopyableField label="Lab" value={device.lab} />
+              <p className="text-xs font-semibold uppercase tracking-wider text-foreground mb-2">Placement</p>
               {device.location_detail && <CopyableField label="Location" value={device.location_detail} />}
             </div>
           </div>
@@ -83,21 +176,21 @@ function ExpandPanel({ device }: { device: Device }) {
           {/* Card 2: ZedCloud Status + Connectivity */}
           <div className="bg-card rounded-md border border-border p-4 space-y-4">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">ZedCloud Status</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-foreground mb-2">ZedCloud Status</p>
               <CopyableField label="EVE Version" value={device.eve_version ?? '—'} mono />
-              <CopyableField label="Last Refreshed" value={new Date(device.updated_at).toLocaleString()} />
+              <CopyableField label="Last Refreshed" value={device.status_fetched_at ? new Date(device.status_fetched_at).toLocaleString() : '—'} />
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Connectivity</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-foreground mb-2">Connectivity</p>
               {device.device_connectivity && device.device_connectivity.length > 0 ? (
                 device.device_connectivity.map((iface, i) => (
                   <div key={i} className="flex items-center justify-between py-1.5 border-b border-border/50 last:border-0">
-                    <span className="text-xs text-muted-foreground font-mono">{iface.interface_name}</span>
+                    <span className="text-xs text-foreground font-mono">{iface.interface_name}</span>
                     <span className="text-xs font-mono text-foreground">{iface.mac} · {iface.ip}</span>
                   </div>
                 ))
               ) : device.status === 'Unknown' ? (
-                <p className="text-xs text-muted-foreground">Unknown</p>
+                <p className="text-xs text-foreground">Unknown</p>
               ) : (
                 <p className="text-xs text-muted-foreground">—</p>
               )}
@@ -107,11 +200,11 @@ function ExpandPanel({ device }: { device: Device }) {
           {/* Card 3: IDRAC + Notes */}
           <div className="bg-card rounded-md border border-border p-4 space-y-4">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">IDRAC</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-foreground mb-2">IDRAC</p>
               {device.idrac_ip ? (
                 <>
                   <div className="flex items-center justify-between py-2.5 border-b border-border/50">
-                    <span className="text-sm text-muted-foreground">Console</span>
+                    <span className="text-sm text-foreground">Console</span>
                     <a
                       href={`http://${device.idrac_ip}`}
                       target="_blank"
@@ -130,7 +223,7 @@ function ExpandPanel({ device }: { device: Device }) {
               )}
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Notes</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-foreground mb-2">Notes</p>
               <p className="text-sm text-foreground whitespace-pre-wrap break-words">
                 {device.description ?? '—'}
               </p>
@@ -141,6 +234,8 @@ function ExpandPanel({ device }: { device: Device }) {
     </tr>
   )
 }
+
+// ── Main component ────────────────────────────────────────────────────────────
 
 interface DeviceTableProps {
   devices: Device[]
@@ -175,6 +270,11 @@ export function DeviceTable({
   const [fetchStatusDevice, setFetchStatusDevice] = useState<Device | null>(null)
   const [historyDevice, setHistoryDevice] = useState<Device | null>(null)
   const [editDevice, setEditDevice] = useState<Device | null>(null)
+
+  // Column ordering
+  const [colOrder, setColOrder] = useState<ColId[]>(loadColOrder)
+  const [dragCol, setDragCol] = useState<ColId | null>(null)
+  const [dragOverCol, setDragOverCol] = useState<ColId | null>(null)
 
   const releaseMutation = useMutation({
     mutationFn: (id: number) => releaseDevice(id),
@@ -217,6 +317,192 @@ export function DeviceTable({
     })
   }, [devices, sortKey, sortDir])
 
+  // ── Drag-to-reorder ─────────────────────────────────────────────────────────
+
+  const reorderCol = (targetId: ColId) => {
+    if (!dragCol || dragCol === targetId) return
+    const next = [...colOrder]
+    const from = next.indexOf(dragCol)
+    const to = next.indexOf(targetId)
+    next.splice(from, 1)
+    next.splice(to, 0, dragCol)
+    setColOrder(next)
+    setDragCol(null)
+    setDragOverCol(null)
+    localStorage.setItem(COL_ORDER_KEY, JSON.stringify(next))
+  }
+
+  const mkDragProps = (id: ColId) => ({
+    draggable: true as const,
+    className: cn(
+      dragCol === id && 'opacity-40',
+      dragOverCol === id && 'bg-primary/5 border-l-2 border-l-primary',
+    ),
+    onDragStart: (e: React.DragEvent) => { e.dataTransfer.effectAllowed = 'move'; setDragCol(id) },
+    onDragOver: (e: React.DragEvent) => { e.preventDefault(); if (dragOverCol !== id) setDragOverCol(id) },
+    onDrop: (e: React.DragEvent) => { e.preventDefault(); reorderCol(id) },
+    onDragEnd: () => { setDragCol(null); setDragOverCol(null) },
+    onDragLeave: () => setDragOverCol(null),
+  })
+
+  // ── Column header renderers ──────────────────────────────────────────────────
+
+  const colHeads: Record<ColId, React.ReactNode> = {
+    name: (
+      <ResizableTableHead columnId="name" defaultWidth={200}
+        sortDirection={sortKey === 'name' ? sortDir : null}
+        onSort={() => handleSort('name')}
+        {...mkDragProps('name')}
+      >Name</ResizableTableHead>
+    ),
+    serial: (
+      <ResizableTableHead columnId="serial" defaultWidth={140} {...mkDragProps('serial')}>
+        Serial No
+      </ResizableTableHead>
+    ),
+    cluster: (
+      <ResizableTableHead columnId="cluster" defaultWidth={120}
+        sortDirection={sortKey === 'cluster' ? sortDir : null}
+        onSort={() => handleSort('cluster')}
+        {...mkDragProps('cluster')}
+      >Cluster</ResizableTableHead>
+    ),
+    clusterName: (
+      <ResizableTableHead columnId="clusterName" defaultWidth={140} {...mkDragProps('clusterName')}>
+        Name in Cluster
+      </ResizableTableHead>
+    ),
+    team: (
+      <ResizableTableHead columnId="team" defaultWidth={120} {...mkDragProps('team')}>Team</ResizableTableHead>
+    ),
+    lab: (
+      <ResizableTableHead columnId="lab" defaultWidth={150} {...mkDragProps('lab')}>Lab</ResizableTableHead>
+    ),
+    owner: (
+      <ResizableTableHead columnId="owner" defaultWidth={180}
+        sortDirection={sortKey === 'owner' ? sortDir : null}
+        onSort={() => handleSort('owner')}
+        {...mkDragProps('owner')}
+      >Owner</ResizableTableHead>
+    ),
+    status: (
+      <ResizableTableHead columnId="status" defaultWidth={120} {...mkDragProps('status')}>Status</ResizableTableHead>
+    ),
+    comment: (
+      <ResizableTableHead columnId="comment" defaultWidth={200} {...mkDragProps('comment')}>Comment</ResizableTableHead>
+    ),
+  }
+
+  // ── Column cell renderers ────────────────────────────────────────────────────
+
+  const mkColCells = (
+    device: Device,
+    isOwner: boolean,
+    isUnavailable: boolean,
+    isDedicated: boolean,
+  ): Record<ColId, React.ReactNode> => ({
+    name: (
+      <ResizableTableCell columnId="name" copyValue={device.name}>
+        <div className="flex flex-col items-start gap-0.5">
+          <span className="font-medium truncate">{device.name}</span>
+          {device.condition !== 'normal' && (
+            <span className={cn(
+              'inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold',
+              CONDITION_BADGE_STYLES[device.condition],
+            )}>
+              {device.condition.replace(/_/g, ' ')}
+            </span>
+          )}
+        </div>
+      </ResizableTableCell>
+    ),
+    serial: (
+      <ResizableTableCell columnId="serial" copyValue={device.serial_number}>
+        <span className="font-mono text-xs">{device.serial_number}</span>
+      </ResizableTableCell>
+    ),
+    cluster: (
+      <ResizableTableCell columnId="cluster">
+        {device.cluster ? (
+          <Badge variant="outline" className="text-xs font-normal">{device.cluster.name}</Badge>
+        ) : (
+          <span className="text-foreground text-xs">—</span>
+        )}
+      </ResizableTableCell>
+    ),
+    clusterName: (
+      <ResizableTableCell columnId="clusterName">
+        {device.cluster_device_name ? (
+          <span className="font-mono text-xs">{device.cluster_device_name}</span>
+        ) : (
+          <span className="text-foreground text-xs">—</span>
+        )}
+      </ResizableTableCell>
+    ),
+    team: (
+      <ResizableTableCell columnId="team">
+        {device.team ? (
+          <span className="text-xs">{device.team}</span>
+        ) : (
+          <span className="text-foreground text-xs">—</span>
+        )}
+      </ResizableTableCell>
+    ),
+    lab: (
+      <ResizableTableCell columnId="lab">
+        <span className="text-xs">{device.lab}</span>
+      </ResizableTableCell>
+    ),
+    owner: (
+      <ResizableTableCell columnId="owner" truncate={false}>
+        <OwnerCell
+          device={device}
+          currentUserEmail={currentUser?.email ?? ''}
+          isAdmin={isAdmin}
+          isOwner={isOwner}
+          isUnavailable={isUnavailable}
+          isDedicated={isDedicated}
+          onReserve={() => setReserveDevice(device)}
+          onRelease={() => releaseMutation.mutate(device.id)}
+        />
+      </ResizableTableCell>
+    ),
+    status: (
+      <ResizableTableCell columnId="status" truncate={false}>
+        <div className="flex flex-col gap-1">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="w-fit"><StatusBadge status={device.status} /></span>
+            </TooltipTrigger>
+            <TooltipContent side="top">
+              Last refresh: {timeAgo(device.status_fetched_at)}
+            </TooltipContent>
+          </Tooltip>
+          <button
+            type="button"
+            onClick={() => setFetchStatusDevice(device)}
+            className="text-xs text-primary hover:underline text-left"
+          >
+            <RefreshCw className="inline w-3 h-3 mr-0.5" />Refresh
+          </button>
+        </div>
+      </ResizableTableCell>
+    ),
+    comment: (
+      <ResizableTableCell columnId="comment">
+        {device.last_comment_text ? (
+          <div className="line-clamp-2 text-xs text-foreground">
+            {device.last_comment_text}
+          </div>
+        ) : (
+          <span className="text-foreground text-xs">—</span>
+        )}
+      </ResizableTableCell>
+    ),
+  })
+
+  // ── Early returns ────────────────────────────────────────────────────────────
+
   if (isLoading) {
     return (
       <div className="w-full">
@@ -241,7 +527,7 @@ export function DeviceTable({
   if (isError) {
     return (
       <div className="flex flex-col items-center justify-center py-24 gap-4">
-        <p className="text-muted-foreground">Failed to load devices</p>
+        <p className="text-foreground">Failed to load devices</p>
         <Button variant="outline" onClick={onRetry}>Retry</Button>
       </div>
     )
@@ -250,7 +536,7 @@ export function DeviceTable({
   if (devices.length === 0 && !hasFilters) {
     return (
       <div className="flex flex-col items-center justify-center py-24 gap-4">
-        <p className="text-muted-foreground">No devices yet</p>
+        <p className="text-foreground">No devices yet</p>
         <Button onClick={onAdd}>Add Device</Button>
       </div>
     )
@@ -259,50 +545,29 @@ export function DeviceTable({
   if (devices.length === 0 && hasFilters) {
     return (
       <div className="flex flex-col items-center justify-center py-24 gap-4">
-        <p className="text-muted-foreground">No devices match your filters</p>
+        <p className="text-foreground">No devices match your filters</p>
         <Button variant="outline" onClick={onClearFilters}>Clear Filters</Button>
       </div>
     )
   }
 
+  // ── Render ───────────────────────────────────────────────────────────────────
+
+  const externalColumnOrder = ['expand', ...colOrder, 'actions']
+
   return (
     <>
       {isStale && <StaleBanner minutes={staleMinutes} onRetry={onRetry} />}
       <div className={cn('transition-opacity', isStale && 'opacity-60')}>
-        <ResizableTable tableId="devices-table" leadingColumns={2}>
+        <ResizableTable tableId="devices-table" leadingColumns={1} externalColumnOrder={externalColumnOrder}>
           <TableHeader>
             <tr>
-              <ResizableTableHead columnId="expand" minWidth={40} defaultWidth={40} isLast={false}>
+              <ResizableTableHead columnId="expand" minWidth={40} defaultWidth={40}>
                 <span className="sr-only">Expand</span>
               </ResizableTableHead>
-              <ResizableTableHead
-                columnId="name"
-                defaultWidth={200}
-                sortDirection={sortKey === 'name' ? sortDir : null}
-                onSort={() => handleSort('name')}
-              >
-                Name
-              </ResizableTableHead>
-              <ResizableTableHead columnId="serial" defaultWidth={140}>Serial No</ResizableTableHead>
-              <ResizableTableHead
-                columnId="cluster"
-                defaultWidth={120}
-                sortDirection={sortKey === 'cluster' ? sortDir : null}
-                onSort={() => handleSort('cluster')}
-              >
-                Cluster
-              </ResizableTableHead>
-              <ResizableTableHead columnId="clusterName" defaultWidth={140}>Name in Cluster</ResizableTableHead>
-              <ResizableTableHead
-                columnId="owner"
-                defaultWidth={180}
-                sortDirection={sortKey === 'owner' ? sortDir : null}
-                onSort={() => handleSort('owner')}
-              >
-                Owner
-              </ResizableTableHead>
-              <ResizableTableHead columnId="status" defaultWidth={120}>Status</ResizableTableHead>
-              <ResizableTableHead columnId="comment" defaultWidth={200}>Comment</ResizableTableHead>
+              {colOrder.map(id => (
+                <Fragment key={id}>{colHeads[id]}</Fragment>
+              ))}
               <ResizableTableHead columnId="actions" defaultWidth={60} isLast>
                 <span className="sr-only">Actions</span>
               </ResizableTableHead>
@@ -315,6 +580,7 @@ export function DeviceTable({
               const isOwner = device.owner_email === currentUser?.email
               const isUnavailable = ['out_of_order', 'temporarily_leased'].includes(device.condition)
               const isDedicated = device.condition === 'dedicated'
+              const cells = mkColCells(device, isOwner, isUnavailable, isDedicated)
 
               return [
                 <TableRow
@@ -333,77 +599,9 @@ export function DeviceTable({
                     </button>
                   </ResizableTableCell>
 
-                  <ResizableTableCell columnId="name">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium truncate">{device.name}</span>
-                      {device.condition !== 'normal' && (
-                        <span
-                          className={cn(
-                            'shrink-0 inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold',
-                            CONDITION_BADGE_STYLES[device.condition],
-                          )}
-                        >
-                          {device.condition.replace(/_/g, ' ')}
-                        </span>
-                      )}
-                    </div>
-                  </ResizableTableCell>
-
-                  <ResizableTableCell columnId="serial">
-                    <span className="font-mono text-xs">{device.serial_number}</span>
-                  </ResizableTableCell>
-
-                  <ResizableTableCell columnId="cluster">
-                    {device.cluster ? (
-                      <Badge variant="outline" className="text-xs font-normal">{device.cluster.name}</Badge>
-                    ) : (
-                      <span className="text-muted-foreground text-xs">—</span>
-                    )}
-                  </ResizableTableCell>
-
-                  <ResizableTableCell columnId="clusterName">
-                    {device.cluster_device_name ? (
-                      <span className="font-mono text-xs">{device.cluster_device_name}</span>
-                    ) : (
-                      <span className="text-muted-foreground text-xs">—</span>
-                    )}
-                  </ResizableTableCell>
-
-                  <ResizableTableCell columnId="owner" truncate={false}>
-                    <OwnerCell
-                      device={device}
-                      currentUserEmail={currentUser?.email ?? ''}
-                      isAdmin={isAdmin}
-                      isOwner={isOwner}
-                      isUnavailable={isUnavailable}
-                      isDedicated={isDedicated}
-                      onReserve={() => setReserveDevice(device)}
-                      onRelease={() => releaseMutation.mutate(device.id)}
-                    />
-                  </ResizableTableCell>
-
-                  <ResizableTableCell columnId="status" truncate={false}>
-                    <div className="flex flex-col gap-1">
-                      <StatusBadge status={device.status} />
-                      <button
-                        type="button"
-                        onClick={() => setFetchStatusDevice(device)}
-                        className="text-xs text-primary hover:underline text-left"
-                      >
-                        <RefreshCw className="inline w-3 h-3 mr-0.5" />Refresh
-                      </button>
-                    </div>
-                  </ResizableTableCell>
-
-                  <ResizableTableCell columnId="comment">
-                    {device.last_comment_text ? (
-                      <div className="line-clamp-2 text-xs text-muted-foreground">
-                        {device.last_comment_text}
-                      </div>
-                    ) : (
-                      <span className="text-muted-foreground text-xs">—</span>
-                    )}
-                  </ResizableTableCell>
+                  {colOrder.map(id => (
+                    <Fragment key={id}>{cells[id]}</Fragment>
+                  ))}
 
                   <ResizableTableCell columnId="actions" truncate={false} className="sticky-action-col">
                     <ActionsMenu
@@ -437,6 +635,7 @@ export function DeviceTable({
           device={forceAssignDevice}
           open={!!forceAssignDevice}
           onOpenChange={(o) => !o && setForceAssignDevice(null)}
+          pendingRequesterEmail={forceAssignDevice.pending_requester_email ?? undefined}
         />
       )}
       {fetchStatusDevice && (
@@ -463,6 +662,8 @@ export function DeviceTable({
     </>
   )
 }
+
+// ── Sub-components (below main export) ───────────────────────────────────────
 
 function StaleBanner({ minutes, onRetry }: { minutes: number; onRetry: () => void }) {
   return (
@@ -502,35 +703,39 @@ function OwnerCell({ device, isAdmin, isOwner, isUnavailable, isDedicated, onRes
   const ownerDisplay = device.owner_name ?? device.owner_email
 
   return (
-    <div className="flex items-center gap-2 min-w-0">
-      {ownerDisplay ? (
-        <div className="flex items-center gap-1.5 min-w-0">
-          <Avatar className="w-5 h-5 shrink-0">
-            <AvatarFallback className="text-[9px]">{initials(ownerDisplay)}</AvatarFallback>
-          </Avatar>
-          <span className="text-xs truncate">{ownerDisplay}</span>
-        </div>
-      ) : null}
-
-      {device.is_available ? (
-        <Button size="sm" className="h-6 text-xs px-2 shrink-0" onClick={onReserve}>
-          Reserve
-        </Button>
-      ) : isOwner ? (
-        <Button size="sm" variant="outline" className="h-6 text-xs px-2 shrink-0" onClick={onRelease}>
-          Release
-        </Button>
-      ) : (
-        <Button size="sm" variant="outline" className="h-6 text-xs px-2 shrink-0" onClick={onReserve}>
-          Reserve
-        </Button>
+    <div className="flex flex-col items-start gap-1 min-w-0">
+      {ownerDisplay && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className="flex items-center gap-1.5 min-w-0 cursor-default">
+              <Avatar className="w-5 h-5 shrink-0">
+                <AvatarFallback className="text-[9px]">{initials(ownerDisplay)}</AvatarFallback>
+              </Avatar>
+              <span className="text-xs truncate">{ownerDisplay}</span>
+            </div>
+          </TooltipTrigger>
+          <TooltipContent side="top">
+            {device.reserved_at ? `Reserved ${timeAgo(device.reserved_at)}` : 'Reservation date unknown'}
+          </TooltipContent>
+        </Tooltip>
       )}
 
-      {isAdmin && !device.is_available && !isOwner && (
-        <Button size="sm" variant="ghost" className="h-6 text-xs px-2 shrink-0" onClick={onRelease}>
-          Release
-        </Button>
-      )}
+      <div className="flex items-center gap-1">
+        {device.is_available ? (
+          <Button size="sm" className="h-6 text-xs px-2" onClick={onReserve}>
+            Reserve
+          </Button>
+        ) : isOwner ? (
+          <Button size="sm" variant="outline" className="h-6 text-xs px-2 border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={onRelease}>
+            Release
+          </Button>
+        ) : (
+          <Button size="sm" variant="outline" className="h-6 text-xs px-2" onClick={onReserve}>
+            Reserve
+          </Button>
+        )}
+
+      </div>
     </div>
   )
 }

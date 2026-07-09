@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/table";
 import { TruncatedCell } from "@/components/ui/truncated-cell";
 import { CopyButton } from "@/components/ui/copy-button";
-import { ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
+import { ChevronUp, ChevronDown, ChevronsUpDown, GripVertical } from "lucide-react";
 
 interface ResizableTableContextValue {
   columnWidths: Record<string, number>;
@@ -48,10 +48,11 @@ interface ResizableTableProps extends React.HTMLAttributes<HTMLTableElement> {
   autoFitToContainer?: boolean;
   onAutoFitReady?: () => void;
   leadingColumns?: number;
+  externalColumnOrder?: string[];
 }
 
 const ResizableTable = React.forwardRef<HTMLTableElement, ResizableTableProps>(
-  ({ className, tableId, children, persistWidths = true, autoFitToContainer = true, onAutoFitReady, leadingColumns = 0, ...props }, ref) => {
+  ({ className, tableId, children, persistWidths = true, autoFitToContainer = true, onAutoFitReady, leadingColumns = 0, externalColumnOrder, ...props }, ref) => {
     const [columns, setColumns] = React.useState<ColumnConfig[]>([]);
     const [columnOrder, setColumnOrder] = React.useState<string[]>([]);
     const [containerWidth, setContainerWidth] = React.useState(0);
@@ -135,18 +136,16 @@ const ResizableTable = React.forwardRef<HTMLTableElement, ResizableTableProps>(
     }, [containerWidth]);
 
     const colGroup = React.useMemo(() => {
-      if (columnOrder.length === 0) return null;
+      const order = externalColumnOrder ?? columnOrder;
+      if (order.length === 0) return null;
       return (
         <colgroup>
-          {Array.from({ length: leadingColumns }).map((_, i) => (
-            <col key={`leading-${i}`} />
-          ))}
-          {columnOrder.slice(leadingColumns).map((id) => (
-            <col key={id} style={{ width: columnWidths[id] ?? 150 }} />
+          {order.map((id, i) => (
+            <col key={id} style={i < leadingColumns ? undefined : { width: columnWidths[id] ?? 150 }} />
           ))}
         </colgroup>
       );
-    }, [columnOrder, columnWidths, leadingColumns]);
+    }, [externalColumnOrder, columnOrder, columnWidths, leadingColumns]);
 
     return (
       <ResizableTableContext.Provider
@@ -181,8 +180,15 @@ interface ResizableTableHeadProps extends React.ThHTMLAttributes<HTMLTableCellEl
   sortLeading?: React.ReactNode;
 }
 
+function SortIcon({ sortDirection, onSort }: { sortDirection?: "asc" | "desc" | null; onSort?: () => void }) {
+  if (sortDirection === "asc") return <ChevronUp aria-hidden="true" className="h-3.5 w-3.5 ml-1 shrink-0" />;
+  if (sortDirection === "desc") return <ChevronDown aria-hidden="true" className="h-3.5 w-3.5 ml-1 shrink-0" />;
+  if (onSort) return <ChevronsUpDown aria-hidden="true" className="h-3.5 w-3.5 ml-1 shrink-0 opacity-40" />;
+  return null;
+}
+
 const ResizableTableHead = React.forwardRef<HTMLTableCellElement, ResizableTableHeadProps>(
-  ({ className, columnId, minWidth = 60, defaultWidth = 150, isLast = false, tooltipContent, enableTooltip = true, sortDirection, onSort, sortLeading, children, onClick, ...props }, ref) => {
+  ({ className, columnId, minWidth = 60, defaultWidth = 150, isLast = false, tooltipContent, enableTooltip = true, sortDirection, onSort, sortLeading, draggable, children, onClick, ...props }, ref) => {
     const { columnWidths, startResize, registerColumn } = useResizableTable();
 
     React.useEffect(() => {
@@ -191,20 +197,15 @@ const ResizableTableHead = React.forwardRef<HTMLTableCellElement, ResizableTable
 
     const width = columnWidths[columnId] ?? defaultWidth;
 
-    const SortIcon = () => {
-      if (sortDirection === "asc") return <ChevronUp className="h-3.5 w-3.5 ml-1 shrink-0" />;
-      if (sortDirection === "desc") return <ChevronDown className="h-3.5 w-3.5 ml-1 shrink-0" />;
-      if (onSort) return <ChevronsUpDown className="h-3.5 w-3.5 ml-1 shrink-0 opacity-40" />;
-      return null;
-    };
-
     return (
       <th
         ref={ref}
         scope="col"
+        draggable={draggable}
         className={cn(
           "relative h-12 px-4 text-left align-middle font-medium text-muted-foreground select-none",
           onSort && "cursor-pointer hover:text-foreground",
+          draggable && "cursor-grab active:cursor-grabbing",
           className,
         )}
         style={{ width, overflow: "hidden" }}
@@ -212,6 +213,9 @@ const ResizableTableHead = React.forwardRef<HTMLTableCellElement, ResizableTable
         {...props}
       >
         <div className="flex items-center min-w-0">
+          {draggable && (
+            <GripVertical aria-hidden="true" className="w-3 h-3 mr-1 text-muted-foreground/40 shrink-0 pointer-events-none" />
+          )}
           {sortLeading}
           {onSort ? (
             <button
@@ -221,7 +225,7 @@ const ResizableTableHead = React.forwardRef<HTMLTableCellElement, ResizableTable
               onClick={(e) => { e.stopPropagation(); onSort(); }}
             >
               <span className="truncate">{children}</span>
-              <SortIcon />
+              <SortIcon sortDirection={sortDirection} onSort={onSort} />
             </button>
           ) : (
             <span className="truncate">{children}</span>
@@ -229,6 +233,7 @@ const ResizableTableHead = React.forwardRef<HTMLTableCellElement, ResizableTable
         </div>
         {!isLast && (
           <div
+            draggable={false}
             className="resize-handle"
             onMouseDown={(e) => {
               e.preventDefault();
