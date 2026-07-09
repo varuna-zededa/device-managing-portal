@@ -57,7 +57,7 @@ export function NotificationBell() {
           className="relative p-2 rounded-md hover:bg-accent transition-colors"
           aria-label="Notifications"
         >
-          <Bell className="w-5 h-5" />
+          <Bell className={cn('w-5 h-5 transition-colors', count > 0 ? 'text-primary' : 'text-foreground')} />
           {count > 0 && (
             <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold flex items-center justify-center px-0.5">
               {count > 9 ? '9+' : count}
@@ -136,7 +136,7 @@ export function NotificationBell() {
         )}
 
         {actionable.length === 0 && mine.length === 0 && (
-          <div className="py-8 text-center text-sm text-muted-foreground">
+          <div className="py-8 text-center text-sm text-foreground">
             No notifications
           </div>
         )}

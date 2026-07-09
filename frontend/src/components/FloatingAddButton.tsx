@@ -53,7 +53,7 @@ export function FloatingAddButton({
     "shadow-lg shadow-primary/25",
     "hover:bg-primary/90 hover:scale-105",
     "active:scale-95",
-    "transition-all duration-150",
+    "transition-[transform,background-color] duration-150",
     className,
   );
 

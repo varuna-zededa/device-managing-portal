@@ -1,4 +1,5 @@
 import { Server, LogOut, ChevronDown } from 'lucide-react'
+import { NavLink } from 'react-router-dom'
 import { useUser } from '@/context/UserContext'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
@@ -11,6 +12,7 @@ import {
   DropdownMenuLabel,
 } from '@/components/ui/dropdown-menu'
 import { NotificationBell } from '@/components/NotificationPanel'
+import { cn } from '@/lib/utils'
 
 function initials(name: string) {
   return name
@@ -28,26 +30,44 @@ export function Header() {
 
   return (
     <header className="fixed top-0 inset-x-0 z-50 h-14 border-b border-border bg-background/95 backdrop-blur flex items-center px-4 gap-4">
-      <div className="flex items-center gap-2 flex-1">
-        <Server className="w-5 h-5 text-primary" />
-        <span className="font-semibold text-foreground">Device Portal</span>
+      <div className="flex items-center gap-6 flex-1">
+        <div className="flex items-center gap-2">
+          <Server className="w-5 h-5 text-primary" aria-hidden="true" />
+          <span className="font-semibold text-foreground">Device Portal</span>
+        </div>
+        <nav className="flex items-center gap-1">
+          {[{ to: '/devices', label: 'Devices' }, { to: '/users', label: 'Users' }].map(({ to, label }) => (
+            <NavLink
+              key={to}
+              to={to}
+              className={({ isActive }) => cn(
+                'px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
+                isActive
+                  ? 'bg-accent text-foreground'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent/60',
+              )}
+            >
+              {label}
+            </NavLink>
+          ))}
+        </nav>
       </div>
 
       <div className="flex items-center gap-2">
         <NotificationBell />
 
         <DropdownMenu>
-          <DropdownMenuTrigger className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent transition-colors outline-none">
+          <DropdownMenuTrigger className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
             <Avatar className="w-7 h-7">
               <AvatarFallback className="text-xs">{initials(currentUser.name)}</AvatarFallback>
             </Avatar>
-            <span className="text-sm font-medium hidden sm:block">{currentUser.name}</span>
+            <span className="text-sm font-bold text-foreground hidden sm:block">{currentUser.name}</span>
             {isAdmin && (
               <Badge variant="default" className="text-xs px-1.5 py-0 h-4 hidden sm:flex">
                 Admin
               </Badge>
             )}
-            <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+            <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" aria-hidden="true" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel className="font-normal">
@@ -60,7 +80,7 @@ export function Header() {
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={logout} className="text-destructive focus:text-destructive gap-2">
-              <LogOut className="w-4 h-4" />
+              <LogOut className="w-4 h-4" aria-hidden="true" />
               Log out
             </DropdownMenuItem>
           </DropdownMenuContent>

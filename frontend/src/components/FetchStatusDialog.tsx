@@ -78,8 +78,8 @@ export function FetchStatusDialog({ device, open, onOpenChange }: FetchStatusDia
       onOpenChange(false)
     },
     onError: (err: unknown) => {
-      const status = (err as { response?: { status?: number; data?: { detail?: string; expected?: string; actual?: string } } })?.response?.status
-      const data = (err as { response?: { data?: { detail?: string; expected?: string; actual?: string } } })?.response?.data
+      const status = (err as { response?: { status?: number; data?: { error?: string; detail?: string; expected?: string; actual?: string } } })?.response?.status
+      const data = (err as { response?: { data?: { error?: string; detail?: string; expected?: string; actual?: string } } })?.response?.data
       if (status === 409) {
         setApiError(`Serial mismatch — Expected: ${data?.expected ?? '?'} · Got: ${data?.actual ?? '?'}`)
       } else if (status === 403) {
@@ -88,7 +88,7 @@ export function FetchStatusDialog({ device, open, onOpenChange }: FetchStatusDia
         toast(`${device.name} not found on cluster`)
         onOpenChange(false)
       } else {
-        setApiError(data?.detail ?? `Error ${status}`)
+        setApiError(data?.error ?? data?.detail ?? `Error ${status}`)
       }
     },
   })
@@ -117,6 +117,7 @@ export function FetchStatusDialog({ device, open, onOpenChange }: FetchStatusDia
                       value={field.value}
                       onValueChange={field.onChange}
                       placeholder="Select cluster..."
+                      hintBelow
                     />
                   </FormControl>
                   <FormMessage />

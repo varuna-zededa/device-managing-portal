@@ -37,7 +37,7 @@ export function OwnershipHistoryModal({ device, open, onOpenChange }: OwnershipH
             ))}
           </div>
         ) : history.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-6">No ownership history</p>
+          <p className="text-sm text-foreground text-center py-6">No ownership history</p>
         ) : (
           <div className="space-y-0 relative">
             <div className="absolute left-4 top-2 bottom-2 w-px bg-border" />
