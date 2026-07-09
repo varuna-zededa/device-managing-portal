@@ -192,9 +192,11 @@ eve_version          str    nullable; "Unknown" after 404
 device_connectivity  json   nullable; JSONField — one entry per IPv4 address on any up+uplink interface;
                             e.g. [{"ip": "192.168.0.121", "mac": "aa:bb:cc:dd:ee:ff", "interface_name": "eth0"}];
                             "Unknown" after 404; populated on status fetch
-status               str    nullable; "Unknown" after 404
-last_comment_text    str    nullable; denormalized cache of newest DeviceComment (for list view — avoids N+1)
-last_comment_by      str    nullable; author name of newest comment
+status               str      nullable; "Unknown" after 404
+status_fetched_at    datetime nullable; timestamp of last successful ZedCloud status fetch; displayed as relative time in Status tooltip
+reserved_at          datetime nullable; timestamp when the current owner acquired the device (set on reserve / force-assign / approval; cleared on release); backfilled from OwnershipHistory on migration
+last_comment_text    str      nullable; denormalized cache of newest DeviceComment (for list view — avoids N+1)
+last_comment_by      str      nullable; author name of newest comment
 last_comment_at      datetime nullable
 created_at           datetime
 updated_at           datetime
@@ -299,7 +301,7 @@ PUT    /api/devices/{id}     update name, description, cluster_id, cluster_devic
 DELETE /api/devices/{id}     admin only (X-User-Email header)
 POST   /api/devices/{id}/reserve          no body — requester identified via X-User-Email header
 POST   /api/devices/{id}/force-assign     admin only; body: {assignee_email}
-POST   /api/devices/{id}/release          owner or admin only (X-User-Email header)
+POST   /api/devices/{id}/release          owner only (X-User-Email header); 403 if requester ≠ owner
 POST   /api/devices/{id}/status           body: {bearer_token}
                                           uses Device.cluster_id + cluster_device_name
                                           saves bearer_token to Vault, calls ZedCloud, updates device
@@ -317,11 +319,19 @@ POST /api/devices/{id}/comments          body: {text}; author from X-User-Email
 GET  /api/devices/{id}/ownership-history   admin only (X-User-Email header); full history, newest first
 ```
 
+### Choices
+```
+GET  /api/choices/      no auth; returns {labs: [...], teams: [...], conditions: [...]}
+                        single source of truth for all enum lists; cached indefinitely in frontend
+```
+
 ### Users
 ```
-GET  /api/users        list all (for dropdowns, search)
-POST /api/users        admin only; body: {name, email_prefix, team, user_type}
-                       email stored as {email_prefix}@zededa.com — frontend sends prefix only
+GET   /api/users        list all (for dropdowns, search)
+POST  /api/users        admin only; body: {name, email_prefix, team, user_type}
+                        email stored as {email_prefix}@zededa.com — frontend sends prefix only
+PATCH /api/users/{id}   admin only; body: any subset of {name, team, user_type}
+                        email is identity — not editable via this endpoint
 ```
 
 ### Vault
@@ -403,24 +413,37 @@ for net in data.get("netStatusList", []):
                     "interface_name": name,
                 })
 
-# Status
+# Status — device-applicable values only (verified against libs/zmsg/zcommon/zcommon.proto)
 STATUS_MAP = {
-    "RUN_STATE_ONLINE":    "Online",
-    "RUN_STATE_OFFLINE":   "Offline",
-    "RUN_STATE_HALTING":   "Halting",
-    "RUN_STATE_SUSPENDED": "Suspended",
-    "RUN_STATE_UNKNOWN":   "Unknown",
+    "RUN_STATE_ONLINE":            "Online",
+    "RUN_STATE_HALTED":            "Halted",
+    "RUN_STATE_REBOOTING":         "Rebooting",
+    "RUN_STATE_OFFLINE":           "Offline",
+    "RUN_STATE_UNKNOWN":           "Unknown",
+    "RUN_STATE_UNPROVISIONED":     "Unprovisioned",
+    "RUN_STATE_PROVISIONED":       "Provisioned",
+    "RUN_STATE_SUSPECT":           "Suspect",
+    "RUN_STATE_DOWNLOADING":       "Downloading",
+    "RUN_STATE_RESTARTING":        "Restarting",
+    "RUN_STATE_BOOTING":           "Booting",
+    "RUN_STATE_MAINTENANCE_MODE":  "Maintenance",
+    "RUN_STATE_BASEOS_UPDATING":   "BaseOS Updating",
+    "RUN_STATE_PREPARING_POWEROFF":"Preparing Poweroff",
+    "RUN_STATE_POWERING_OFF":      "Powering Off",
+    "RUN_STATE_PREPARED_POWEROFF": "Prepared Poweroff",
 }
-status = STATUS_MAP.get(data.get("runState", ""), data.get("runState"))
+# Unmapped values fall through to "Unknown"
+# App-instance-only states (RUN_STATE_PURGING, _HALTING, _ERROR, _VERIFYING, _LOADING,
+# _CREATING_VOLUME, _START_DELAYED, _INIT) are intentionally excluded
 ```
 
 ### Error Handling
 | HTTP | Backend | Frontend |
 |---|---|---|
-| **200 (serial match or no serial in response)** | Update device row (eve_version, device_connectivity, status) | Dialog closes; table row refreshes |
-| **200 (serial mismatch)** | Do NOT update device | Dialog stays open; error: *"Serial mismatch — Device: {device_name} · Cluster: {cluster_name} · Expected: {expected} · Got: {actual}"* |
-| **403** | Do NOT update Vault | Dialog stays open; error: *"Bearer token invalid or expired"* |
-| **404** | Set all live fields → `"Unknown"`; clear device_connectivity | Dialog closes; toast: *"{device} not found on {cluster}."* |
+| **200 (serial match or no serial in response)** | Update device row (eve_version, device_connectivity, status, status_fetched_at) | Dialog closes; table row refreshes |
+| **200 (serial mismatch)** | Do NOT update device | Dialog stays open; error: *"Serial mismatch — Expected: {expected} · Got: {actual}"* |
+| **401 / 403** | Do NOT update Vault | Dialog stays open; error: *"Bearer token invalid or expired"* |
+| **404** | Set all live fields → `"Unknown"`; clear device_connectivity; stamp status_fetched_at | Dialog closes; toast: *"{device} not found on {cluster}."* |
 | **Other** | No device update | Dialog stays open; show HTTP status + body excerpt |
 
 ---
@@ -541,64 +564,74 @@ Admin UI shows a yellow warning banner if SMTP is not configured.
 > explicitly out of scope.
 
 ### Search & Filter
-- **Single search box** — debounced 300ms — matches against: Name, Model, Cluster name, Owner
-  (name), EVE-version, **last comment text** (case-insensitive partial match)
+- **Single search box** — debounced 300ms — placeholder lists all searchable fields; matches
+  against: Name, Model, Customer/Partner name, Cluster name, Owner (name), EVE version,
+  **last comment text** (case-insensitive partial match)
 - **Available / Reserved / All** — chip toggle (uses the derived `is_available` rule, so blocking-
   condition devices never count as Available)
 - **Team / Lab / Condition** — three exact-match filter selects beside the chip toggle; combinable
   with the search box and each other
-- When the search text matches a field that lives in the collapsed detail (Model, EVE Version, SSH
-  IP), the matching row **auto-expands** so the hit is visible
 
 ### Layout — collapsible rows
 The table shows a compact primary row per device; a **chevron** in the first column expands an
 inline detail panel below it. This keeps the common case scannable while still surfacing the full
 record on demand.
 
-**Primary row columns (left → right):**
+**Primary row columns (left → right, default order — user-reorderable via drag-and-drop):**
 | Column | Notes |
 |---|---|
-| (chevron) | Expand / collapse toggle |
-| Name | Sortable; condition badge shown when condition ≠ normal |
-| Serial No | Hardware serial number (monospace); unique; immutable after creation |
+| (chevron) | Expand / collapse toggle; fixed first; not reorderable |
+| Name | Sortable; condition badge below name when condition ≠ normal; copy button on hover |
+| Serial No | Hardware serial number (monospace); unique; immutable; copy button on hover |
 | Cluster | Short name badge; sortable |
 | Name in Cluster | `cluster_device_name` in monospace; "—" if not set |
-| Owner | Avatar + name; Reserve / Release per role; ⏱ pending notice; "UNAVAILABLE" for blocking conditions |
-| Status | Color badge (Online=green, Offline=red, Unknown/blank=gray) + **"Refresh"** link below |
+| Team | Team assignment; "—" if not set |
+| Lab | Lab location; always set |
+| Owner | Avatar + name; Reserve / Release per role; "UNAVAILABLE" for blocking conditions; hover tooltip shows "Reserved X days ago" |
+| Status | Color-coded badge (see Status Badge Colors below) + **"Refresh"** link below; hover tooltip shows "Last refresh: X mins ago" |
 | Comment / Purpose | Newest comment (2-line truncated) from denormalized cache; "—" if none |
-| Actions | 3-dot dropdown only — contents vary by role (see below) |
+| Actions | 3-dot dropdown only — fixed last; not reorderable |
+
+**Column reordering:** All columns between chevron and Actions can be dragged by their header grip
+icon (⠿) to reorder. Order is persisted per browser in `localStorage`.
+
+**Column resizing:** Drag the resize handle on any column header border to adjust width; widths
+persisted per browser in `localStorage`.
+
+**Status Badge Colors (ZedUI-aligned):**
+| Status | Color |
+|---|---|
+| Online | Green |
+| Suspect · Maintenance · Preparing/Powering/Prepared Poweroff | Amber / warning |
+| Rebooting · Downloading · Restarting · Booting · BaseOS Updating | Blue / info |
+| Provisioned | Purple |
+| Offline · Halted · Unprovisioned · Unknown | Gray / neutral |
 
 **Expanded detail panel — 3 card columns:**
 
 *Card 1 — Identity + Placement (left):*
 | Section | Fields |
 |---|---|
-| Identity | Serial (mono) · Model · Customer / Partner |
-| Placement | Team · Lab · Location |
+| Identity | Model · Customer / Partner |
+| Placement | Location detail |
 
 *Card 2 — ZedCloud Status + Connectivity (middle):*
 | Section | Fields |
 |---|---|
-| ZedCloud Status | EVE Version (mono, break-all for long strings) · Last Refreshed |
+| ZedCloud Status | EVE Version (mono) · Last Refreshed (exact datetime of last status fetch) |
 | Connectivity | One row per interface: `{interface_name}` left / `{mac} · {ip}` right (mono); "—" if none; "Unknown" after 404 |
 
 *Card 3 — IDRAC + Notes (right):*
 | Section | Fields |
 |---|---|
-| IDRAC | Console ↗ link · Credentials link; "—" if not configured |
+| IDRAC | Console ↗ link · Credentials; "—" if not configured |
 | Notes | Free-text device capabilities / hardware notes; "—" if empty |
 
-Each card uses a label-left / value-right row pattern (CopyableField from zedui-dev) with a
-distinct header strip per section. Section order within Card 1 Placement: Team → Lab → Location.
+Fields **not** in the expand panel (they have their own primary-row columns): Serial No, Team, Lab.
+Condition is communicated by the row's left-border color and the Name-column badge; change it via
+Edit Device modal. The Comment column in the primary row already surfaces the newest comment.
 
-Condition is **not** shown in the expand panel — it is communicated by the row's left-border color
-and the inline badge in the Name column. To change condition: open Edit Device modal.
-
-The Comment / Purpose column in the main row already surfaces the newest comment — no separate
-comment bar in the expand panel.
-
-**Sortable columns:** Name, Cluster, Owner. (Model, Team, EVE Version are in the expand panel;
-Serial No appears in both the primary row column and the expand panel Identity card.)
+**Sortable columns:** Name, Cluster, Owner.
 
 ### List states (wireframed in `states.html`)
 | State | Behavior |
@@ -610,10 +643,13 @@ Serial No appears in both the primary row column and the expand panel Identity c
 | Stale | Keep last-known rows (dimmed); "Couldn't refresh — data from {n} min ago" + **Retry now** |
 
 ### Owner Column — Reserve / Release Rules
+Release is **owner-only** — admins cannot release a device they do not own (same restriction as members).
+The Release button is red-tinted (`border-destructive/50 text-destructive`) to visually distinguish it from the neutral blue Reserve button.
+
 | Scenario | Member sees | Admin sees |
 |---|---|---|
-| Device owned by logged-in user | Release | Release + Reserve |
-| Device owned by someone else | Reserve | Release + Reserve |
+| Device owned by logged-in user | Red-tinted "Release" button | Red-tinted "Release" button |
+| Device owned by someone else | Blue "Reserve" button | Blue "Reserve" button (no Release) |
 | Device available (no owner) | Blue "Reserve" button | Blue "Reserve" button |
 | Device condition = `dedicated` | Team name chip (e.g. "ST") — no Reserve button | Team name chip — no Reserve button |
 
@@ -978,7 +1014,7 @@ device-managing-portal/
 | 18 | Cluster field | Dropdown (short name); backed by Cluster table in DB |
 | 19 | Cluster list management | Any user can add new cluster via UI; stored in DB |
 | 20 | Cluster hostname pattern | `zedcontrol.{name}.zededa.net`; prod is `zedcontrol.zededa.net` |
-| 21 | Release permissions | Owner or admin only |
+| 21 | Release permissions | Owner only — admins cannot release a device they do not own; backend returns 403 if requester ≠ owner |
 | 22 | SMTP | Configurable in .env; graceful degradation to in-app only if not set |
 | 23 | Email approve/reject links | `/confirm/{token}` React page; buttons fire POST; scanner-safe |
 | 24 | Backend framework | Django + DRF; built-in migrations, email, admin, CSRF, SSO readiness |

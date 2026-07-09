@@ -18,9 +18,9 @@ Each version follows the same 5-step cycle before shipping:
 1. **Wireframes** — static HTML mockups covering all new UI surfaces for the version
 2. **Backend implementation details** — finalize API design, data model changes, and any new
    infrastructure decisions; update DESIGN.md
-3. **Team feedback** — share wireframes + implementation details with the team; collect input
-4. **Update** — incorporate feedback into wireframes and DESIGN.md
-5. **Full implementation** — backend + frontend + Docker + seed data
+3. **Frontend + Integration** — build frontend components and wire up backend integration
+4. **Team feedback + Update based on feedback** — share with team; collect input; incorporate into wireframes and DESIGN.md
+5. **Deploy and test** — backend + frontend + Docker + seed data; deploy and validate end-to-end
 
 ---
 
@@ -41,15 +41,15 @@ Each version follows the same 5-step cycle before shipping:
 - Notifications: in-app bell (always) + email via SMTP (if configured)
 - Search by customer/partner name; condition filter includes `dedicated`
 - Export / Import CSV & JSON (admin); upsert by serial number; drag-drop UI with preview
-- User management page (admin)
+- User management page (admin): list, add, edit (name/team/role)
 - All 5 table states: loading, empty, no-results, load-error, stale
 
 **Cycle:**
 - [x] Wireframes — see `wireframes/` (index, admin_index, modals, states, confirm, users)
-- [ ] Backend implementation details
-- [ ] Team feedback
-- [ ] Update based on feedback
-- [ ] Full implementation
+- [x] Backend implementation details
+- [ ] Frontend + Integration
+- [ ] Team feedback + Update based on feedback
+- [ ] Deploy and test
 
 **Implementation tasks:**
 - [ ] Backend — Django + DRF: models, migrations, API endpoints, ZedCloud status fetch,
@@ -95,9 +95,9 @@ Each version follows the same 5-step cycle before shipping:
 **Cycle:**
 - [ ] Wireframes
 - [ ] Backend implementation details
-- [ ] Team feedback
-- [ ] Update based on feedback
-- [ ] Full implementation
+- [ ] Frontend + Integration
+- [ ] Team feedback + Update based on feedback
+- [ ] Deploy and test
 
 **Implementation tasks:**
 - Note: `BulkActionBar`, `GlobalSearch`, and `tags-display` are already extracted in v1 —
@@ -118,9 +118,9 @@ Each version follows the same 5-step cycle before shipping:
 **Cycle:**
 - [ ] Wireframes
 - [ ] Backend implementation details
-- [ ] Team feedback
-- [ ] Update based on feedback
-- [ ] Full implementation
+- [ ] Frontend + Integration
+- [ ] Team feedback + Update based on feedback
+- [ ] Deploy and test
 
 > **Note:** Initiate SSO IdP setup with IT/infra during v2 development — client credentials and
 > SAML/OIDC config from the identity provider are needed before v3 can ship. Starting late causes
@@ -148,9 +148,9 @@ Each version follows the same 5-step cycle before shipping:
 **Cycle:**
 - [ ] Wireframes
 - [ ] Backend implementation details
-- [ ] Team feedback
-- [ ] Update based on feedback
-- [ ] Full implementation
+- [ ] Frontend + Integration
+- [ ] Team feedback + Update based on feedback
+- [ ] Deploy and test
 
 **Implementation tasks:**
 
@@ -172,9 +172,9 @@ Each version follows the same 5-step cycle before shipping:
 **Cycle:**
 - [ ] Wireframes
 - [ ] Backend implementation details
-- [ ] Team feedback
-- [ ] Update based on feedback
-- [ ] Full implementation
+- [ ] Frontend + Integration
+- [ ] Team feedback + Update based on feedback
+- [ ] Deploy and test
 
 **Implementation tasks:**
 
