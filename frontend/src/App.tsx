@@ -11,11 +11,13 @@ const ConfirmReservationPage = lazy(() => import('@/pages/ConfirmReservationPage
 function AuthenticatedRoutes() {
   return (
     <UserProvider>
-      <Routes>
-        <Route path="/devices" element={<DevicesPage />} />
-        <Route path="/users" element={<UsersPage />} />
-        <Route path="*" element={<Navigate to="/devices" replace />} />
-      </Routes>
+      <Suspense fallback={null}>
+        <Routes>
+          <Route path="/devices" element={<DevicesPage />} />
+          <Route path="/users" element={<UsersPage />} />
+          <Route path="*" element={<Navigate to="/devices" replace />} />
+        </Routes>
+      </Suspense>
     </UserProvider>
   )
 }
