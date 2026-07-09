@@ -36,11 +36,18 @@ class Device(models.Model):
     eve_version = models.CharField(max_length=200, blank=True, null=True)
     device_connectivity = models.JSONField(blank=True, null=True)
     status = models.CharField(max_length=50, blank=True, null=True)
+    status_fetched_at = models.DateTimeField(blank=True, null=True)
+    reserved_at = models.DateTimeField(blank=True, null=True)
     last_comment_text = models.TextField(blank=True, null=True)
     last_comment_by = models.CharField(max_length=200, blank=True, null=True)
     last_comment_at = models.DateTimeField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    def save(self, *args, **kwargs):
+        if not self.owner_email:
+            self.owner_email = None
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.name
@@ -48,6 +55,6 @@ class Device(models.Model):
     @property
     def is_available(self):
         return (
-            self.owner_email is None
+            not self.owner_email
             and self.condition not in ('out_of_order', 'temporarily_leased', 'dedicated')
         )
