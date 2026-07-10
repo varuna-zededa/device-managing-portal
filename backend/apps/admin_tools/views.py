@@ -1,5 +1,6 @@
 import csv
 import io
+import ipaddress
 import json
 import logging
 from datetime import timedelta
@@ -8,12 +9,17 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.http import HttpResponse
 from django.utils import timezone
-from apps.devices.models import Device
+from django.core.validators import validate_email
+from django.core.exceptions import ValidationError as DjangoValidationError
+from apps.devices.models import Device, Lab, CONDITION_CHOICES
 from apps.devices.serializers import DeviceSerializer
 from apps.clusters.models import Cluster
 from apps.device_models.models import DeviceModel
+from apps.users.models import Team
 from .models import RequestLog
 from utils.permissions import get_user_email, IsAdminPortalUser, IsPortalUser
+
+_VALID_CONDITIONS = {c[0] for c in CONDITION_CHOICES}
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +30,7 @@ class ExportView(APIView):
     def get(self, request):
 
         fmt = request.query_params.get('fmt', 'json').lower()
-        devices = Device.objects.select_related('model', 'cluster').all().order_by('name')
+        devices = Device.objects.select_related('model', 'cluster', 'lab', 'team').all().order_by('name')
 
         ts = timezone.now().strftime('%Y%m%d_%H%M%S')
         filename_base = f'holocron_device_inventory_{ts}'
@@ -47,7 +53,7 @@ class ExportView(APIView):
                     d.cluster_device_name or '',
                     d.model.name if d.model else '',
                     d.model.customer_partner_name if d.model else '',
-                    d.team or '', d.owner_email or '', d.lab, d.location_detail or '',
+                    d.team.name if d.team else '', d.owner_email or '', d.lab.name, d.location_detail or '',
                     d.condition, d.idrac_ip or '', d.idrac_username or '',
                     d.eve_version or '',
                     json.dumps(d.device_connectivity) if d.device_connectivity else '',
@@ -92,11 +98,22 @@ class ImportView(APIView):
             logger.warning(str(e))
             return Response({'error': f'Failed to parse file: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
 
+        lab_cache = {lab.name: lab for lab in Lab.objects.all()}
+        team_cache = {team.name: team for team in Team.objects.all()}
+        valid_labs = set(lab_cache)
+        valid_teams = set(team_cache)
+
         for i, row in enumerate(rows):
             try:
                 serial = (row.get('serial_number') or '').strip()
                 if not serial:
                     errors.append({'row': i + 1, 'error': 'serial_number is required'})
+                    skipped += 1
+                    continue
+
+                row_errors = _validate_import_row(row, i + 1, valid_labs, valid_teams)
+                if row_errors:
+                    errors.extend([{'row': i + 1, 'error': e} for e in row_errors])
                     skipped += 1
                     continue
 
@@ -111,11 +128,14 @@ class ImportView(APIView):
                 if cluster_name:
                     cluster_obj, _ = Cluster.objects.get_or_create(
                         name=cluster_name,
-                        defaults={'host': f'zedcontrol.{cluster_name}.zededa.net'},
+                        defaults={'host': f'zcloud.{cluster_name}.zededa.net'},
                     )
 
+                lab_name = (row.get('lab') or '').strip()
+                team_name = (row.get('team') or '').strip()
+
                 defaults = {}
-                for field in ('name', 'description', 'team', 'owner_email', 'lab',
+                for field in ('name', 'description', 'owner_email',
                               'location_detail', 'condition', 'idrac_ip', 'eve_version',
                               'status', 'cluster_device_name'):
                     if row.get(field) not in (None, ''):
@@ -126,6 +146,10 @@ class ImportView(APIView):
                     defaults['model'] = model_obj
                 if cluster_obj:
                     defaults['cluster'] = cluster_obj
+                if lab_name and lab_name in lab_cache:
+                    defaults['lab'] = lab_cache[lab_name]
+                if team_name and team_name in team_cache:
+                    defaults['team'] = team_cache[team_name]
 
                 existing = Device.objects.filter(serial_number=serial).first()
                 if existing:
@@ -141,8 +165,7 @@ class ImportView(APIView):
                         errors.append({'row': i + 1, 'error': 'model is required for new devices'})
                         skipped += 1
                         continue
-                    lab = defaults.get('lab', '')
-                    if not lab:
+                    if not defaults.get('lab'):
                         errors.append({'row': i + 1, 'error': 'lab is required for new devices'})
                         skipped += 1
                         continue
@@ -204,6 +227,41 @@ class ImportTemplateView(APIView):
         response = HttpResponse(output.getvalue(), content_type='text/csv')
         response['Content-Disposition'] = 'attachment; filename="device_import_template.csv"'
         return response
+
+
+def _validate_import_row(row, row_num, valid_labs, valid_teams):
+    """Returns a list of error strings for fields that fail validation."""
+    errs = []
+
+    email = (row.get('owner_email') or '').strip()
+    if email:
+        try:
+            validate_email(email)
+        except DjangoValidationError:
+            errs.append(f'owner_email "{email}" is not a valid email address')
+
+    ip = (row.get('idrac_ip') or '').strip()
+    if ip:
+        try:
+            ipaddress.ip_address(ip)
+        except ValueError:
+            errs.append(f'idrac_ip "{ip}" is not a valid IP address')
+
+    condition = (row.get('condition') or '').strip()
+    if condition:
+        normalized = _normalize_condition(condition)
+        if normalized not in _VALID_CONDITIONS:
+            errs.append(f'condition "{condition}" is not valid — must be one of: {", ".join(sorted(_VALID_CONDITIONS))}')
+
+    lab = (row.get('lab') or '').strip()
+    if lab and lab not in valid_labs:
+        errs.append(f'lab "{lab}" is not recognised — must be one of: {", ".join(sorted(valid_labs))}')
+
+    team = (row.get('team') or '').strip()
+    if team and team not in valid_teams:
+        errs.append(f'team "{team}" is not recognised — must be one of: {", ".join(sorted(valid_teams))}')
+
+    return errs
 
 
 def _parse_csv(uploaded_file):
