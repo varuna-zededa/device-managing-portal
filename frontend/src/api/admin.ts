@@ -8,6 +8,11 @@ export async function exportDevices(format: 'csv' | 'json'): Promise<Blob> {
   return res.data
 }
 
+export async function downloadImportTemplate(): Promise<Blob> {
+  const res = await client.get('/admin/import-template/', { responseType: 'blob' })
+  return res.data
+}
+
 export async function importDevices(
   file: File,
   mode: 'create_only' | 'update_or_create',

@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { Download, Upload, FileJson, FileText } from 'lucide-react'
-import { exportDevices, importDevices } from '@/api/admin'
+import { exportDevices, importDevices, downloadImportTemplate } from '@/api/admin'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -18,6 +18,20 @@ export function ExportImportPanel() {
   const [importing, setImporting] = useState(false)
   const [result, setResult] = useState<{ created: number; updated: number; skipped: number; errors: Array<{ row: number; error: string }> } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleDownloadTemplate = async () => {
+    try {
+      const blob = await downloadImportTemplate()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'device_import_template.csv'
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      toast.error('Failed to download template')
+    }
+  }
 
   const handleExport = async (format: 'csv' | 'json') => {
     try {
@@ -81,6 +95,13 @@ export function ExportImportPanel() {
             <DialogTitle>Import Devices</DialogTitle>
             <DialogDescription>Upload a CSV or JSON file to import devices.</DialogDescription>
           </DialogHeader>
+
+          <button
+            onClick={handleDownloadTemplate}
+            className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 text-left w-fit"
+          >
+            Download CSV template
+          </button>
 
           {result ? (
             <div className="space-y-3">
