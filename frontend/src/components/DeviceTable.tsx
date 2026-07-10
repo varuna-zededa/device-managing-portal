@@ -49,7 +49,7 @@ function loadColOrder(): ColId[] {
 
 // ── Sort ─────────────────────────────────────────────────────────────────────
 
-type SortKey = 'name' | 'cluster' | 'owner' | null
+type SortKey = 'name' | 'serial' | 'cluster' | 'clusterName' | 'team' | 'lab' | 'owner' | 'status' | null
 type SortDir = 'asc' | 'desc'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -115,6 +115,7 @@ const CONDITION_STYLES: Record<string, string> = {
   needs_repair: 'border-l-4 border-l-yellow-400 bg-yellow-50/10',
   temporarily_leased: 'border-l-4 border-l-violet-400 bg-violet-50/10',
   dedicated: 'border-l-4 border-l-blue-400 bg-blue-50/10',
+  missing: 'border-l-4 border-l-orange-400 bg-orange-50/10',
 }
 
 const CONDITION_BADGE_STYLES: Record<string, string> = {
@@ -122,6 +123,7 @@ const CONDITION_BADGE_STYLES: Record<string, string> = {
   needs_repair: 'bg-yellow-400/20 text-yellow-400 border-yellow-400/30',
   temporarily_leased: 'bg-violet-400/20 text-violet-400 border-violet-400/30',
   dedicated: 'bg-blue-400/20 text-blue-400 border-blue-400/30',
+  missing: 'bg-orange-400/20 text-orange-400 border-orange-400/30',
 }
 
 const STATUS_BADGE: Record<string, string> = {
@@ -163,13 +165,12 @@ function ExpandPanel({ device }: { device: Device }) {
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-foreground mb-2">Identity</p>
               <CopyableField label="Model" value={device.model.name} />
-              {device.model.customer_partner_name && (
-                <CopyableField label="Customer / Partner" value={device.model.customer_partner_name} />
-              )}
+              <CopyableField label="Customer / Partner" value={device.model.customer_partner_name ?? '—'} />
             </div>
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-foreground mb-2">Placement</p>
-              {device.location_detail && <CopyableField label="Location" value={device.location_detail} />}
+              <CopyableField label="Lab" value={device.lab} />
+              <CopyableField label="Location" value={device.location_detail ?? '—'} />
             </div>
           </div>
 
@@ -185,7 +186,7 @@ function ExpandPanel({ device }: { device: Device }) {
               {device.device_connectivity && device.device_connectivity.length > 0 ? (
                 device.device_connectivity.map((iface, i) => (
                   <div key={i} className="flex items-center justify-between py-1.5 border-b border-border/50 last:border-0">
-                    <span className="text-xs text-foreground font-mono">{iface.interface_name}</span>
+                    <span className="text-xs text-foreground font-mono">{iface.interface_name || `Interface ${i + 1}`}</span>
                     <span className="text-xs font-mono text-foreground">{iface.mac} · {iface.ip}</span>
                   </div>
                 ))
@@ -201,26 +202,22 @@ function ExpandPanel({ device }: { device: Device }) {
           <div className="bg-card rounded-md border border-border p-4 space-y-4">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-foreground mb-2">IDRAC</p>
-              {device.idrac_ip ? (
-                <>
-                  <div className="flex items-center justify-between py-2.5 border-b border-border/50">
-                    <span className="text-sm text-foreground">Console</span>
-                    <a
-                      href={`http://${device.idrac_ip}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm font-medium text-primary hover:underline flex items-center gap-1"
-                    >
-                      Open <ExternalLink className="w-3 h-3" />
-                    </a>
-                  </div>
-                  {device.idrac_username && (
-                    <CopyableField label="Credentials" value={device.idrac_username} mono />
-                  )}
-                </>
-              ) : (
-                <p className="text-xs text-muted-foreground">—</p>
-              )}
+              <div className="flex items-center justify-between py-2.5 border-b border-border/50">
+                <span className="text-sm text-foreground">Console</span>
+                {device.idrac_ip ? (
+                  <a
+                    href={`http://${device.idrac_ip}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm font-medium text-primary hover:underline flex items-center gap-1"
+                  >
+                    Open <ExternalLink className="w-3 h-3" />
+                  </a>
+                ) : (
+                  <span className="text-sm text-muted-foreground">—</span>
+                )}
+              </div>
+              <CopyableField label="Credentials" value={device.idrac_username ?? '—'} mono />
             </div>
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-foreground mb-2">Notes</p>
@@ -310,9 +307,18 @@ export function DeviceTable({
     if (!sortKey) return devices
     return [...devices].sort((a, b) => {
       let av = '', bv = ''
-      if (sortKey === 'name') { av = a.name; bv = b.name }
-      if (sortKey === 'cluster') { av = a.cluster?.name ?? ''; bv = b.cluster?.name ?? '' }
-      if (sortKey === 'owner') { av = a.owner_name ?? a.owner_email ?? ''; bv = b.owner_name ?? b.owner_email ?? '' }
+      switch (sortKey) {
+        case 'name':        av = a.name;                              bv = b.name; break
+        case 'serial':      av = a.serial_number;                     bv = b.serial_number; break
+        case 'cluster':     av = a.cluster?.name ?? '';               bv = b.cluster?.name ?? ''; break
+        case 'clusterName': av = a.cluster_device_name ?? '';         bv = b.cluster_device_name ?? ''; break
+        case 'team':        av = a.team ?? '';                        bv = b.team ?? ''; break
+        case 'lab':         av = a.lab;                               bv = b.lab; break
+        case 'owner':       av = a.owner_name ?? a.owner_email ?? ''; bv = b.owner_name ?? b.owner_email ?? ''; break
+        case 'status':      av = a.status ?? '';                      bv = b.status ?? ''; break
+      }
+      if (!av && bv) return 1   // empty values always sort last
+      if (av && !bv) return -1
       return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av)
     })
   }, [devices, sortKey, sortDir])
@@ -356,9 +362,11 @@ export function DeviceTable({
       >Name</ResizableTableHead>
     ),
     serial: (
-      <ResizableTableHead columnId="serial" defaultWidth={140} {...mkDragProps('serial')}>
-        Serial No
-      </ResizableTableHead>
+      <ResizableTableHead columnId="serial" defaultWidth={140}
+        sortDirection={sortKey === 'serial' ? sortDir : null}
+        onSort={() => handleSort('serial')}
+        {...mkDragProps('serial')}
+      >Serial No</ResizableTableHead>
     ),
     cluster: (
       <ResizableTableHead columnId="cluster" defaultWidth={120}
@@ -368,15 +376,25 @@ export function DeviceTable({
       >Cluster</ResizableTableHead>
     ),
     clusterName: (
-      <ResizableTableHead columnId="clusterName" defaultWidth={140} {...mkDragProps('clusterName')}>
-        Name in Cluster
-      </ResizableTableHead>
+      <ResizableTableHead columnId="clusterName" defaultWidth={140}
+        sortDirection={sortKey === 'clusterName' ? sortDir : null}
+        onSort={() => handleSort('clusterName')}
+        {...mkDragProps('clusterName')}
+      >Name in Cluster</ResizableTableHead>
     ),
     team: (
-      <ResizableTableHead columnId="team" defaultWidth={120} {...mkDragProps('team')}>Team</ResizableTableHead>
+      <ResizableTableHead columnId="team" defaultWidth={120}
+        sortDirection={sortKey === 'team' ? sortDir : null}
+        onSort={() => handleSort('team')}
+        {...mkDragProps('team')}
+      >Team</ResizableTableHead>
     ),
     lab: (
-      <ResizableTableHead columnId="lab" defaultWidth={150} {...mkDragProps('lab')}>Lab</ResizableTableHead>
+      <ResizableTableHead columnId="lab" defaultWidth={150}
+        sortDirection={sortKey === 'lab' ? sortDir : null}
+        onSort={() => handleSort('lab')}
+        {...mkDragProps('lab')}
+      >Lab</ResizableTableHead>
     ),
     owner: (
       <ResizableTableHead columnId="owner" defaultWidth={180}
@@ -386,7 +404,11 @@ export function DeviceTable({
       >Owner</ResizableTableHead>
     ),
     status: (
-      <ResizableTableHead columnId="status" defaultWidth={120} {...mkDragProps('status')}>Status</ResizableTableHead>
+      <ResizableTableHead columnId="status" defaultWidth={120}
+        sortDirection={sortKey === 'status' ? sortDir : null}
+        onSort={() => handleSort('status')}
+        {...mkDragProps('status')}
+      >Status</ResizableTableHead>
     ),
     comment: (
       <ResizableTableHead columnId="comment" defaultWidth={200} {...mkDragProps('comment')}>Comment</ResizableTableHead>
@@ -410,7 +432,7 @@ export function DeviceTable({
               'inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold',
               CONDITION_BADGE_STYLES[device.condition],
             )}>
-              {device.condition.replace(/_/g, ' ')}
+              {device.condition.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
             </span>
           )}
         </div>
@@ -578,7 +600,7 @@ export function DeviceTable({
               const isExpanded = expandedIds.has(device.id)
               const condClass = CONDITION_STYLES[device.condition] ?? ''
               const isOwner = device.owner_email === currentUser?.email
-              const isUnavailable = ['out_of_order', 'temporarily_leased'].includes(device.condition)
+              const isUnavailable = ['out_of_order', 'temporarily_leased', 'missing'].includes(device.condition)
               const isDedicated = device.condition === 'dedicated'
               const cells = mkColCells(device, isOwner, isUnavailable, isDedicated)
 
