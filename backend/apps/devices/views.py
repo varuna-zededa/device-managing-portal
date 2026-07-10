@@ -20,27 +20,13 @@ from apps.users.models import Team, PortalUser
 from apps.vault.models import Vault
 from utils.crypto import encrypt, decrypt
 from utils import email as email_utils
+from utils.permissions import get_user_email, is_admin, IsPortalUser, IsAdminPortalUser
 from services.zedcloud import fetch_device_status, SerialMismatchError
 import httpx
 
 logger = logging.getLogger(__name__)
 
 UNAVAILABLE_CONDITIONS = ('out_of_order', 'temporarily_leased', 'dedicated', 'missing')
-
-
-def _get_user_email(request):
-    return request.META.get('HTTP_X_USER_EMAIL', '').strip()
-
-
-def _is_admin(email):
-    try:
-        user = PortalUser.objects.get(email=email)
-        return user.user_type == 'admin'
-    except PortalUser.DoesNotExist:
-        return False
-    except Exception as e:
-        logger.warning(str(e))
-        return False
 
 
 def _handle_condition_change(device, new_condition, old_condition, changed_by):
@@ -75,6 +61,8 @@ def _handle_condition_change(device, new_condition, old_condition, changed_by):
 
 
 class DeviceListCreateView(APIView):
+    permission_classes = [IsPortalUser]
+
     def get(self, request):
         qs = Device.objects.select_related('model', 'cluster').all()
 
@@ -114,7 +102,8 @@ class DeviceListCreateView(APIView):
                 | Q(owner_email__in=owner_emails)
             )
 
-        serializer = DeviceSerializer(qs.order_by('name'), many=True)
+        owner_lookup = {u.email: u.name for u in PortalUser.objects.only('email', 'name')}
+        serializer = DeviceSerializer(qs.order_by('name'), many=True, context={'owner_lookup': owner_lookup})
         return Response(serializer.data)
 
     def post(self, request):
@@ -124,23 +113,26 @@ class DeviceListCreateView(APIView):
 
         serializer = DeviceCreateSerializer(data=request.data)
         if serializer.is_valid():
-            device = serializer.save()
-            idrac_password = request.data.get('idrac_password', '').strip()
-            if idrac_password:
-                device.idrac_password_enc = encrypt(idrac_password)
-                device.save(update_fields=['idrac_password_enc', 'updated_at'])
-            user_email = _get_user_email(request)
-            OwnershipHistory.objects.create(
-                device=device,
-                owner_email=device.owner_email,
-                changed_by=user_email or 'system',
-                reason='device_added',
-            )
+            with transaction.atomic():
+                device = serializer.save()
+                idrac_password = request.data.get('idrac_password', '').strip()
+                if idrac_password:
+                    device.idrac_password_enc = encrypt(idrac_password)
+                    device.save(update_fields=['idrac_password_enc', 'updated_at'])
+                user_email = get_user_email(request)
+                OwnershipHistory.objects.create(
+                    device=device,
+                    owner_email=device.owner_email,
+                    changed_by=user_email or 'system',
+                    reason='device_added',
+                )
             return Response(DeviceSerializer(device).data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class DeviceDetailView(APIView):
+    permission_classes = [IsPortalUser]
+
     def _get_device(self, pk):
         try:
             return Device.objects.select_related('model', 'cluster').get(pk=pk)
@@ -152,7 +144,7 @@ class DeviceDetailView(APIView):
         if not device:
             return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        user_email = _get_user_email(request)
+        user_email = get_user_email(request)
         data = request.data.copy()
         data.pop('serial_number', None)
 
@@ -164,18 +156,19 @@ class DeviceDetailView(APIView):
 
         serializer = DeviceSerializer(device, data=data, partial=True)
         if serializer.is_valid():
-            _handle_condition_change(device, new_condition, old_condition, user_email)
-            serializer.save()
-            idrac_password = request.data.get('idrac_password', '').strip()
-            if idrac_password:
-                device.idrac_password_enc = encrypt(idrac_password)
-                device.save(update_fields=['idrac_password_enc', 'updated_at'])
+            with transaction.atomic():
+                _handle_condition_change(device, new_condition, old_condition, user_email)
+                serializer.save()
+                idrac_password = request.data.get('idrac_password', '').strip()
+                if idrac_password:
+                    device.idrac_password_enc = encrypt(idrac_password)
+                    device.save(update_fields=['idrac_password_enc', 'updated_at'])
             return Response(DeviceSerializer(device).data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def delete(self, request, pk):
-        user_email = _get_user_email(request)
-        if not _is_admin(user_email):
+        user_email = get_user_email(request)
+        if not is_admin(user_email):
             return Response({'error': 'Admin only'}, status=status.HTTP_403_FORBIDDEN)
         device = self._get_device(pk)
         if not device:
@@ -185,8 +178,10 @@ class DeviceDetailView(APIView):
 
 
 class DeviceReserveView(APIView):
+    permission_classes = [IsPortalUser]
+
     def post(self, request, pk):
-        requester_email = _get_user_email(request)
+        requester_email = get_user_email(request)
         if not requester_email:
             return Response({'error': 'X-User-Email header required'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -253,10 +248,10 @@ class DeviceReserveView(APIView):
 
 
 class DeviceForceAssignView(APIView):
+    permission_classes = [IsAdminPortalUser]
+
     def post(self, request, pk):
-        user_email = _get_user_email(request)
-        if not _is_admin(user_email):
-            return Response({'error': 'Admin only'}, status=status.HTTP_403_FORBIDDEN)
+        user_email = get_user_email(request)
 
         try:
             device = Device.objects.get(pk=pk)
@@ -268,22 +263,26 @@ class DeviceForceAssignView(APIView):
             return Response({'error': 'assignee_email is required'}, status=status.HTTP_400_BAD_REQUEST)
 
         displaced_owner = device.owner_email
-        device.owner_email = assignee_email
-        device.reserved_at = timezone.now()
-        device.save(update_fields=['owner_email', 'reserved_at', 'updated_at'])
+        overridden_emails = []
 
-        OwnershipHistory.objects.create(
-            device=device,
-            owner_email=assignee_email,
-            changed_by=user_email,
-            reason='force_assigned',
-        )
+        with transaction.atomic():
+            device.owner_email = assignee_email
+            device.reserved_at = timezone.now()
+            device.save(update_fields=['owner_email', 'reserved_at', 'updated_at'])
 
-        pending = ReservationRequest.objects.filter(device=device, status='pending')
-        for req in pending:
-            if req.requester_email != assignee_email:
-                email_utils.send_reservation_overridden(device, req.requester_email)
-        pending.update(status='expired')
+            OwnershipHistory.objects.create(
+                device=device,
+                owner_email=assignee_email,
+                changed_by=user_email,
+                reason='force_assigned',
+            )
+
+            pending = list(ReservationRequest.objects.filter(device=device, status='pending'))
+            overridden_emails = [r.requester_email for r in pending if r.requester_email != assignee_email]
+            ReservationRequest.objects.filter(device=device, status='pending').update(status='expired')
+
+        for req_email in overridden_emails:
+            email_utils.send_reservation_overridden(device, req_email)
 
         if displaced_owner and displaced_owner != assignee_email:
             assignee_name = assignee_email
@@ -300,8 +299,10 @@ class DeviceForceAssignView(APIView):
 
 
 class DeviceReleaseView(APIView):
+    permission_classes = [IsPortalUser]
+
     def post(self, request, pk):
-        user_email = _get_user_email(request)
+        user_email = get_user_email(request)
         if not user_email:
             return Response({'error': 'X-User-Email header required'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -313,35 +314,42 @@ class DeviceReleaseView(APIView):
         if device.owner_email != user_email:
             return Response({'error': 'Only the owner can release a device'}, status=status.HTTP_403_FORBIDDEN)
 
-        pending = ReservationRequest.objects.filter(device=device, status='pending').order_by('requested_at').first()
-        if pending:
-            device.owner_email = pending.requester_email
-            device.reserved_at = timezone.now()
-            device.save(update_fields=['owner_email', 'reserved_at', 'updated_at'])
-            pending.status = 'approved'
-            pending.save(update_fields=['status'])
-            OwnershipHistory.objects.create(
-                device=device,
-                owner_email=pending.requester_email,
-                changed_by=user_email,
-                reason='request_approved',
-            )
-            email_utils.send_reservation_approved(device, pending.requester_email)
-        else:
-            device.owner_email = None
-            device.reserved_at = None
-            device.save(update_fields=['owner_email', 'reserved_at', 'updated_at'])
-            OwnershipHistory.objects.create(
-                device=device,
-                owner_email=None,
-                changed_by=user_email,
-                reason='released',
-            )
+        approved_email = None
+        with transaction.atomic():
+            pending = ReservationRequest.objects.filter(device=device, status='pending').order_by('requested_at').first()
+            if pending:
+                device.owner_email = pending.requester_email
+                device.reserved_at = timezone.now()
+                device.save(update_fields=['owner_email', 'reserved_at', 'updated_at'])
+                pending.status = 'approved'
+                pending.save(update_fields=['status'])
+                OwnershipHistory.objects.create(
+                    device=device,
+                    owner_email=pending.requester_email,
+                    changed_by=user_email,
+                    reason='request_approved',
+                )
+                approved_email = pending.requester_email
+            else:
+                device.owner_email = None
+                device.reserved_at = None
+                device.save(update_fields=['owner_email', 'reserved_at', 'updated_at'])
+                OwnershipHistory.objects.create(
+                    device=device,
+                    owner_email=None,
+                    changed_by=user_email,
+                    reason='released',
+                )
+
+        if approved_email:
+            email_utils.send_reservation_approved(device, approved_email)
 
         return Response(DeviceSerializer(device).data)
 
 
 class DeviceStatusView(APIView):
+    permission_classes = [IsPortalUser]
+
     def post(self, request, pk):
         try:
             device = Device.objects.select_related('cluster').get(pk=pk)
@@ -351,7 +359,7 @@ class DeviceStatusView(APIView):
         bearer_token = request.data.get('bearer_token', '').strip()
         cluster_id = request.data.get('cluster_id')
         cluster_device_name = request.data.get('cluster_device_name', '').strip()
-        user_email = _get_user_email(request)
+        user_email = get_user_email(request)
 
         if cluster_id:
             try:
@@ -429,6 +437,8 @@ class DeviceStatusView(APIView):
 
 
 class DeviceCommentListCreateView(APIView):
+    permission_classes = [IsPortalUser]
+
     def get(self, request, pk):
         comments = DeviceComment.objects.filter(device_id=pk).order_by('-created_at')[:10]
         serializer = DeviceCommentSerializer(comments, many=True)
@@ -440,7 +450,7 @@ class DeviceCommentListCreateView(APIView):
         except Device.DoesNotExist:
             return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        author_email = _get_user_email(request)
+        author_email = get_user_email(request)
         text = request.data.get('text', '').strip()
         if not text:
             return Response({'error': 'text is required'}, status=status.HTTP_400_BAD_REQUEST)
@@ -460,16 +470,17 @@ class DeviceCommentListCreateView(APIView):
 
 
 class DeviceOwnershipHistoryView(APIView):
+    permission_classes = [IsAdminPortalUser]
+
     def get(self, request, pk):
-        user_email = _get_user_email(request)
-        if not _is_admin(user_email):
-            return Response({'error': 'Admin only'}, status=status.HTTP_403_FORBIDDEN)
-        history = OwnershipHistory.objects.filter(device_id=pk).order_by('-changed_at')
+        history = OwnershipHistory.objects.filter(device_id=pk).order_by('-changed_at')[:50]
         serializer = OwnershipHistorySerializer(history, many=True)
         return Response(serializer.data)
 
 
 class ChoicesView(APIView):
+    permission_classes = [IsPortalUser]
+
     def get(self, request):
         return Response({
             'labs': list(Lab.objects.values_list('name', flat=True)),

@@ -12,32 +12,16 @@ from apps.devices.models import Device
 from apps.devices.serializers import DeviceSerializer
 from apps.clusters.models import Cluster
 from apps.device_models.models import DeviceModel
-from apps.users.models import PortalUser
 from .models import RequestLog
+from utils.permissions import get_user_email, IsAdminPortalUser, IsPortalUser
 
 logger = logging.getLogger(__name__)
 
 
-def _get_user_email(request):
-    return request.META.get('HTTP_X_USER_EMAIL', '').strip()
-
-
-def _is_admin(email):
-    try:
-        user = PortalUser.objects.get(email=email)
-        return user.user_type == 'admin'
-    except PortalUser.DoesNotExist:
-        return False
-    except Exception as e:
-        logger.warning(str(e))
-        return False
-
-
 class ExportView(APIView):
+    permission_classes = [IsAdminPortalUser]
+
     def get(self, request):
-        user_email = _get_user_email(request)
-        if not _is_admin(user_email):
-            return Response({'error': 'Admin only'}, status=status.HTTP_403_FORBIDDEN)
 
         fmt = request.query_params.get('format', 'json').lower()
         devices = Device.objects.select_related('model', 'cluster').all().order_by('name')
@@ -83,10 +67,9 @@ class ExportView(APIView):
 
 
 class ImportView(APIView):
+    permission_classes = [IsAdminPortalUser]
+
     def post(self, request):
-        user_email = _get_user_email(request)
-        if not _is_admin(user_email):
-            return Response({'error': 'Admin only'}, status=status.HTTP_403_FORBIDDEN)
 
         uploaded_file = request.FILES.get('file')
         mode = request.data.get('mode', 'create_only')
@@ -210,6 +193,8 @@ _TEMPLATE_EXAMPLE = [
 
 
 class ImportTemplateView(APIView):
+    permission_classes = [IsPortalUser]
+
     def get(self, request):
         output = io.StringIO()
         writer = csv.writer(output)
@@ -242,14 +227,12 @@ def _percentile(sorted_values, pct):
 
 
 class LatencyView(APIView):
+    permission_classes = [IsAdminPortalUser]
     SLOW_THRESHOLD_MS = 1000
     SLOW_LIMIT = 20
     RETENTION_DAYS = 30
 
     def get(self, request):
-        user_email = _get_user_email(request)
-        if not _is_admin(user_email):
-            return Response({'error': 'Admin only'}, status=status.HTTP_403_FORBIDDEN)
 
         now = timezone.now()
         window_24h = now - timedelta(hours=24)

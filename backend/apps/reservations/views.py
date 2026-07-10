@@ -9,33 +9,18 @@ from .serializers import ReservationRequestSerializer, PendingReservationSeriali
 from apps.devices.models import Device
 from apps.users.models import PortalUser
 from utils import email as email_utils
+from utils.permissions import get_user_email, is_admin, IsPortalUser
 
 _UNAVAILABLE_CONDITIONS = ('out_of_order', 'temporarily_leased', 'dedicated', 'missing')
 
 logger = logging.getLogger(__name__)
 
 
-def _is_admin(email):
-    if not email:
-        return False
-    try:
-        return PortalUser.objects.get(email=email).user_type == 'admin'
-    except PortalUser.DoesNotExist:
-        return False
-    except Exception as e:
-        logger.warning(str(e))
-        return False
-
-
-def _get_user_email(request):
-    return request.META.get('HTTP_X_USER_EMAIL', '').strip()
-
-
 class PendingReservationsView(APIView):
+    permission_classes = [IsPortalUser]
+
     def get(self, request):
-        user_email = _get_user_email(request)
-        if not user_email:
-            return Response({'error': 'X-User-Email header required'}, status=status.HTTP_400_BAD_REQUEST)
+        user_email = get_user_email(request)
         reservations = ReservationRequest.objects.filter(
             device__owner_email=user_email, status='pending'
         ).select_related('device').order_by('-requested_at')
@@ -44,10 +29,10 @@ class PendingReservationsView(APIView):
 
 
 class MyReservationsView(APIView):
+    permission_classes = [IsPortalUser]
+
     def get(self, request):
-        user_email = _get_user_email(request)
-        if not user_email:
-            return Response({'error': 'X-User-Email header required'}, status=status.HTTP_400_BAD_REQUEST)
+        user_email = get_user_email(request)
         reservations = ReservationRequest.objects.filter(
             requester_email=user_email
         ).select_related('device').order_by('-requested_at')
@@ -56,6 +41,8 @@ class MyReservationsView(APIView):
 
 
 class ReservationDetailView(APIView):
+    permission_classes = []  # token-based, accessed from email link without portal login
+
     def get(self, request, token):
         try:
             reservation = ReservationRequest.objects.select_related('device').get(token=token)
@@ -80,8 +67,10 @@ class ReservationDetailView(APIView):
 
 
 class ReservationApproveView(APIView):
+    permission_classes = []  # token-based, accessed from email link without portal login
+
     def post(self, request, token):
-        user_email = _get_user_email(request)
+        user_email = get_user_email(request)
 
         with transaction.atomic():
             try:
@@ -99,11 +88,9 @@ class ReservationApproveView(APIView):
 
             device = Device.objects.select_for_update().get(pk=reservation.device_id)
 
-            # C2: if caller identity is known, verify they are the owner or an admin
-            if user_email and user_email != device.owner_email and not _is_admin(user_email):
+            if user_email and user_email != device.owner_email and not is_admin(user_email):
                 return Response({'error': 'Only the device owner can approve this request'}, status=status.HTTP_403_FORBIDDEN)
 
-            # C3: re-check device is still reservable
             if device.condition in _UNAVAILABLE_CONDITIONS:
                 reservation.status = 'expired'
                 reservation.save(update_fields=['status'])
@@ -117,20 +104,22 @@ class ReservationApproveView(APIView):
             reservation.status = 'approved'
             reservation.save(update_fields=['status'])
 
-        OwnershipHistory.objects.create(
-            device=device,
-            owner_email=reservation.requester_email,
-            changed_by=old_owner or user_email or 'email_link',
-            reason='request_approved',
-        )
+            OwnershipHistory.objects.create(
+                device=device,
+                owner_email=reservation.requester_email,
+                changed_by=old_owner or user_email or 'email_link',
+                reason='request_approved',
+            )
 
         email_utils.send_reservation_approved(device, reservation.requester_email)
         return Response({'message': 'Reservation approved', 'device': device.name, 'new_owner': reservation.requester_email})
 
 
 class ReservationRejectView(APIView):
+    permission_classes = []  # token-based, accessed from email link without portal login
+
     def post(self, request, token):
-        user_email = _get_user_email(request)
+        user_email = get_user_email(request)
 
         try:
             reservation = ReservationRequest.objects.select_related('device').get(token=token)
@@ -140,8 +129,7 @@ class ReservationRejectView(APIView):
         if reservation.status != 'pending':
             return Response({'error': f'Reservation is already {reservation.status}'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # C2: if caller identity is known, verify they are the owner or an admin
-        if user_email and user_email != reservation.device.owner_email and not _is_admin(user_email):
+        if user_email and user_email != reservation.device.owner_email and not is_admin(user_email):
             return Response({'error': 'Only the device owner can reject this request'}, status=status.HTTP_403_FORBIDDEN)
 
         reservation.status = 'rejected'
