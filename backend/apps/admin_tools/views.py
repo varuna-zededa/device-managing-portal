@@ -29,7 +29,7 @@ def _is_admin(email):
     except PortalUser.DoesNotExist:
         return False
     except Exception as e:
-        logger.debug(str(e))
+        logger.warning(str(e))
         return False
 
 
@@ -105,7 +105,7 @@ class ImportView(APIView):
             else:
                 return Response({'error': 'Unsupported file type. Use CSV or JSON.'}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            logger.debug(str(e))
+            logger.warning(str(e))
             return Response({'error': f'Failed to parse file: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
 
         for i, row in enumerate(rows):
@@ -163,17 +163,57 @@ class ImportView(APIView):
                     created += 1
 
             except Exception as e:
-                logger.debug(str(e))
+                logger.warning(str(e))
                 errors.append({'row': i + 1, 'error': str(e)})
                 skipped += 1
 
         return Response({'created': created, 'updated': updated, 'skipped': skipped, 'errors': errors})
 
 
+_FIELD_ALIASES = {
+    'serial': 'serial_number',
+    'serial_no': 'serial_number',
+    'device_name': 'name',
+    'model_name': 'model',
+    'cluster_name': 'cluster',
+    'name_in_cluster': 'cluster_device_name',
+    'cluster_device': 'cluster_device_name',
+    'location': 'location_detail',
+    'lab_location': 'lab',
+}
+
+def _normalize_key(key):
+    k = key.strip().lower().replace(' ', '_').replace('-', '_').rstrip('.')
+    return _FIELD_ALIASES.get(k, k)
+
+_TEMPLATE_HEADERS = [
+    'name', 'serial_number', 'model', 'cluster', 'cluster_device_name',
+    'team', 'lab', 'location_detail', 'condition', 'description',
+    'idrac_ip', 'idrac_username', 'owner_email',
+]
+
+_TEMPLATE_EXAMPLE = [
+    'My-Device-01', 'SN123456', 'Dell-XR12', 'hummingbird', 'My-Device-01',
+    'ST', 'SanJose Lab', 'Rack 3 Shelf 2', 'normal', 'Example device — delete this row',
+    '10.0.0.1', 'root', '',
+]
+
+
+class ImportTemplateView(APIView):
+    def get(self, request):
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(_TEMPLATE_HEADERS)
+        writer.writerow(_TEMPLATE_EXAMPLE)
+        response = HttpResponse(output.getvalue(), content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="device_import_template.csv"'
+        return response
+
+
 def _parse_csv(uploaded_file):
     text = uploaded_file.read().decode('utf-8-sig')
     reader = csv.DictReader(io.StringIO(text))
-    return list(reader)
+    return [{_normalize_key(k): v for k, v in row.items()} for row in reader]
 
 
 def _parse_json(uploaded_file):
