@@ -43,7 +43,7 @@ function initials(name: string) {
 }
 
 export default function UsersPage() {
-  const { isAdmin } = useUser()
+  const { isAdmin, isLoading: isAuthLoading } = useUser()
   const [addOpen, setAddOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<PortalUser | null>(null)
   const [sortKey, setSortKey] = useState<'name' | 'email' | 'team' | 'role' | null>(null)
@@ -62,6 +62,7 @@ export default function UsersPage() {
   }
   const qc = useQueryClient()
 
+  if (isAuthLoading) return null
   if (!isAdmin) return <Navigate to="/devices" replace />
 
   const { data: rawUsers = [], isLoading } = useQuery({ queryKey: ['users'], queryFn: getUsers })

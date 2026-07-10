@@ -5,6 +5,7 @@ import { getUsers, type PortalUser } from '@/api/users'
 interface UserContextValue {
   currentUser: PortalUser | null
   isAdmin: boolean
+  isLoading: boolean
   logout: () => void
 }
 
@@ -45,14 +46,16 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="animate-pulse text-muted-foreground text-sm">Loading...</div>
-      </div>
+      <UserContext.Provider value={{ currentUser: null, isAdmin: false, isLoading: true, logout }}>
+        <div className="flex items-center justify-center h-screen">
+          <div className="animate-pulse text-muted-foreground text-sm">Loading...</div>
+        </div>
+      </UserContext.Provider>
     )
   }
 
   return (
-    <UserContext.Provider value={{ currentUser, isAdmin: currentUser?.user_type === 'admin', logout }}>
+    <UserContext.Provider value={{ currentUser, isAdmin: currentUser?.user_type === 'admin', isLoading: false, logout }}>
       {children}
     </UserContext.Provider>
   )
