@@ -4,12 +4,12 @@ from apps.devices.views import ChoicesView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('api/choices/', ChoicesView.as_view()),
-    path('api/clusters/', include('apps.clusters.urls')),
-    path('api/models/', include('apps.device_models.urls')),
-    path('api/devices/', include('apps.devices.urls')),
-    path('api/users/', include('apps.users.urls')),
-    path('api/vault/', include('apps.vault.urls')),
-    path('api/reservations/', include('apps.reservations.urls')),
-    path('api/admin/', include('apps.admin_tools.urls')),
+    path('api/v1/choices/', ChoicesView.as_view()),
+    path('api/v1/clusters/', include('apps.clusters.urls')),
+    path('api/v1/models/', include('apps.device_models.urls')),
+    path('api/v1/devices/', include('apps.devices.urls')),
+    path('api/v1/users/', include('apps.users.urls')),
+    path('api/v1/vault/', include('apps.vault.urls')),
+    path('api/v1/reservations/', include('apps.reservations.urls')),
+    path('api/v1/admin/', include('apps.admin_tools.urls')),
 ]

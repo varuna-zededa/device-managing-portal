@@ -1,6 +1,6 @@
 import axios from 'axios'
 
-const client = axios.create({ baseURL: '/api' })
+const client = axios.create({ baseURL: '/api/v1' })
 
 client.interceptors.request.use((config) => {
   const email = localStorage.getItem('currentUserEmail') || ''
