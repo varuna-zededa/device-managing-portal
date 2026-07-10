@@ -97,3 +97,4 @@ It contains exact file paths, code patterns, and checklists for every common imp
 - Do **not** use `fetch` or bare `axios` in frontend — always use `src/api/client.ts`
 - Do **not** read `request.META.get('HTTP_X_USER_EMAIL')` directly in views — use `get_user_email(request)` from `utils.permissions`
 - Do **not** omit `permission_classes` on any view — `DEFAULT_PERMISSION_CLASSES = []`, so undecorated views are fully public
+- Do **not** use `?format=` query param for export — use `?fmt=` to avoid DRF content-negotiation 404

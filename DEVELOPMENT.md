@@ -123,6 +123,41 @@ raw = decrypt(device.idrac_password_enc)
 | `needs_repair` | no | no | no |
 | `normal` (clear) | no | no | no |
 
+### Serializer field validation pattern
+
+All write serializers validate inputs. Follow these patterns when adding new fields:
+
+**FK fields (lab, team):** Use `SlugRelatedField` — accepts/returns the name string, enforces FK at DB level:
+```python
+lab = serializers.SlugRelatedField(queryset=Lab.objects.all(), slug_field='name')
+```
+
+**Nullable FK fields (device team):** Use `NullableSlugRelatedField` from `apps/devices/serializers.py` — converts `""` to `None`:
+```python
+team = NullableSlugRelatedField(
+    queryset=Team.objects.all(), slug_field='name', allow_null=True, required=False,
+)
+```
+
+**String validators in serializers:**
+```python
+def validate_name(self, value):
+    if not (value or '').strip():
+        raise serializers.ValidationError('Name must not be blank.')
+    return value.strip()
+```
+
+**Always add `select_related` for FK fields** to avoid N+1 queries:
+```python
+Device.objects.select_related('model', 'cluster', 'lab', 'team')
+```
+
+**Filter queries after FK conversion** use double-underscore traversal:
+```python
+qs.filter(team__name=team)   # not qs.filter(team=team)
+qs.filter(lab__name=lab)
+```
+
 ### Email pattern
 ```python
 from utils.email import send_reservation_request   # example
@@ -326,3 +361,10 @@ No code changes. Django admin → Labs (or Teams) → Add.
 1. Add function to `utils/email.py` following existing pattern
 2. Call from view with `fail_silently=False` + catch + `logger.warning()`
 3. No-op if `settings.EMAIL_HOST` is blank — no special handling needed
+
+### New write endpoint (validation checklist)
+- [ ] Declare `permission_classes` explicitly on every view — omitting them makes the endpoint public
+- [ ] Use `SlugRelatedField` for FK fields (lab, team); `NullableSlugRelatedField` for nullable FK
+- [ ] Add `validate_<field>` methods for string fields that must be non-blank or format-constrained
+- [ ] Add the FK fields to `select_related` on all querysets that touch those models
+- [ ] Update filter clauses from `field=value` to `field__name=value` after FK conversion

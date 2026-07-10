@@ -145,17 +145,17 @@ Features not in scope for v1 but worth considering later, roughly ordered by use
 ```
 id      int   PK auto
 name    str   unique short name, e.g. "hummingbird", "prod"
-host    str   ZedCloud hostname, e.g. "zedcontrol.hummingbird.zededa.net"
+host    str   ZedCloud hostname, format: zcloud.<name>.zededa.[net|dev], e.g. "zcloud.hummingbird.zededa.net"
 ```
 **Pre-seeded entries:**
 | name | host |
 |---|---|
-| hummingbird | zedcontrol.hummingbird.zededa.net |
-| alpha | zedcontrol.alpha.zededa.net |
-| canary | zedcontrol.canary.zededa.net |
-| gmwtus | zedcontrol.gmwtus.zededa.net |
-| thor | zedcontrol.thor.zededa.net |
-| prod | zedcontrol.zededa.net |
+| hummingbird | zcloud.hummingbird.zededa.net |
+| alpha | zcloud.alpha.zededa.net |
+| canary | zcloud.canary.zededa.net |
+| gmwtus | zcloud.gmwtus.zededa.net |
+| thor | zcloud.thor.zededa.net |
+| prod | zcloud.prod.zededa.net |
 
 Any user can add a new cluster. The dropdown in all forms is populated from this table.
 
@@ -180,11 +180,12 @@ description          str    nullable; free text — device capabilities, hardwar
 cluster_device_name  str    nullable; name used in ZedCloud API path (optional — only needed for ZedCloud status fetch)
 model                FK     → DeviceModel.id
 cluster_id           int    FK → Cluster.id; nullable (optional — only needed for ZedCloud status fetch)
-team                 str    nullable; set on reserve; required before setting condition = dedicated
+team                 FK     → Team.id; nullable (SET_NULL); required before setting condition = dedicated
 owner_email          str    nullable; FK → User.email; set on reserve
-lab                  str    NOT NULL; free text (max 100 chars); valid values managed via the Lab DB model (see below)
+lab                  FK     → Lab.id (PROTECT, NOT NULL); must reference an existing Lab row
 location_detail      str    nullable; free text — exact spot inside lab (e.g. "Rack-B3, slot 4", "Near the printer")
 condition            enum   default 'normal' (NOT NULL); normal | out_of_order | needs_repair | temporarily_leased | dedicated | missing
+                            DB constraint: CheckConstraint ensures condition is always one of the six valid enum values
 idrac_ip             str    nullable
 idrac_username       str    nullable
 idrac_password_enc   bytes  nullable; AES-encrypted
@@ -232,8 +233,8 @@ New teams can be added via Django admin — all Team dropdowns refresh on next p
 id          int   PK auto
 name        str
 email       str   unique — identity anchor
-team        str   nullable; free text (max 50 chars); matches a Team.name value
-user_type   enum  admin | team_member
+team        FK    → Team.id (PROTECT, NOT NULL)
+user_type   enum  admin | member
 ```
 
 ### Vault  *(per-user ZedCloud bearer tokens)*
@@ -292,7 +293,7 @@ reason         enum     device_added | reserved | released | force_assigned | re
 ```
 GET  /api/v1/clusters          list all (for dropdown)
 POST /api/v1/clusters          any user; body: {name, host}
-                               host auto-suggested as zedcontrol.{name}.zededa.net if omitted
+                               host auto-suggested as zcloud.{name}.zededa.net if omitted; host validated against pattern zcloud.<name>.zededa.[net|dev]
 ```
 
 ### Models
@@ -349,6 +350,7 @@ GET  /api/v1/choices/      any registered user; returns {labs: [...], teams: [..
 GET   /api/v1/users        list all (for dropdowns, search)
 POST  /api/v1/users        admin only; body: {name, email_prefix, team, user_type}
                            email stored as {email_prefix}@zededa.com — frontend sends prefix only
+                           user_type accepts: admin | member
 PATCH /api/v1/users/{id}   admin only; body: any subset of {name, team, user_type}
                            email is identity — not editable via this endpoint
 ```
@@ -627,10 +629,10 @@ record on demand.
 | Name | Sortable; condition badge below name when condition ≠ normal; copy button on hover |
 | Serial No | Hardware serial number (monospace); unique; immutable; copy button on hover |
 | Cluster | Short name badge; sortable |
-| Name in Cluster | `cluster_device_name` in monospace; "—" if not set |
+| Name in Cluster | `cluster_device_name` in monospace; "—" if not set; copy button on hover |
 | Team | Team assignment; "—" if not set |
 | Lab | Lab location; always set |
-| Owner | Avatar + name; Reserve / Release per role; "UNAVAILABLE" for blocking conditions; hover tooltip shows "Reserved X days ago" |
+| Owner | Green "Available" text for available devices; avatar + name for owned devices; blue outline Reserve button for all non-owner users; red outline Release button for owner; "UNAVAILABLE" badge for blocking conditions; hover tooltip shows "Reserved X days ago" |
 | Status | Color-coded badge (see Status Badge Colors below) + **"Refresh"** link below; hover tooltip shows "Last refresh: X mins ago" |
 | Comment / Purpose | Newest comment (2-line truncated) from denormalized cache; "—" if none |
 | Actions | 3-dot dropdown only — fixed last; not reorderable |
@@ -690,13 +692,13 @@ Edit Device modal. The Comment column in the primary row already surfaces the ne
 
 ### Owner Column — Reserve / Release Rules
 Release is **owner-only** — admins cannot release a device they do not own (same restriction as members).
-The Release button is red-tinted (`border-destructive/50 text-destructive`) to visually distinguish it from the neutral blue Reserve button.
+The Release button uses red outline styling (`border-destructive/50 text-destructive`) to visually distinguish it from the blue outline Reserve button. Available devices show a plain green "Available" label above the Reserve button in place of the owner avatar.
 
 | Scenario | Member sees | Admin sees |
 |---|---|---|
-| Device owned by logged-in user | Red-tinted "Release" button | Red-tinted "Release" button |
-| Device owned by someone else | Blue "Reserve" button | Blue "Reserve" button (no Release) |
-| Device available (no owner) | Blue "Reserve" button | Blue "Reserve" button |
+| Device owned by logged-in user | Red outline "Release" button | Red outline "Release" button |
+| Device owned by someone else | Green "Available" text + blue outline "Reserve" | Green "Available" text + blue outline "Reserve" |
+| Device available (no owner) | Green "Available" text + blue outline "Reserve" | Green "Available" text + blue outline "Reserve" |
 | Device condition = `dedicated` | Team name chip (e.g. "ST") — no Reserve button | Team name chip — no Reserve button |
 
 ### Actions Column (3-dot menu)
@@ -804,12 +806,13 @@ An **Export / Import** button is visible in the device table header for admin us
 
 ### Export
 ```
-GET /api/v1/admin/export?format=<csv|json>
+GET /api/v1/admin/export?fmt=<csv|json>
 ```
 - Auth: admin only (X-User-Email header)
-- Downloads a snapshot of the full device list; filename: `devices_{YYYY-MM-DD}.{csv|json}`
+- Downloads a snapshot of the full device list; filename: `holocron_device_inventory_{YYYYMMDD_HHMMSS}.{csv|json}`
 - CSV: one row per device; column headers match field names
 - JSON: list of device objects — same shape as `GET /api/v1/devices` response
+- After download completes, a toast notification informs the user that the full inventory was exported — not just the current filtered view
 
 **Exported fields:** id, name, serial_number, description, cluster (name), cluster_device_name,
 model (name), customer_partner_name (from model), team, owner_email, lab, location_detail,
@@ -842,7 +845,7 @@ Body: file=<csv or json>, mode=<create_only|update_or_create>
 - Import does **not** touch ownership history or device comments — device fields only
 - Encrypted fields (idrac_password, bearer tokens) cannot be imported; must be set manually after import
 - **Required import columns:** name, serial_number, model (name), lab
-- Unknown model names → auto-create a new DeviceModel; unknown cluster names → auto-create a new Cluster
+- Unknown model names → auto-create a new DeviceModel; unknown cluster names → auto-create a new Cluster with zcloud. host prefix; lab and team must already exist — unknown values are rejected with a per-row validation error
 
 **Forgiving header parsing:** column names are normalised before processing — leading/trailing
 whitespace stripped, lowercased, spaces and hyphens replaced with underscores. Common aliases
@@ -862,14 +865,15 @@ are mapped to canonical names automatically:
 variant is accepted and converted to the DB snake_case format on import
 (e.g. "Needs Repair", "needs repair", "NEEDS_REPAIR" → `needs_repair`).
 
+**Per-row field validation:** Each row is validated before any DB write. Rejected rows are reported in the error list (with row number and reason) and skipped; valid rows continue to be processed. Validated fields: `owner_email` (valid email format), `idrac_ip` (valid IPv4 or IPv6), `condition` (must be a known value after normalisation), `lab` (must reference an existing Lab row), `team` (must reference an existing Team row if provided).
+
 **Frontend:** drag-and-drop file picker + mode selector; result modal showing created / updated / skipped / error counts.
 
 ---
 
 ## Add Cluster Flow
 - Any user can open "Add Cluster" (button in the cluster dropdown or a Clusters page)
-- Fields: **Name** + **Hostname** (auto-suggested as `zedcontrol.{name}.zededa.net` when name is
-  typed; prod → `zedcontrol.zededa.net`)
+- Fields: **Name** + **Hostname** (auto-suggested as `zcloud.{name}.zededa.net` when name is typed; host is validated against the pattern `zcloud.<name>.zededa.[net|dev]`)
 - On submit → `POST /api/v1/clusters` → dropdown in all forms immediately includes new cluster
 - Duplicate name rejected with a clear error
 
@@ -1100,7 +1104,7 @@ device-managing-portal/
 | 17 | Required fields | Name, Serial Number, Model, Lab — Cluster and Name-in-Cluster are optional (only needed for ZedCloud status fetch) |
 | 18 | Cluster field | Dropdown (short name); backed by Cluster table in DB |
 | 19 | Cluster list management | Any user can add new cluster via UI; stored in DB |
-| 20 | Cluster hostname pattern | `zedcontrol.{name}.zededa.net`; prod is `zedcontrol.zededa.net` |
+| 20 | Cluster hostname pattern | `zcloud.<name>.zededa.[net|dev]`; enforced by both backend regex validator and frontend Zod schema; auto-generated on name entry |
 | 21 | Release permissions | Owner only — admins cannot release a device they do not own; backend returns 403 if requester ≠ owner |
 | 22 | SMTP | Configurable in .env; graceful degradation to in-app only if not set |
 | 23 | Email approve/reject links | `/confirm/{token}` React page; buttons fire POST; scanner-safe |
@@ -1131,3 +1135,10 @@ device-managing-portal/
 | 48 | Show both device names | Portal name (Name column) and cluster name (dedicated Name in Cluster column) both visible in primary row; not in expand panel |
 | 49 | Expand panel layout | 3 card columns: Identity+Placement (left) · ZedCloud Status+Connectivity (middle) · IDRAC+Notes (right); CopyableField label-left/value-right rows with section-header strips; Placement field order: Lab → Location detail; all fields always rendered with "—" fallback |
 | 50 | Frontend component source | shadcn/ui components extracted from `zedui-dev` (React 19, Tailwind v4, slate base, CSS variables); no pagination — list kept to single scrollable view (expected max ~200 rows) |
+| 51 | DB-level FK integrity | Device.lab → FK(Lab, PROTECT); Device.team → FK(Team, SET_NULL); PortalUser.team → FK(Team, PROTECT); Device.condition → CheckConstraint; owner_email kept as CharField for audit trail (deleted users must still appear in ownership history) |
+| 52 | Backend field validation | All write endpoints use DRF serializer validators: SlugRelatedField for lab/team (accept/return name strings, reject unknowns at DB level); NullableSlugRelatedField for nullable team (converts "" to None); field validators for name, idrac_ip, email_prefix, user_type, cluster host regex |
+| 53 | Frontend Zod validation | Two-layer validation: backend (security boundary, fires on submit) + frontend Zod (UX, real-time); idrac_ip validated as IPv4/IPv6; cluster host validated against zcloud pattern; user_type restricted to admin\|member |
+| 54 | Export format param | Query param renamed from `?format=` to `?fmt=` to avoid DRF content-negotiation intercepting the request and returning 404 |
+| 55 | Export filename | `holocron_device_inventory_{YYYYMMDD_HHMMSS}.{ext}`; post-download toast informs user that full inventory was exported regardless of current filters |
+| 56 | Available label in Owner column | Available devices show a plain green "Available" text in the Owner column (no pill/badge) above the Reserve button; replaces the empty owner slot |
+| 57 | Reserve button unified | Single Reserve button definition for both direct-reserve and request-reserve flows (blue outline style); backend decides whether to transfer immediately or create a pending request based on device state |
