@@ -2,7 +2,7 @@ import client from './client'
 
 export async function exportDevices(format: 'csv' | 'json'): Promise<Blob> {
   const res = await client.get('/admin/export/', {
-    params: { format },
+    params: { fmt: format },
     responseType: 'blob',
   })
   return res.data

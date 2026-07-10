@@ -2,7 +2,7 @@ import csv
 import io
 import json
 import logging
-from datetime import date, timedelta
+from datetime import timedelta
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -23,10 +23,11 @@ class ExportView(APIView):
 
     def get(self, request):
 
-        fmt = request.query_params.get('format', 'json').lower()
+        fmt = request.query_params.get('fmt', 'json').lower()
         devices = Device.objects.select_related('model', 'cluster').all().order_by('name')
 
-        today = date.today().isoformat()
+        ts = timezone.now().strftime('%Y%m%d_%H%M%S')
+        filename_base = f'holocron_device_inventory_{ts}'
 
         if fmt == 'csv':
             output = io.StringIO()
@@ -54,7 +55,7 @@ class ExportView(APIView):
                     d.created_at.isoformat(), d.updated_at.isoformat(),
                 ])
             response = HttpResponse(output.getvalue(), content_type='text/csv')
-            response['Content-Disposition'] = f'attachment; filename="devices_{today}.csv"'
+            response['Content-Disposition'] = f'attachment; filename="{filename_base}.csv"'
             return response
 
         serializer = DeviceSerializer(devices, many=True)
@@ -62,7 +63,7 @@ class ExportView(APIView):
             json.dumps(serializer.data, default=str),
             content_type='application/json',
         )
-        resp['Content-Disposition'] = f'attachment; filename="devices_{today}.json"'
+        resp['Content-Disposition'] = f'attachment; filename="{filename_base}.json"'
         return resp
 
 
