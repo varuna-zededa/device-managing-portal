@@ -24,10 +24,12 @@ class DeviceSerializer(serializers.ModelSerializer):
             'last_comment_text', 'last_comment_by', 'last_comment_at',
             'created_at', 'updated_at', 'is_available', 'pending_requester_email',
         ]
-        read_only_fields = ['serial_number', 'created_at', 'updated_at']
-        extra_kwargs = {
-            'idrac_password_enc': {'write_only': True},
-        }
+        read_only_fields = [
+            'serial_number', 'created_at', 'updated_at',
+            'status', 'status_fetched_at', 'reserved_at',
+            'owner_email',
+            'last_comment_text', 'last_comment_by', 'last_comment_at',
+        ]
 
     def to_representation(self, instance):
         ret = super().to_representation(instance)
@@ -53,6 +55,9 @@ class DeviceSerializer(serializers.ModelSerializer):
     def get_owner_name(self, obj):
         if not obj.owner_email:
             return None
+        lookup = self.context.get('owner_lookup')
+        if lookup is not None:
+            return lookup.get(obj.owner_email, obj.owner_email)
         try:
             user = PortalUser.objects.get(email=obj.owner_email)
             return user.name
