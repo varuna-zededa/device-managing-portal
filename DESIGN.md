@@ -217,7 +217,7 @@ name  str   unique (max 100 chars); e.g. "Bangalore Lab", "CoreSite Lab", "Home 
 ```
 Pre-seeded entries: Bangalore Lab · Bangalore Office Space · Berlin Lab · SanJose Lab · CoreSite Lab · Home Lab.
 New labs can be added via Django admin (`/admin/`) without any code change — all Lab dropdowns in the UI
-refresh on the next full page load because `GET /api/choices/` queries this table at runtime.
+refresh on the next full page load because `GET /api/v1/choices/` queries this table at runtime.
 
 ### Team
 ```
@@ -290,88 +290,88 @@ reason         enum     device_added | reserved | released | force_assigned | re
 
 ### Clusters
 ```
-GET  /api/clusters          list all (for dropdown)
-POST /api/clusters          any user; body: {name, host}
-                            host auto-suggested as zedcontrol.{name}.zededa.net if omitted
+GET  /api/v1/clusters          list all (for dropdown)
+POST /api/v1/clusters          any user; body: {name, host}
+                               host auto-suggested as zedcontrol.{name}.zededa.net if omitted
 ```
 
 ### Models
 ```
-GET  /api/models            list all (for dropdown)
-POST /api/models            any user; body: {name, customer_partner_name?}
-                            duplicate name rejected with clear error
-                            customer_partner_name optional — identifies the customer or Zededa partner
-                            Zededa customer/partner using the model; searchable from the main device search bar
+GET  /api/v1/models            list all (for dropdown)
+POST /api/v1/models            any user; body: {name, customer_partner_name?}
+                               duplicate name rejected with clear error
+                               customer_partner_name optional — identifies the customer or Zededa partner
+                               Zededa customer/partner using the model; searchable from the main device search bar
 ```
 
 ### Devices
 ```
-GET    /api/devices          ?q=<search>&available=<true|false|all>
-                            &team=<ST|EVE|PLATFORM>&lab=<lab name>
-                            &condition=<normal|out_of_order|needs_repair|temporarily_leased|dedicated>
-                            q matches: name, model, cluster, owner name, eve_version, comment text,
-                            customer_partner_name (via device model)
-                            team / lab / condition are exact-match filter selects (combinable)
-POST   /api/devices          add; body: DeviceCreate; duplicate serial_number → 400 "Serial number already exists"
-PUT    /api/devices/{id}     update name, description, cluster_id, cluster_device_name, idrac fields, team
-                              serial_number is immutable after creation
-DELETE /api/devices/{id}     admin only (X-User-Email header)
-POST   /api/devices/{id}/reserve          no body — requester identified via X-User-Email header
-POST   /api/devices/{id}/force-assign     admin only; body: {assignee_email}
-POST   /api/devices/{id}/release          owner only (X-User-Email header); 403 if requester ≠ owner
-POST   /api/devices/{id}/status           body: {bearer_token}
-                                          uses Device.cluster_id + cluster_device_name
-                                          saves bearer_token to Vault, calls ZedCloud, updates device
+GET    /api/v1/devices          ?q=<search>&available=<true|false|all>
+                                &team=<ST|EVE|PLATFORM>&lab=<lab name>
+                                &condition=<normal|out_of_order|needs_repair|temporarily_leased|dedicated>
+                                q matches: name, model, cluster, owner name, eve_version, comment text,
+                                customer_partner_name (via device model)
+                                team / lab / condition are exact-match filter selects (combinable)
+POST   /api/v1/devices          add; body: DeviceCreate; duplicate serial_number → 400 "Serial number already exists"
+PUT    /api/v1/devices/{id}     update name, description, cluster_id, cluster_device_name, idrac fields, team
+                                serial_number is immutable after creation
+DELETE /api/v1/devices/{id}     admin only (X-User-Email header)
+POST   /api/v1/devices/{id}/reserve          no body — requester identified via X-User-Email header
+POST   /api/v1/devices/{id}/force-assign     admin only; body: {assignee_email}
+POST   /api/v1/devices/{id}/release          owner only (X-User-Email header); 403 if requester ≠ owner
+POST   /api/v1/devices/{id}/status           body: {bearer_token}
+                                             uses Device.cluster_id + cluster_device_name
+                                             saves bearer_token to Vault, calls ZedCloud, updates device
 ```
 
 ### Device Comments
 ```
-GET  /api/devices/{id}/comments          list last 10 comments, newest first; any logged-in user
-POST /api/devices/{id}/comments          body: {text}; author from X-User-Email
-                                          auto-prunes to 10 entries after insert
+GET  /api/v1/devices/{id}/comments          list last 10 comments, newest first; any logged-in user
+POST /api/v1/devices/{id}/comments          body: {text}; author from X-User-Email
+                                             auto-prunes to 10 entries after insert
 ```
 
 ### Device Ownership History
 ```
-GET  /api/devices/{id}/ownership-history   admin only (X-User-Email header); full history, newest first
+GET  /api/v1/devices/{id}/ownership-history   admin only; newest 50 records, newest first
 ```
 
 ### Choices
 ```
-GET  /api/choices/      no auth; returns {labs: [...], teams: [...], conditions: [...]}
-                        single source of truth for all dropdown lists; labs and teams queried from
-                        DB at runtime — adding a new Lab or Team via Django admin is reflected on
-                        next page load; conditions list is derived from CONDITION_CHOICES in code
+GET  /api/v1/choices/      any registered user; returns {labs: [...], teams: [...], conditions: [...]}
+                           single source of truth for all dropdown lists; labs and teams queried from
+                           DB at runtime — adding a new Lab or Team via Django admin is reflected on
+                           next page load; conditions list is derived from CONDITION_CHOICES in code
 ```
 
 ### Users
 ```
-GET   /api/users        list all (for dropdowns, search)
-POST  /api/users        admin only; body: {name, email_prefix, team, user_type}
-                        email stored as {email_prefix}@zededa.com — frontend sends prefix only
-PATCH /api/users/{id}   admin only; body: any subset of {name, team, user_type}
-                        email is identity — not editable via this endpoint
+GET   /api/v1/users        list all (for dropdowns, search)
+POST  /api/v1/users        admin only; body: {name, email_prefix, team, user_type}
+                           email stored as {email_prefix}@zededa.com — frontend sends prefix only
+PATCH /api/v1/users/{id}   admin only; body: any subset of {name, team, user_type}
+                           email is identity — not editable via this endpoint
 ```
 
 ### Vault
 ```
-GET  /api/vault/{cluster_id}    Header X-User-Email → {has_token: bool}
+GET  /api/v1/vault/{cluster_id}    Header X-User-Email → {has_token: bool}
 ```
-(Vault write happens via `POST /api/devices/{id}/status` — no separate upsert endpoint needed)
+(Vault write happens via `POST /api/v1/devices/{id}/status` — no separate upsert endpoint needed)
 
 ### Reservation Requests
 ```
-GET  /api/reservations/pending              Header X-User-Email → requests where owner = current user
-GET  /api/reservations/mine                 Header X-User-Email → requests made by current user
-GET  /api/reservations/{token}              no auth — returns {device_name, requester_name, expires_at, status}
-                                            used by the confirmation page to display context
-POST /api/reservations/{token}/approve      no auth — token IS the auth; executes approval
-POST /api/reservations/{token}/reject       no auth — token IS the auth; executes rejection
+GET  /api/v1/reservations/pending              Header X-User-Email → requests where owner = current user
+GET  /api/v1/reservations/mine                 Header X-User-Email → requests made by current user
+GET  /api/v1/reservations/{token}              no auth — returns {device_name, requester_name, expires_at, status}
+                                               used by the confirmation page to display context
+POST /api/v1/reservations/{token}/approve      no auth — token IS the auth; executes approval
+POST /api/v1/reservations/{token}/reject       no auth — token IS the auth; executes rejection
 ```
 
 **Email link flow:**
 - Email contains a **single link**: `http://<server>/confirm/{token}`
-- That's a React frontend route — the page calls `GET /api/reservations/{token}` to fetch context,
+- That's a React frontend route — the page calls `GET /api/v1/reservations/{token}` to fetch context,
   then renders device name, requester name, expiry time, and two buttons: **[Approve]** /
   **[Reject]**
 - Each button fires the corresponding `POST` endpoint
@@ -478,7 +478,7 @@ STATUS_MAP = {
 ### Login Flow
 
 **Login page (`/login`):**
-- Fetches user list from `GET /api/users` (no auth required — public endpoint)
+- Fetches user list from `GET /api/v1/users` (no auth required — public endpoint)
 - Searchable dropdown — filter by name or email; select to log in
 - On select: store `currentUserEmail` in `localStorage`; redirect to `/devices`
 - If `localStorage` has no entry (first visit or after logout) → redirect to `/login`
@@ -493,10 +493,10 @@ STATUS_MAP = {
   header, read from `localStorage`
 - Backend uses this header to identify the caller, look up their `user_type`, and enforce role-based
   access
-- Endpoints that require no identity: `GET /api/users` (login page), `GET
-  /api/reservations/{token}`, `POST /api/reservations/{token}/approve`, `POST
-  /api/reservations/{token}/reject` (token IS the auth)
-- Reserve specifically: `POST /api/devices/{id}/reserve` sends no body — requester is derived
+- Endpoints that require no identity: `GET /api/v1/users` (login page), `GET
+  /api/v1/reservations/{token}`, `POST /api/v1/reservations/{token}/approve`, `POST
+  /api/v1/reservations/{token}/reject` (token IS the auth)
+- Reserve specifically: `POST /api/v1/devices/{id}/reserve` sends no body — requester is derived
   entirely from `X-User-Email`; no user picker in the UI
 
 **Route protection (frontend):**
@@ -611,7 +611,7 @@ current filtered set:
 - **Available / Reserved / All** — chip toggle (uses the derived `is_available` rule, so blocking-
   condition devices never count as Available)
 - **Condition / Lab / Team** — three exact-match filter selects (in this order) beside the chip toggle;
-  combinable with the search box and each other; all values populated from DB via `GET /api/choices/`
+  combinable with the search box and each other; all values populated from DB via `GET /api/v1/choices/`
 - **Team "Unassigned"** — special value in the Team filter that returns devices where `team IS NULL`;
   useful to audit unassigned devices across labs
 
@@ -804,12 +804,12 @@ An **Export / Import** button is visible in the device table header for admin us
 
 ### Export
 ```
-GET /api/admin/export?format=<csv|json>
+GET /api/v1/admin/export?format=<csv|json>
 ```
 - Auth: admin only (X-User-Email header)
 - Downloads a snapshot of the full device list; filename: `devices_{YYYY-MM-DD}.{csv|json}`
 - CSV: one row per device; column headers match field names
-- JSON: list of device objects — same shape as `GET /api/devices` response
+- JSON: list of device objects — same shape as `GET /api/v1/devices` response
 
 **Exported fields:** id, name, serial_number, description, cluster (name), cluster_device_name,
 model (name), customer_partner_name (from model), team, owner_email, lab, location_detail,
@@ -820,7 +820,7 @@ last_comment_text, created_at, updated_at
 
 ### Import template
 ```
-GET /api/admin/import-template/
+GET /api/v1/admin/import-template/
 ```
 - No auth required — returns a static CSV file with correct column headers and one example row
 - Filename: `device_import_template.csv`
@@ -831,7 +831,7 @@ location_detail, condition, description, idrac_ip, idrac_username, owner_email
 
 ### Import
 ```
-POST /api/admin/import
+POST /api/v1/admin/import
 Content-Type: multipart/form-data
 Body: file=<csv or json>, mode=<create_only|update_or_create>
 ```
@@ -870,7 +870,7 @@ variant is accepted and converted to the DB snake_case format on import
 - Any user can open "Add Cluster" (button in the cluster dropdown or a Clusters page)
 - Fields: **Name** + **Hostname** (auto-suggested as `zedcontrol.{name}.zededa.net` when name is
   typed; prod → `zedcontrol.zededa.net`)
-- On submit → `POST /api/clusters` → dropdown in all forms immediately includes new cluster
+- On submit → `POST /api/v1/clusters` → dropdown in all forms immediately includes new cluster
 - Duplicate name rejected with a clear error
 
 ---
@@ -884,7 +884,7 @@ variant is accepted and converted to the DB snake_case format on import
 ---
 
 ## Auto-Refresh
-- Device table polls `GET /api/devices` every **15 minutes** while the browser tab is active
+- Device table polls `GET /api/v1/devices` every **15 minutes** while the browser tab is active
 - Uses `setInterval` with a visibility check (`document.visibilityState === 'visible'`) — pauses
   when tab is hidden
 
@@ -1037,7 +1037,7 @@ device-managing-portal/
 │   │   └── zedcloud.py          sync httpx call + response parsing + serial verification
 │   ├── apps/
 │   │   └── admin_tools/
-│   │       ├── views.py         ExportView + ImportView (GET/POST /api/admin/export|import)
+│   │       ├── views.py         ExportView + ImportView (GET/POST /api/v1/admin/export|import)
 │   │       └── urls.py
 │   ├── utils/
 │   │   ├── crypto.py            Fernet encrypt() / decrypt()

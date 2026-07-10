@@ -1,0 +1,99 @@
+# Device Managing Portal — Claude Code Context
+
+Full spec: [DESIGN.md](DESIGN.md) | Implementation reference: [DEVELOPMENT.md](DEVELOPMENT.md)
+
+**Before making any source code changes, read DEVELOPMENT.md.**
+It contains exact file paths, code patterns, and checklists for every common implementation task.
+
+---
+
+## Stack
+
+- **Backend:** Python / Django 5 + Django REST Framework; SQLite (dev) → PostgreSQL-compatible
+- **Frontend:** React 19 + Vite + TypeScript + Tailwind v4 + shadcn/ui
+- **HTTP client (backend→ZedCloud):** `httpx` (sync)
+- **Data fetching (frontend):** TanStack Query (`useQuery` / `useMutation`)
+
+---
+
+## Critical conventions — read before touching any file
+
+### Condition values
+- Stored in DB as **snake_case**: `needs_repair`, `out_of_order`, `temporarily_leased`, `dedicated`, `missing`
+- **Never** store title-case or spaced forms in the DB
+- Displayed in the frontend with: `value.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())`
+- CSV importer normalizes incoming condition strings to snake_case via `_normalize_condition()` in `admin_tools/views.py`
+- Full enum: `normal | out_of_order | needs_repair | temporarily_leased | dedicated | missing`
+
+### ZedCloud API field names (verified against live API)
+- Interface name field: **`ifName`** — NOT `name` (a common mistake)
+- Serial number: **`minfo.serialNumber`** first; fall back to `hardwareInfo.serialNum`
+- EVE version: `swInfo[i].shortVersion` where `swInfo[i].activated == true`
+- Run state: `runState` (e.g. `"RUN_STATE_ONLINE"`)
+- Connectivity list: `netStatusList`; filter for `up=true` AND `uplink=true`
+
+### Labs and Teams — DB-backed, never hardcoded
+- `Lab` model in `apps/devices/models.py`; `Team` model in `apps/users/models.py`
+- `GET /api/choices/` queries these tables at runtime — do not hardcode lab or team lists anywhere
+- Add new labs/teams via Django admin; no code change required
+- Pre-seeded labs: Bangalore Lab, Bangalore Office Space, Berlin Lab, SanJose Lab, CoreSite Lab, Home Lab
+- Pre-seeded teams: EVE, PLATFORM, ST
+
+### Auth — header-based, no sessions
+- Every API request includes `X-User-Email: {email}` (set by the axios client from localStorage)
+- Backend reads the header with `get_user_email(request)` from `utils.permissions` — **never** read `HTTP_X_USER_EMAIL` directly in views
+- Admin check: `is_admin(email)` from `utils.permissions` — NOT Django's built-in auth system
+- Every view must declare `permission_classes` explicitly:
+  - `IsPortalUser` — any registered email in the PortalUser table
+  - `IsAdminPortalUser` — admin users only; replaces inline `_is_admin()` checks
+  - `[]` (empty) — public endpoints (token-based reservation confirm/approve/reject)
+- No session cookies; no Django auth middleware used for portal users
+
+### Encryption
+- Fernet key from `settings.ENCRYPTION_KEY` (env var)
+- Use `utils/crypto.py` — `encrypt(str) -> bytes`, `decrypt(bytes) -> str`
+- Encrypted fields: `Device.idrac_password_enc`, `Vault.bearer_token_enc`
+- `Device.idrac_username` is plaintext
+- Never return encrypted fields in API responses
+
+### Availability rule
+`is_available = owner_email IS NULL AND condition NOT IN (out_of_order, temporarily_leased, dedicated, missing)`
+- This property is on the `Device` model
+- `UNAVAILABLE_CONDITIONS` tuple must be kept in sync in **two places**:
+  - `apps/devices/views.py`
+  - `apps/reservations/views.py`
+
+### Email
+- Wrapper: `utils/email.py`; no-op if `settings.EMAIL_HOST` is blank
+- Always use `fail_silently=False` + catch and `logger.warning()` — never swallow silently
+- `out_of_order` condition → email all admins; `missing`, `temporarily_leased`, `dedicated` do not
+
+---
+
+## Sort behavior
+- Empty values **always sort last** regardless of `asc`/`desc` direction
+- Sort key is the primary string value per column (owner → name/email, status → status string, cluster → cluster name)
+
+## Summary bar
+- Counts reflect the **currently filtered** device set — not global totals
+- `total`, `available`, `online` always shown; problem-state counts hidden when zero
+
+## Choices endpoint caching
+- Frontend caches `GET /api/v1/choices/` with `staleTime: Infinity`
+- Cache is cleared on full page reload — new labs/teams appear after refresh, not automatically
+
+---
+
+## Never do
+
+- Do **not** hardcode lab names or team names as enums or string lists in frontend or backend
+- Do **not** use `name` to get the interface name from ZedCloud `netStatusList` — use `ifName`
+- Do **not** look only in `hardwareInfo.serialNum` for device serial — check `minfo.serialNumber` first
+- Do **not** store condition values as title-case in the DB
+- Do **not** return `idrac_password_enc` or `bearer_token_enc` in any API response
+- Do **not** use Django's built-in User model for portal users — use `apps.users.models.PortalUser`
+- Do **not** catch email exceptions and pass silently — log them with `logger.warning()`
+- Do **not** forget to update both `UNAVAILABLE_CONDITIONS` locations when changing the unavailable set
+- Do **not** use `fetch` or bare `axios` in frontend — always use `src/api/client.ts`
+- Do **not** read `request.META.get('HTTP_X_USER_EMAIL')` directly in views — use `get_user_email(request)` from `utils.permissions`
+- Do **not** omit `permission_classes` on any view — `DEFAULT_PERMISSION_CLASSES = []`, so undecorated views are fully public
