@@ -9,15 +9,31 @@ import { DeviceFormModal } from '@/components/DeviceFormModal'
 import { ExportImportPanel } from '@/components/ExportImportPanel'
 import { useUser } from '@/context/UserContext'
 
+const FILTER_SESSION_KEY = 'devices_search_params'
+
+function readFilterSession(): SearchParams {
+  try {
+    const raw = sessionStorage.getItem(FILTER_SESSION_KEY)
+    return raw ? JSON.parse(raw) : {}
+  } catch {
+    return {}
+  }
+}
+
 function Dot() {
   return <span className="text-muted-foreground text-base select-none">·</span>
 }
 
 export default function DevicesPage() {
   const { isAdmin } = useUser()
-  const [searchParams, setSearchParams] = useState<SearchParams>({})
+  const [searchParams, setSearchParams] = useState<SearchParams>(readFilterSession)
   const [addOpen, setAddOpen] = useState(false)
   const lastFetchedAt = useRef<number>(Date.now())
+
+  const updateSearch = (params: SearchParams) => {
+    setSearchParams(params)
+    try { sessionStorage.setItem(FILTER_SESSION_KEY, JSON.stringify(params)) } catch { /* storage unavailable */ }
+  }
 
   const { data: devices = [], isLoading, isError, isFetching, refetch, dataUpdatedAt } = useQuery({
     queryKey: ['devices', searchParams],
@@ -66,7 +82,7 @@ export default function DevicesPage() {
           </div>
           {isAdmin && <ExportImportPanel />}
         </div>
-        <SearchBar value={searchParams} onChange={setSearchParams} />
+        <SearchBar value={searchParams} onChange={updateSearch} />
         <DeviceTable
           devices={devices}
           isLoading={isLoading}
@@ -74,7 +90,7 @@ export default function DevicesPage() {
           isStale={isStale}
           staleMinutes={staleMinutes}
           onRetry={() => refetch()}
-          onClearFilters={() => setSearchParams({})}
+          onClearFilters={() => updateSearch({})}
           hasFilters={hasFilters}
           onAdd={() => setAddOpen(true)}
         />
