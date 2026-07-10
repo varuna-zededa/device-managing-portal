@@ -869,6 +869,14 @@ variant is accepted and converted to the DB snake_case format on import
 
 **Frontend:** drag-and-drop file picker + mode selector; result modal showing created / updated / skipped / error counts.
 
+### Latency dashboard
+```
+GET /api/v1/admin/latency/
+```
+- Auth: admin only
+- Returns request latency statistics from the `RequestLog` table: p50/p95/p99 per endpoint (last 24 h and 7 d), slowest recent requests, and a list of endpoints that frequently exceed 1 000 ms
+- Used internally for performance monitoring; data is retained for 30 days and then pruned
+
 ---
 
 ## Add Cluster Flow
@@ -944,6 +952,9 @@ volumes:
 python manage.py migrate --noinput
 python manage.py collectstatic --noinput
 python manage.py loaddata clusters_seed.json   # idempotent — safe to repeat
+if [ "$LOAD_DEMO_DATA" = "true" ]; then
+  python manage.py loaddata demo_fixture.json
+fi
 exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 2
 ```
 
@@ -1039,43 +1050,51 @@ device-managing-portal/
 │   │       └── urls.py
 │   ├── services/
 │   │   └── zedcloud.py          sync httpx call + response parsing + serial verification
-│   ├── apps/
-│   │   └── admin_tools/
-│   │       ├── views.py         ExportView + ImportView (GET/POST /api/v1/admin/export|import)
-│   │       └── urls.py
+│   ├── apps/admin_tools/
+│   │   ├── views.py         ExportView, ImportView, ImportTemplateView, LatencyView
+│   │   └── urls.py
 │   ├── utils/
 │   │   ├── crypto.py            Fernet encrypt() / decrypt()
-│   │   ├── email.py             django.core.mail wrapper; no-op if EMAIL_HOST unset
-│   │   └── permissions.py       IsAdminPortalUser, IsOwnerOrAdmin DRF permission classes
+│   │   ├── email.py             django.core.mail wrapper; no-op if SMTP_HOST unset
+│   │   └── permissions.py       IsPortalUser, IsAdminPortalUser, IsOwnerOrAdmin DRF permission classes
 │   ├── requirements.txt
 │   └── .env.example
 └── frontend/
     ├── src/
-    │   ├── main.jsx
-    │   ├── App.jsx
+    │   ├── main.tsx
+    │   ├── App.tsx
     │   ├── api/
-    │   │   └── client.js        axios instance; auto-sends X-User-Email header
+    │   │   ├── client.ts        axios instance; auto-sends X-User-Email header
+    │   │   ├── choices.ts       getChoices() → {labs, teams, conditions}
+    │   │   ├── devices.ts
+    │   │   ├── users.ts
+    │   │   ├── clusters.ts
+    │   │   ├── models.ts
+    │   │   ├── reservations.ts
+    │   │   ├── vault.ts
+    │   │   └── admin.ts
     │   ├── context/
-    │   │   └── UserContext.jsx  current user in localStorage; provides useUser()
+    │   │   └── UserContext.tsx  current user in localStorage; provides useUser()
     │   ├── components/
-    │   │   ├── Header.jsx           user dropdown + notification bell
-    │   │   ├── NotificationPanel.jsx  pending reservations for current user
-    │   │   ├── DeviceTable.jsx      sortable table, auto-refresh, pending indicator
-    │   │   ├── SearchBar.jsx        single debounced input + Available/Reserved chip
-    │   │   ├── DeviceFormModal.jsx  add / edit device
-    │   │   ├── FetchStatusDialog.jsx
-    │   │   ├── ReserveDialog.jsx
-    │   │   ├── ForceAssignDialog.jsx
-    │   │   ├── AddClusterForm.jsx
-    │   │   ├── ExportImportPanel.jsx  admin-only; drag-drop file picker, format/mode selectors, preview, result modal
-    │   │   └── UserManager.jsx      admin-only
+    │   │   ├── Header.tsx           user dropdown + notification bell
+    │   │   ├── NotificationPanel.tsx  pending reservations for current user
+    │   │   ├── DeviceTable.tsx      sortable table, auto-refresh, pending indicator
+    │   │   ├── SearchBar.tsx        single debounced input + Available/Reserved chip
+    │   │   ├── DeviceFormModal.tsx  add / edit device
+    │   │   ├── FetchStatusDialog.tsx
+    │   │   ├── ReserveDialog.tsx
+    │   │   ├── ForceAssignDialog.tsx
+    │   │   ├── AddClusterModal.tsx
+    │   │   ├── AddModelModal.tsx
+    │   │   ├── ExportImportPanel.tsx  admin-only; drag-drop file picker, format/mode selectors, preview, result modal
+    │   │   └── OwnershipHistoryModal.tsx
     │   └── pages/
-    │       ├── LoginPage.jsx              /login — user selection; redirects if already logged in
-    │       ├── DevicesPage.jsx            / — redirects to /login if no session
-    │       ├── UsersPage.jsx              /users — admin-only; redirects non-admin to /devices
-    │       └── ConfirmReservationPage.jsx  /confirm/:token — approve/reject reservation; no auth needed
+    │       ├── LoginPage.tsx              /login — user selection; redirects if already logged in
+    │       ├── DevicesPage.tsx            /devices — redirects to /login if no session
+    │       ├── UsersPage.tsx              /users — admin-only; redirects non-admin to /devices
+    │       └── ConfirmReservationPage.tsx  /confirm/:token — approve/reject reservation; no auth needed
     ├── package.json
-    ├── vite.config.js       proxy /api → :8000 in dev
+    ├── vite.config.ts       proxy /api → :8000 in dev
     └── .env.example         VITE_API_BASE_URL
 ```
 

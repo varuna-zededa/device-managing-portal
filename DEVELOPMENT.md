@@ -63,7 +63,7 @@ backend/
 ├── apps/reservations/
 │   ├── views.py                 reservation flow; _UNAVAILABLE_CONDITIONS (keep in sync with devices/views.py)
 │   └── models.py                ReservationRequest
-├── apps/admin_tools/views.py    ExportView, ImportView, _normalize_condition()
+├── apps/admin_tools/views.py    ExportView, ImportView, ImportTemplateView, LatencyView, _normalize_condition()
 ├── services/zedcloud.py         fetch_device_status(); SerialMismatchError
 └── utils/
     ├── crypto.py                encrypt(str)->bytes; decrypt(bytes)->str

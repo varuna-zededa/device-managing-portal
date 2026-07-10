@@ -142,11 +142,14 @@ No code changes are required.
 | `SECRET_KEY` | Yes | Django secret key |
 | `ENCRYPTION_KEY` | Yes | Fernet key for encrypted fields |
 | `ALLOWED_HOSTS` | Yes | Comma-separated list of hostnames |
-| `EMAIL_HOST` | No | SMTP host (email disabled if blank) |
-| `EMAIL_PORT` | No | SMTP port (default 587) |
-| `EMAIL_HOST_USER` | No | SMTP username |
-| `EMAIL_HOST_PASSWORD` | No | SMTP password / app password |
-| `DEFAULT_FROM_EMAIL` | No | Sender address for notification emails |
+| `SMTP_HOST` | No | SMTP server hostname (email disabled if blank) |
+| `SMTP_PORT` | No | SMTP port (default 587) |
+| `SMTP_USER` | No | SMTP account username / email address |
+| `SMTP_PASS` | No | SMTP password / app password |
+| `SMTP_FROM` | No | Sender address for notification emails (default `device-portal@zededa.com`) |
 | `ADMIN_EMAILS` | No | Comma-separated admin emails for alerts |
+| `PORTAL_BASE_URL` | No | Base URL used in email links (default `http://localhost:80`) |
 | `DATABASE_URL` | No | PostgreSQL URL (uses SQLite if blank) |
+| `CORS_ALLOWED_ORIGINS` | No | Comma-separated allowed CORS origins (required in non-DEBUG mode) |
+| `DEBUG` | No | Set to `true` to enable Django debug mode and allow all CORS origins |
 | `LOAD_DEMO_DATA` | No | Set to `true` to load demo fixture on startup |

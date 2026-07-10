@@ -87,12 +87,13 @@ a `.env` file on the VM (never committed to the repository).
 | `SECRET_KEY` | Django secret key (random 50-char string) | IT / DevOps — generate once |
 | `ENCRYPTION_KEY` | Fernet encryption key for sensitive device fields | IT / DevOps — generate once; **keep a backup** |
 | `ALLOWED_HOSTS` | Hostname or IP of the VM (e.g. `holocron.internal`) | IT |
-| `EMAIL_HOST` | SMTP server hostname (e.g. `smtp.gmail.com`) | IT / App owner |
-| `EMAIL_PORT` | SMTP port (typically `587`) | IT |
-| `EMAIL_HOST_USER` | SMTP account username / email address | App owner |
-| `EMAIL_HOST_PASSWORD` | SMTP password or App Password | App owner |
-| `DEFAULT_FROM_EMAIL` | Sender address for system emails | App owner |
+| `SMTP_HOST` | SMTP server hostname (e.g. `smtp.gmail.com`; email disabled if blank) | IT / App owner |
+| `SMTP_PORT` | SMTP port (typically `587`) | IT |
+| `SMTP_USER` | SMTP account username / email address | App owner |
+| `SMTP_PASS` | SMTP password or App Password | App owner |
+| `SMTP_FROM` | Sender address for system emails (default `device-portal@zededa.com`) | App owner |
 | `ADMIN_EMAILS` | Comma-separated list of admin email addresses | App owner |
+| `PORTAL_BASE_URL` | Base URL used in email links (default `http://localhost:80`) | IT |
 | `DATABASE_URL` | PostgreSQL connection string (production only) | IT / DBA |
 
 ### Generating required keys
