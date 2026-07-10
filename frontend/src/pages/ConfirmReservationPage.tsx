@@ -53,10 +53,11 @@ export default function ConfirmReservationPage() {
   if (result === 'approved') {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <div className="text-center space-y-2">
+        <div className="text-center space-y-3">
           <CheckCircle className="w-12 h-12 text-status-online mx-auto" />
           <h1 className="text-xl font-semibold">Reservation Approved</h1>
           <p className="text-foreground">{data.requester_name} has been assigned {data.device_name}.</p>
+          <a href="/devices" className="inline-block text-sm text-blue-500 hover:underline">Go to Device Portal →</a>
         </div>
       </div>
     )
@@ -65,10 +66,11 @@ export default function ConfirmReservationPage() {
   if (result === 'rejected') {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <div className="text-center space-y-2">
+        <div className="text-center space-y-3">
           <XCircle className="w-12 h-12 text-destructive mx-auto" />
           <h1 className="text-xl font-semibold">Reservation Rejected</h1>
           <p className="text-foreground">The request has been rejected.</p>
+          <a href="/devices" className="inline-block text-sm text-blue-500 hover:underline">Go to Device Portal →</a>
         </div>
       </div>
     )

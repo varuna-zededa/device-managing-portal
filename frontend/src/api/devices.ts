@@ -23,6 +23,7 @@ export interface Device {
   reserved_at: string | null
   is_available: boolean
   pending_requester_email: string | null
+  pending_requester_name: string | null
   last_comment_text: string | null
   last_comment_by: string | null
   last_comment_at: string | null

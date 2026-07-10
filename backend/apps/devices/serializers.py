@@ -41,6 +41,7 @@ class DeviceSerializer(_DeviceValidationMixin, serializers.ModelSerializer):
     is_available = serializers.SerializerMethodField()
     owner_name = serializers.SerializerMethodField()
     pending_requester_email = serializers.SerializerMethodField()
+    pending_requester_name = serializers.SerializerMethodField()
     lab = serializers.SlugRelatedField(queryset=Lab.objects.all(), slug_field='name')
     team = NullableSlugRelatedField(
         queryset=Team.objects.all(), slug_field='name', allow_null=True, required=False,
@@ -56,7 +57,7 @@ class DeviceSerializer(_DeviceValidationMixin, serializers.ModelSerializer):
             'idrac_ip', 'idrac_username',
             'eve_version', 'device_connectivity', 'status', 'status_fetched_at', 'reserved_at',
             'last_comment_text', 'last_comment_by', 'last_comment_at',
-            'created_at', 'updated_at', 'is_available', 'pending_requester_email',
+            'created_at', 'updated_at', 'is_available', 'pending_requester_email', 'pending_requester_name',
         ]
         read_only_fields = [
             'serial_number', 'created_at', 'updated_at',
@@ -85,6 +86,21 @@ class DeviceSerializer(_DeviceValidationMixin, serializers.ModelSerializer):
     def get_pending_requester_email(self, obj):
         req = ReservationRequest.objects.filter(device=obj, status='pending').order_by('requested_at').first()
         return req.requester_email if req else None
+
+    def get_pending_requester_name(self, obj):
+        req = ReservationRequest.objects.filter(device=obj, status='pending').order_by('requested_at').first()
+        if not req:
+            return None
+        lookup = self.context.get('owner_lookup')
+        if lookup is not None:
+            return lookup.get(req.requester_email, req.requester_email)
+        try:
+            return PortalUser.objects.get(email=req.requester_email).name
+        except PortalUser.DoesNotExist:
+            return req.requester_email
+        except Exception as e:
+            logger.warning(str(e))
+            return req.requester_email
 
     def get_owner_name(self, obj):
         if not obj.owner_email:
