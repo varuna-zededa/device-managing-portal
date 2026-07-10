@@ -3,6 +3,8 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
+_client = httpx.Client(timeout=30)
+
 # Source: libs/zmsg/zcommon/zcommon.proto — enum RunState, device-applicable values only
 STATUS_MAP = {
     'RUN_STATE_ONLINE': 'Online',                           # 1
@@ -25,17 +27,22 @@ STATUS_MAP = {
 
 
 class SerialMismatchError(Exception):
-    def __init__(self, expected, actual):
+    def __init__(self, expected: str, actual: str) -> None:
         self.expected = expected
         self.actual = actual
         super().__init__(f'Serial mismatch: expected={expected}, actual={actual}')
 
 
-def fetch_device_status(cluster, cluster_device_name, bearer_token, device):
+def fetch_device_status(
+    cluster,
+    cluster_device_name: str,
+    bearer_token: str,
+    device,
+) -> tuple[str | None, list | None, str]:
     url = f'https://{cluster.host}/api/v1/devices/name/{cluster_device_name}/status/info'
     headers = {'Authorization': f'Bearer {bearer_token}'}
 
-    response = httpx.get(url, headers=headers, timeout=30)
+    response = _client.get(url, headers=headers)
     response.raise_for_status()
 
     data = response.json()
@@ -47,12 +54,12 @@ def fetch_device_status(cluster, cluster_device_name, bearer_token, device):
     if actual_serial and actual_serial != device.serial_number:
         raise SerialMismatchError(expected=device.serial_number, actual=actual_serial)
 
-    eve_version = next(
+    eve_version: str | None = next(
         (sw['shortVersion'] for sw in data.get('swInfo', []) if sw.get('activated')),
         None,
     )
 
-    connectivity = []
+    connectivity: list = []
     for iface in data.get('netStatusList', []):
         if iface.get('up') and iface.get('uplink'):
             mac = iface.get('macAddr', '')
@@ -66,6 +73,6 @@ def fetch_device_status(cluster, cluster_device_name, bearer_token, device):
                     })
 
     run_state = data.get('runState', 'RUN_STATE_UNKNOWN')
-    dev_status = STATUS_MAP.get(run_state, 'Unknown')
+    dev_status: str = STATUS_MAP.get(run_state, 'Unknown')
 
     return eve_version, connectivity if connectivity else None, dev_status

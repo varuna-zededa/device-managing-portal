@@ -7,9 +7,9 @@ from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
-# Matches numeric IDs and hex reservation tokens (32+ hex chars)
+# Matches numeric IDs and hex reservation tokens (exactly 64 hex chars from secrets.token_hex(32))
 _ID_RE = re.compile(r'/\d+(?=/|$)')
-_TOKEN_RE = re.compile(r'/[0-9a-f]{32,}(?=/|$)')
+_TOKEN_RE = re.compile(r'/[0-9a-f]{64}(?=/|$)')
 
 _SKIP_PREFIXES = ('/static/', '/admin/', '/favicon')
 
