@@ -107,6 +107,7 @@ class DeviceListCreateView(APIView):
         return Response(serializer.data)
 
     def post(self, request):
+        user_email = get_user_email(request)
         serial = request.data.get('serial_number', '')
         if Device.objects.filter(serial_number=serial).exists():
             return Response({'error': 'Serial number already exists'}, status=status.HTTP_400_BAD_REQUEST)
@@ -119,7 +120,6 @@ class DeviceListCreateView(APIView):
                 if idrac_password:
                     device.idrac_password_enc = encrypt(idrac_password)
                     device.save(update_fields=['idrac_password_enc', 'updated_at'])
-                user_email = get_user_email(request)
                 OwnershipHistory.objects.create(
                     device=device,
                     owner_email=device.owner_email,

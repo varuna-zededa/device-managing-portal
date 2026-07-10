@@ -5,7 +5,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from .models import PortalUser
 from .serializers import PortalUserSerializer
-from utils.permissions import get_user_email, is_admin, IsAdminPortalUser
+from utils.permissions import IsAdminPortalUser
 
 _EMAIL_PREFIX_RE = re.compile(r'^[a-zA-Z0-9._-]+$')
 
@@ -26,10 +26,6 @@ class UserListCreateView(APIView):
         return Response(serializer.data)
 
     def post(self, request):
-        user_email = get_user_email(request)
-        if not is_admin(user_email):
-            return Response({'error': 'Admin only'}, status=status.HTTP_403_FORBIDDEN)
-
         email_prefix = request.data.get('email_prefix', '').strip()
         name = request.data.get('name', '').strip()
         team = request.data.get('team', '').strip()

@@ -3,11 +3,14 @@ from rest_framework.response import Response
 from rest_framework import status
 from .models import DeviceModel
 from .serializers import DeviceModelSerializer
-from utils.permissions import IsPortalUser, is_admin, get_user_email
+from utils.permissions import IsPortalUser, IsAdminPortalUser
 
 
 class DeviceModelListCreateView(APIView):
-    permission_classes = [IsPortalUser]
+    def get_permissions(self):
+        if self.request.method == 'GET':
+            return [IsPortalUser()]
+        return [IsAdminPortalUser()]
 
     def get(self, request):
         models_qs = DeviceModel.objects.all().order_by('name')
@@ -15,8 +18,6 @@ class DeviceModelListCreateView(APIView):
         return Response(serializer.data)
 
     def post(self, request):
-        if not is_admin(get_user_email(request)):
-            return Response({'error': 'Admin access required'}, status=status.HTTP_403_FORBIDDEN)
         serializer = DeviceModelSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save()
