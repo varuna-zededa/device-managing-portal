@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Pencil } from 'lucide-react'
+import { Pencil, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
 import { getUsers, createUser, updateUser, type PortalUser } from '@/api/users'
 import { getChoices } from '@/api/choices'
 import { useUser } from '@/context/UserContext'
@@ -46,11 +46,38 @@ export default function UsersPage() {
   const { isAdmin } = useUser()
   const [addOpen, setAddOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<PortalUser | null>(null)
+  const [sortKey, setSortKey] = useState<'name' | 'email' | 'team' | 'role' | null>(null)
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+
+  function handleSort(key: typeof sortKey) {
+    if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    else { setSortKey(key); setSortDir('asc') }
+  }
+
+  function SortIcon({ col }: { col: typeof sortKey }) {
+    if (sortKey !== col) return <ChevronsUpDown className="h-3.5 w-3.5 ml-1 shrink-0 opacity-40" aria-hidden="true" />
+    return sortDir === 'asc'
+      ? <ChevronUp className="h-3.5 w-3.5 ml-1 shrink-0" aria-hidden="true" />
+      : <ChevronDown className="h-3.5 w-3.5 ml-1 shrink-0" aria-hidden="true" />
+  }
   const qc = useQueryClient()
 
   if (!isAdmin) return <Navigate to="/devices" replace />
 
-  const { data: users = [], isLoading } = useQuery({ queryKey: ['users'], queryFn: getUsers })
+  const { data: rawUsers = [], isLoading } = useQuery({ queryKey: ['users'], queryFn: getUsers })
+
+  const users = sortKey ? [...rawUsers].sort((a, b) => {
+    let av = '', bv = ''
+    switch (sortKey) {
+      case 'name':  av = a.name;       bv = b.name; break
+      case 'email': av = a.email;      bv = b.email; break
+      case 'team':  av = a.team ?? ''; bv = b.team ?? ''; break
+      case 'role':  av = a.user_type;  bv = b.user_type; break
+    }
+    if (!av && bv) return 1
+    if (av && !bv) return -1
+    return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av)
+  }) : rawUsers
   const { data: choices } = useQuery({ queryKey: ['choices'], queryFn: getChoices, staleTime: Infinity })
   const teams = choices?.teams ?? []
 
@@ -106,10 +133,17 @@ export default function UsersPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border">
-                <th className="h-11 px-4 text-left font-medium text-foreground">Name</th>
-                <th className="h-11 px-4 text-left font-medium text-foreground">Email</th>
-                <th className="h-11 px-4 text-left font-medium text-foreground">Team</th>
-                <th className="h-11 px-4 text-left font-medium text-foreground">Role</th>
+                {(['name', 'email', 'team', 'role'] as const).map((col) => (
+                  <th key={col}
+                    className="h-11 px-4 text-left font-medium text-foreground cursor-pointer select-none hover:text-foreground/80"
+                    onClick={() => handleSort(col)}
+                  >
+                    <span className="inline-flex items-center capitalize">
+                      {col}
+                      <SortIcon col={col} />
+                    </span>
+                  </th>
+                ))}
                 <th className="h-11 px-4 w-10" />
               </tr>
             </thead>
