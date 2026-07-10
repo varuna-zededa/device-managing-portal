@@ -182,9 +182,9 @@ model                FK     → DeviceModel.id
 cluster_id           int    FK → Cluster.id; nullable (optional — only needed for ZedCloud status fetch)
 team                 str    nullable; set on reserve; required before setting condition = dedicated
 owner_email          str    nullable; FK → User.email; set on reserve
-lab                  enum   NOT NULL; Bangalore Lab | Bangalore Office Space | Berlin Lab | SanJose Lab | CoreSite Lab | Home Lab
+lab                  str    NOT NULL; free text (max 100 chars); valid values managed via the Lab DB model (see below)
 location_detail      str    nullable; free text — exact spot inside lab (e.g. "Rack-B3, slot 4", "Near the printer")
-condition            enum   default 'normal' (NOT NULL); normal | out_of_order | needs_repair | temporarily_leased | dedicated
+condition            enum   default 'normal' (NOT NULL); normal | out_of_order | needs_repair | temporarily_leased | dedicated | missing
 idrac_ip             str    nullable
 idrac_username       str    nullable
 idrac_password_enc   bytes  nullable; AES-encrypted
@@ -203,19 +203,36 @@ updated_at           datetime
 ```
 
 **Derived (not stored):** `is_available = (owner_email IS NULL) AND condition NOT IN (out_of_order,
-temporarily_leased, dedicated)`. Used by both the Available/Reserved filter and the status badge — a
+temporarily_leased, dedicated, missing)`. Used by both the Available/Reserved filter and the status badge — a
 device with a blocking condition is **never** "Available" even though it has no owner.
 
 **Required on creation:** name, serial_number, model, lab
 **Optional on creation:** description, cluster_id, cluster_device_name, team, owner_email,
 location_detail, idrac_ip, idrac_username, idrac_password
 
+### Lab
+```
+id    int   PK auto
+name  str   unique (max 100 chars); e.g. "Bangalore Lab", "CoreSite Lab", "Home Lab"
+```
+Pre-seeded entries: Bangalore Lab · Bangalore Office Space · Berlin Lab · SanJose Lab · CoreSite Lab · Home Lab.
+New labs can be added via Django admin (`/admin/`) without any code change — all Lab dropdowns in the UI
+refresh on the next full page load because `GET /api/choices/` queries this table at runtime.
+
+### Team
+```
+id    int   PK auto
+name  str   unique (max 50 chars); e.g. "ST", "EVE", "PLATFORM"
+```
+Pre-seeded entries: EVE · PLATFORM · ST.
+New teams can be added via Django admin — all Team dropdowns refresh on next page load (same pattern as Lab).
+
 ### User
 ```
 id          int   PK auto
 name        str
 email       str   unique — identity anchor
-team        enum  ST | EVE | PLATFORM
+team        str   nullable; free text (max 50 chars); matches a Team.name value
 user_type   enum  admin | team_member
 ```
 
@@ -322,7 +339,9 @@ GET  /api/devices/{id}/ownership-history   admin only (X-User-Email header); ful
 ### Choices
 ```
 GET  /api/choices/      no auth; returns {labs: [...], teams: [...], conditions: [...]}
-                        single source of truth for all enum lists; cached indefinitely in frontend
+                        single source of truth for all dropdown lists; labs and teams queried from
+                        DB at runtime — adding a new Lab or Team via Django admin is reflected on
+                        next page load; conditions list is derived from CONDITION_CHOICES in code
 ```
 
 ### Users
@@ -383,7 +402,12 @@ Authorization: Bearer {token}
 ### Response Parsing
 ```python
 # Serial number verification — reject entire update if mismatch
-actual_serial = data.get("hardwareInfo", {}).get("serialNum", "")
+# minfo.serialNumber is the primary source; hardwareInfo.serialNum is a fallback
+# (ZedCloud does not always populate hardwareInfo)
+actual_serial = (
+    data.get("minfo", {}).get("serialNumber", "")
+    or data.get("hardwareInfo", {}).get("serialNum", "")
+)
 if actual_serial and actual_serial != device.serial_number:
     raise SerialMismatchError(
         device_name=device.name,
@@ -400,12 +424,13 @@ eve_version = next(
 )
 
 # Connectivity: one entry per IPv4 on any up+uplink interface
+# Interface name field in the ZedCloud API response is `ifName` (not `name`)
 device_connectivity = []
-for net in data.get("netStatusList", []):
-    if net.get("up") and net.get("uplink"):
-        mac  = net.get("macAddr", "")
-        name = net.get("name", "")
-        for ip in net.get("ipAddrs", []):
+for iface in data.get("netStatusList", []):
+    if iface.get("up") and iface.get("uplink"):
+        mac  = iface.get("macAddr", "")
+        name = iface.get("ifName", "")
+        for ip in iface.get("ipAddrs", []):
             if ":" not in ip:    # IPv4 only
                 device_connectivity.append({
                     "ip":             ip,
@@ -563,14 +588,32 @@ Admin UI shows a yellow warning banner if SMTP is not configured.
 > workstations; the table horizontal-scrolls below ~`md`. Responsive/mobile layout is
 > explicitly out of scope.
 
+### Summary Bar
+
+A stats line appears directly below the "Devices" heading, giving an at-a-glance view of the
+current filtered set:
+
+```
+37 total  ·  12 available  ·  5 reserved  ·  19 online  ·  3 needs repair  ·  1 out of order  ·  2 leased  ·  1 missing
+```
+
+- Hidden while the initial data load is in progress
+- Counts always reflect the currently applied search and filter — not global totals
+- **`total`**, **`available`**, **`online`** are always shown
+- **`reserved`**, **`needs repair`**, **`out of order`**, **`leased`**, **`missing`** are omitted when their count is 0
+- Color coding: `total` → foreground, `available` → emerald green, `needs repair` → yellow-400,
+  `out of order` → red-400, `leased` → violet-400, `missing` → orange-400; rest inherit muted foreground
+
 ### Search & Filter
 - **Single search box** — debounced 300ms — placeholder lists all searchable fields; matches
   against: Name, Model, Customer/Partner name, Cluster name, Owner (name), EVE version,
   **last comment text** (case-insensitive partial match)
 - **Available / Reserved / All** — chip toggle (uses the derived `is_available` rule, so blocking-
   condition devices never count as Available)
-- **Team / Lab / Condition** — three exact-match filter selects beside the chip toggle; combinable
-  with the search box and each other
+- **Condition / Lab / Team** — three exact-match filter selects (in this order) beside the chip toggle;
+  combinable with the search box and each other; all values populated from DB via `GET /api/choices/`
+- **Team "Unassigned"** — special value in the Team filter that returns devices where `team IS NULL`;
+  useful to audit unassigned devices across labs
 
 ### Layout — collapsible rows
 The table shows a compact primary row per device; a **chevron** in the first column expands an
@@ -613,7 +656,10 @@ persisted per browser in `localStorage`.
 | Section | Fields |
 |---|---|
 | Identity | Model · Customer / Partner |
-| Placement | Location detail |
+| Placement | Lab · Location detail |
+
+All fields in the expand panel are always rendered. Fields with no data show `—` (em dash) rather than
+being hidden. This makes the panel predictable — the same layout every time regardless of data completeness.
 
 *Card 2 — ZedCloud Status + Connectivity (middle):*
 | Section | Fields |
@@ -631,7 +677,7 @@ Fields **not** in the expand panel (they have their own primary-row columns): Se
 Condition is communicated by the row's left-border color and the Name-column badge; change it via
 Edit Device modal. The Comment column in the primary row already surfaces the newest comment.
 
-**Sortable columns:** Name, Cluster, Owner.
+**Sortable columns:** All columns except Comment. Sort key is the primary value (e.g. Owner sorts by owner name/email, Status sorts by status string). Empty values always sort last regardless of direction.
 
 ### List states (wireframed in `states.html`)
 | State | Behavior |
@@ -675,13 +721,21 @@ The Release button is red-tinted (`border-destructive/50 text-destructive`) to v
 
 Any logged-in user can set or clear the condition via the **Edit Device modal**.
 
+Condition values are stored in the DB as snake_case (`needs_repair`, `out_of_order`, etc.) and
+displayed in the UI as title-case labels ("Needs Repair", "Out Of Order", etc.).
+
 | Condition | Row highlight | Owner field | Reserve | Release | Email alert |
 |---|---|---|---|---|---|
 | `out_of_order` | Red row + red left border | **UNAVAILABLE** | Disabled | Hidden | Yes — all admins |
 | `needs_repair` | Yellow row + yellow left border | Unchanged | Normal | Normal | No |
 | `temporarily_leased` | Violet row + violet left border | **UNAVAILABLE** | Disabled | Hidden | No |
 | `dedicated` | Blue row + blue left border | Device team name (e.g. "ST") — requires `device.team` to be set | Disabled | Hidden | No |
+| `missing` | Orange row + orange left border | **UNAVAILABLE** | Disabled | Hidden | No |
 | *(cleared / normal)* | No highlight | Stays null — new reservation needed | Normal | Normal | No |
+
+**`missing` condition** — used when a physical device cannot be located. Behaves like `out_of_order`
+for reservation purposes (clears owner, expires pending requests) but does **not** send an admin email.
+Useful to flag devices that disappeared from a lab without triggering an incident notification.
 
 **UI color tokens (Tailwind):**
 
@@ -691,6 +745,10 @@ Any logged-in user can set or clear the condition via the **Edit Device modal**.
 | needs_repair | `bg-yellow-50` | `border-l-yellow-400` | `bg-yellow-100 text-yellow-800` |
 | temporarily_leased | `bg-violet-50` | `border-l-violet-400` | `bg-violet-100 text-violet-700` |
 | dedicated | `bg-blue-50` | `border-l-blue-400` | `bg-blue-100 text-blue-700` |
+| missing | `bg-orange-50` | `border-l-orange-400` | `bg-orange-100 text-orange-700` |
+
+Condition values are stored in the DB as snake_case (`needs_repair`, `out_of_order`, etc.) and rendered
+in the UI as title-case labels ("Needs Repair", "Out Of Order", etc.) via a `.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())` transform in the frontend.
 
 **Out of Order — admin email content:**
 
@@ -705,7 +763,7 @@ resolved.
 - Does **not** include: owner history, comments
 
 **Condition rules:**
-- Setting `out_of_order` or `temporarily_leased` → set `owner_email = null`; append OwnershipHistory
+- Setting `out_of_order`, `temporarily_leased`, or `missing` → set `owner_email = null`; append OwnershipHistory
   (`reason = condition_change`); expire any pending ReservationRequest
 - Setting `dedicated` → set `owner_email = null`; expire any pending ReservationRequest; append
   OwnershipHistory (`reason = condition_change`); validation: `device.team` must be non-null (if not
@@ -713,6 +771,7 @@ resolved.
 - Clearing any condition → device becomes available (owner stays null; reserve normally)
 - `needs_repair` → no change to owner or reservations
 - Any user can set or clear the condition field
+- `out_of_order` additionally emails all admins; `missing`, `temporarily_leased`, and `dedicated` do not
 
 ---
 
@@ -798,6 +857,10 @@ are mapped to canonical names automatically:
 | Name In Cluster, name_in_cluster | cluster_device_name |
 | Location | location_detail |
 | Lab Location, lab_location | lab |
+
+**Value normalisation:** The `condition` field value is also normalised — any casing or spacing
+variant is accepted and converted to the DB snake_case format on import
+(e.g. "Needs Repair", "needs repair", "NEEDS_REPAIR" → `needs_repair`).
 
 **Frontend:** drag-and-drop file picker + mode selector; result modal showing created / updated / skipped / error counts.
 
@@ -1033,7 +1096,7 @@ device-managing-portal/
 | 13 | Auto-refresh | Every 15 minutes; pauses when tab is hidden |
 | 14 | Search UX | Single debounced (300ms) text box; Team/Lab/Condition are separate filter selects |
 | 15 | Availability filter | Available / Reserved / All chip toggle |
-| 16 | Sortable columns | Name, Cluster, Owner (Model/Team/EVE moved into the expand panel) |
+| 16 | Sortable columns | All columns except Comment; empty values always sort last |
 | 17 | Required fields | Name, Serial Number, Model, Lab — Cluster and Name-in-Cluster are optional (only needed for ZedCloud status fetch) |
 | 18 | Cluster field | Dropdown (short name); backed by Cluster table in DB |
 | 19 | Cluster list management | Any user can add new cluster via UI; stored in DB |
@@ -1044,20 +1107,20 @@ device-managing-portal/
 | 24 | Backend framework | Django + DRF; built-in migrations, email, admin, CSRF, SSO readiness |
 | 25 | Device model field | Select dropdown + "+" button; "+" opens a standalone Add Model modal (same pattern as Add Cluster); modal fields: model name (required) + customer_partner_name (optional, searchable dropdown of existing names with free-text fallback for new entries) |
 | 26 | User email input | Prefix only; "@zededa.com" fixed suffix in UI; stored as full email |
-| 28 | Team values | Fixed enum: ST, EVE, PLATFORM — rendered as a select dropdown, not free text |
+| 28 | Team values | DB-backed Team model; pre-seeded ST/EVE/PLATFORM; add new teams via Django admin; all dropdowns refresh on next page load |
 | 27 | Admin-only pages | Users page (`/users`) visible in nav only to Admin users |
 | 29 | Device comments | Any user can write; last 10 kept; cleared on ownership transfer |
 | 30 | Ownership history | Append-only; never deleted; admin-only via API and UI |
-| 31 | Device condition | Enum: normal / out_of_order / needs_repair / temporarily_leased / dedicated; changed via Edit Device modal |
+| 31 | Device condition | Enum: normal / out_of_order / needs_repair / temporarily_leased / dedicated / missing; changed via Edit Device modal; values stored as snake_case; displayed as title-case in UI |
 | 34 | Table layout | Compact primary row + chevron-expand panel; secondary fields in expand panel |
 | 35 | Device list filters | Available/Reserved/All chip + Team/Lab/Condition selects, server-side |
 | 36 | Latest comment in list | Denormalized on Device (last_comment_text/by/at) to avoid N+1 join |
-| 37 | "Available" semantics | owner is null AND condition not in (out_of_order, temporarily_leased, dedicated) |
+| 37 | "Available" semantics | owner is null AND condition not in (out_of_order, temporarily_leased, dedicated, missing) |
 | 38 | Viewport scope | Desktop-first; internal workstation tool; responsive/mobile layout out of scope |
 | 39 | List states | Loading, empty, no-results, load-error, stale — wireframed in states.html |
-| 32 | Lab field | Fixed enum of 6 labs; free-text `location_detail` for exact spot inside lab |
-| 33 | Condition colors | out_of_order=red, needs_repair=yellow, temporarily_leased=violet, dedicated=blue |
-| 40 | Serial verification on status fetch | ZedCloud response `hardwareInfo.serialNum` compared to stored serial; mismatch → reject update entirely, show error with device/cluster/expected/actual |
+| 32 | Lab field | DB-backed Lab model; pre-seeded 6 labs; add new labs via Django admin; all dropdowns refresh on next page load; free-text `location_detail` for exact spot inside lab |
+| 33 | Condition colors | out_of_order=red, needs_repair=yellow, temporarily_leased=violet, dedicated=blue, missing=orange |
+| 40 | Serial verification on status fetch | `minfo.serialNumber` checked first (primary), `hardwareInfo.serialNum` as fallback; mismatch → reject update entirely, show error with device/cluster/expected/actual |
 | 41 | Serial absent in response | If ZedCloud returns no serialNum, skip verification silently and proceed with update |
 | 42 | device_connectivity | Single JSONField replaces ssh_ips + ssh_macs; one entry per IPv4: [{ip, mac, interface_name}]; shown per entry in expand panel Connectivity group |
 | 43 | cluster / cluster_device_name optional | Both fields optional on creation; only required for ZedCloud status fetch; devices without ZedCloud can be tracked without them |
@@ -1066,5 +1129,5 @@ device-managing-portal/
 | 46 | customer_partner_name on DeviceModel | Optional field on model object; identifies customer or Zededa partner; always visible in the Add/Edit Device form alongside the Model field; searchable from main device search bar via `model__customer_partner_name__icontains` |
 | 47 | Export/Import | Admin-only; CSV and JSON format; upsert key is serial_number; excludes encrypted fields and audit history; unknown model/cluster names auto-created on import |
 | 48 | Show both device names | Portal name (Name column) and cluster name (dedicated Name in Cluster column) both visible in primary row; not in expand panel |
-| 49 | Expand panel layout | 3 card columns: Identity+Placement (left) · ZedCloud Status+Connectivity (middle) · IDRAC+Notes (right); CopyableField label-left/value-right rows with section-header strips; Placement field order: Team → Lab → Location |
+| 49 | Expand panel layout | 3 card columns: Identity+Placement (left) · ZedCloud Status+Connectivity (middle) · IDRAC+Notes (right); CopyableField label-left/value-right rows with section-header strips; Placement field order: Lab → Location detail; all fields always rendered with "—" fallback |
 | 50 | Frontend component source | shadcn/ui components extracted from `zedui-dev` (React 19, Tailwind v4, slate base, CSS variables); no pagination — list kept to single scrollable view (expected max ~200 rows) |

@@ -35,7 +35,10 @@ Each version follows the same 5-step cycle before shipping:
 - Serial number verification on status fetch; silent skip if ZedCloud returns no serial
 - `device_connectivity` JSONField — one entry per IPv4 on any up+uplink interface
 - Name in Cluster as dedicated table column; cluster + cluster_device_name optional
-- Device conditions: `normal · out_of_order · needs_repair · temporarily_leased · dedicated`
+- Device conditions: `normal · out_of_order · needs_repair · temporarily_leased · dedicated · missing`; badge labels shown in title case; values stored as snake_case and normalized on CSV import
+- Summary bar below "Devices" heading: total · available · reserved · online · needs repair · out of order · leased · missing; non-zero counts only for problem states; reflects active filters; hidden during load
+- Lab and Team backed by DB models (Lab, Team); add via Django admin; all dropdowns refresh on next page load — no code changes needed to add new labs or teams
+- All device table columns sortable (except Comment); empty values sort last; Users page columns also sortable
 - `dedicated` condition: team name chip in Owner column; Reserve disabled; blue row
 - Device comments / purpose; ownership history (admin)
 - Notifications: in-app bell (always) + email via SMTP (if configured)
@@ -182,9 +185,9 @@ Each version follows the same 5-step cycle before shipping:
 
 ## v1 Design Additions (incorporated into DESIGN.md and wireframes)
 
-- **Serial number verification on status refresh** — ZedCloud response `hardwareInfo.serialNum`
-  compared to `Device.serial_number`; mismatch → reject update, surface error with device name,
-  cluster name, expected serial, actual serial; absent serial → skip silently
+- **Serial number verification on status refresh** — `minfo.serialNumber` (primary) or
+  `hardwareInfo.serialNum` (fallback) compared to `Device.serial_number`; mismatch → reject update,
+  surface error with device name, cluster name, expected serial, actual serial; absent serial → skip silently
 - **`device_connectivity` field** — replaces separate ssh_ips/ssh_macs; JSONField
   `[{ip, mac, interface_name}]` — one entry per IPv4; shown as `interface · mac · ip` in expand panel
 - **Name in Cluster column** — `cluster_device_name` shown as a dedicated column in the primary
@@ -198,4 +201,7 @@ Each version follows the same 5-step cycle before shipping:
   known names: BOBST · SLB · OnLogic · Emmerson · Shell · Toyota
 - **Export / Import (admin only)** — `GET /api/admin/export?format=csv|json` downloads full device
   snapshot; `POST /api/admin/import` upserts by serial_number with `create_only` or
-  `update_or_create` mode; frontend drag-drop picker with 5-row preview and result summary modal
+  `update_or_create` mode; frontend drag-drop picker with 5-row preview and result summary modal;
+  `GET /api/admin/import-template/` serves a ready-to-fill CSV template
+- **Import forgiving parsing** — column headers normalised (strip/lowercase/underscore + alias map);
+  `condition` field value normalised to snake_case on import ("Needs Repair" → `needs_repair`)
