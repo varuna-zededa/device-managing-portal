@@ -35,7 +35,7 @@ export function Header() {
         <div className="flex items-center gap-2">
           <Tooltip>
             <TooltipTrigger asChild>
-              <img src="/holocron.png" alt="Holocron" className="w-6 h-6 object-contain cursor-default" />
+              <img src="/holocron.png" alt="Holocron" className="w-7 h-7 object-contain cursor-default" style={{ filter: 'drop-shadow(0 0 5px hsl(195 85% 55% / 0.75))' }} />
             </TooltipTrigger>
             <TooltipContent side="bottom">
               <p>A Holocron holds all knowledge — who owns what, what state it's in, and the full history.</p>
