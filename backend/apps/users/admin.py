@@ -1,5 +1,11 @@
 from django.contrib import admin
-from .models import PortalUser
+from .models import PortalUser, Team
+
+
+@admin.register(Team)
+class TeamAdmin(admin.ModelAdmin):
+    list_display = ('name',)
+    search_fields = ('name',)
 
 
 @admin.register(PortalUser)

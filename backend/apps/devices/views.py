@@ -10,13 +10,13 @@ from rest_framework import status
 
 from django.db.models import Q
 
-from .models import Device, LAB_CHOICES, CONDITION_CHOICES
+from .models import Device, Lab, CONDITION_CHOICES
 from .serializers import DeviceSerializer, DeviceCreateSerializer
 from apps.clusters.models import Cluster
 from apps.device_models.models import DeviceModel
 from apps.reservations.models import ReservationRequest, DeviceComment, OwnershipHistory
 from apps.reservations.serializers import DeviceCommentSerializer, OwnershipHistorySerializer
-from apps.users.models import TEAM_CHOICES, PortalUser
+from apps.users.models import Team, PortalUser
 from apps.vault.models import Vault
 from utils.crypto import encrypt, decrypt
 from utils import email as email_utils
@@ -25,7 +25,7 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-UNAVAILABLE_CONDITIONS = ('out_of_order', 'temporarily_leased', 'dedicated')
+UNAVAILABLE_CONDITIONS = ('out_of_order', 'temporarily_leased', 'dedicated', 'missing')
 
 
 def _get_user_email(request):
@@ -47,7 +47,7 @@ def _handle_condition_change(device, new_condition, old_condition, changed_by):
     if new_condition == old_condition:
         return
 
-    if new_condition in ('out_of_order', 'temporarily_leased'):
+    if new_condition in ('out_of_order', 'temporarily_leased', 'missing'):
         old_owner = device.owner_email
         device.owner_email = None
         pending = ReservationRequest.objects.filter(device=device, status='pending')
@@ -84,7 +84,9 @@ class DeviceListCreateView(APIView):
         lab = request.query_params.get('lab', '').strip()
         condition = request.query_params.get('condition', '').strip()
 
-        if team:
+        if team == 'unassigned':
+            qs = qs.filter(team__isnull=True)
+        elif team:
             qs = qs.filter(team=team)
         if lab:
             qs = qs.filter(lab=lab)
@@ -470,7 +472,7 @@ class DeviceOwnershipHistoryView(APIView):
 class ChoicesView(APIView):
     def get(self, request):
         return Response({
-            'labs': [c[0] for c in LAB_CHOICES],
-            'teams': [c[0] for c in TEAM_CHOICES],
+            'labs': list(Lab.objects.values_list('name', flat=True)),
+            'teams': list(Team.objects.values_list('name', flat=True)),
             'conditions': [c[0] for c in CONDITION_CHOICES],
         })

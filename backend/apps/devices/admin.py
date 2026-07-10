@@ -1,5 +1,11 @@
 from django.contrib import admin
-from .models import Device
+from .models import Device, Lab
+
+
+@admin.register(Lab)
+class LabAdmin(admin.ModelAdmin):
+    list_display = ('name',)
+    search_fields = ('name',)
 
 
 @admin.register(Device)

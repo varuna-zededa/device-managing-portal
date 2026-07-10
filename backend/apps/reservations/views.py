@@ -10,7 +10,7 @@ from apps.devices.models import Device
 from apps.users.models import PortalUser
 from utils import email as email_utils
 
-_UNAVAILABLE_CONDITIONS = ('out_of_order', 'temporarily_leased', 'dedicated')
+_UNAVAILABLE_CONDITIONS = ('out_of_order', 'temporarily_leased', 'dedicated', 'missing')
 
 logger = logging.getLogger(__name__)
 
