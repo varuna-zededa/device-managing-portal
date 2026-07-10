@@ -27,9 +27,14 @@ class Device(models.Model):
     cluster_device_name = models.CharField(max_length=200, blank=True, null=True)
     model = models.ForeignKey('device_models.DeviceModel', on_delete=models.PROTECT)
     cluster = models.ForeignKey('clusters.Cluster', on_delete=models.SET_NULL, null=True, blank=True)
-    team = models.CharField(max_length=20, blank=True, null=True)
+    team = models.ForeignKey(
+        'users.Team', null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='devices',
+    )
     owner_email = models.CharField(max_length=200, blank=True, null=True)
-    lab = models.CharField(max_length=100)
+    lab = models.ForeignKey(
+        'devices.Lab', on_delete=models.PROTECT, related_name='devices',
+    )
     location_detail = models.CharField(max_length=500, blank=True, null=True)
     condition = models.CharField(max_length=20, choices=CONDITION_CHOICES, default='normal')
     idrac_ip = models.CharField(max_length=100, blank=True, null=True)
@@ -45,6 +50,17 @@ class Device(models.Model):
     last_comment_at = models.DateTimeField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(condition__in=[
+                    'normal', 'out_of_order', 'needs_repair',
+                    'temporarily_leased', 'dedicated', 'missing',
+                ]),
+                name='device_condition_valid',
+            )
+        ]
 
     def save(self, *args, **kwargs):
         if not self.owner_email:
