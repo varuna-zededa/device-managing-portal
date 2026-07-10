@@ -759,6 +759,17 @@ last_comment_text, created_at, updated_at
 
 **Not exported:** idrac_password_enc, Vault bearer tokens, ownership history, device comments
 
+### Import template
+```
+GET /api/admin/import-template/
+```
+- No auth required — returns a static CSV file with correct column headers and one example row
+- Filename: `device_import_template.csv`
+- Frontend: "Download CSV template" link at the top of the Import dialog
+
+**Template columns:** name, serial_number, model, cluster, cluster_device_name, team, lab,
+location_detail, condition, description, idrac_ip, idrac_username, owner_email
+
 ### Import
 ```
 POST /api/admin/import
@@ -774,8 +785,21 @@ Body: file=<csv or json>, mode=<create_only|update_or_create>
 - **Required import columns:** name, serial_number, model (name), lab
 - Unknown model names → auto-create a new DeviceModel; unknown cluster names → auto-create a new Cluster
 
-**Frontend:** drag-and-drop file picker + format selector + mode selector; preview table of first
-5 rows before submit; result modal showing created / updated / skipped / error counts.
+**Forgiving header parsing:** column names are normalised before processing — leading/trailing
+whitespace stripped, lowercased, spaces and hyphens replaced with underscores. Common aliases
+are mapped to canonical names automatically:
+
+| Accepted variant | Canonical field |
+|---|---|
+| Serial, serial_no, Serial Number | serial_number |
+| Device Name, device_name | name |
+| Model Name, model_name | model |
+| Cluster Name, cluster_name | cluster |
+| Name In Cluster, name_in_cluster | cluster_device_name |
+| Location | location_detail |
+| Lab Location, lab_location | lab |
+
+**Frontend:** drag-and-drop file picker + mode selector; result modal showing created / updated / skipped / error counts.
 
 ---
 
