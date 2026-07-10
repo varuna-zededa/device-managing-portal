@@ -30,6 +30,7 @@ const CONDITION_LABELS: Record<string, string> = {
   needs_repair: 'Needs Repair',
   temporarily_leased: 'Temporarily Leased',
   dedicated: 'Dedicated',
+  missing: 'Missing',
 }
 
 const CONDITION_COLORS: Record<string, string> = {
