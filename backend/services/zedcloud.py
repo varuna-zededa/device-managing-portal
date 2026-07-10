@@ -40,7 +40,10 @@ def fetch_device_status(cluster, cluster_device_name, bearer_token, device):
 
     data = response.json()
 
-    actual_serial = data.get('hardwareInfo', {}).get('serialNum', '')
+    actual_serial = (
+        data.get('minfo', {}).get('serialNumber', '')
+        or data.get('hardwareInfo', {}).get('serialNum', '')
+    )
     if actual_serial and actual_serial != device.serial_number:
         raise SerialMismatchError(expected=device.serial_number, actual=actual_serial)
 
@@ -53,7 +56,7 @@ def fetch_device_status(cluster, cluster_device_name, bearer_token, device):
     for iface in data.get('netStatusList', []):
         if iface.get('up') and iface.get('uplink'):
             mac = iface.get('macAddr', '')
-            name = iface.get('name', '')
+            name = iface.get('ifName', '')
             for ip in iface.get('ipAddrs', []):
                 if ip and ':' not in ip:
                     connectivity.append({
