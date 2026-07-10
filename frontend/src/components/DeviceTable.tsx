@@ -453,7 +453,7 @@ export function DeviceTable({
       </ResizableTableCell>
     ),
     clusterName: (
-      <ResizableTableCell columnId="clusterName">
+      <ResizableTableCell columnId="clusterName" copyValue={device.cluster_device_name ?? undefined}>
         {device.cluster_device_name ? (
           <span className="font-mono text-xs">{device.cluster_device_name}</span>
         ) : (
@@ -725,8 +725,10 @@ function OwnerCell({ device, isAdmin, isOwner, isUnavailable, isDedicated, onRes
   const ownerDisplay = device.owner_name ?? device.owner_email
 
   return (
-    <div className="flex flex-col items-start gap-1 min-w-0">
-      {ownerDisplay && (
+    <div className="flex flex-col items-center gap-1 min-w-0">
+      {device.is_available ? (
+        <span className="text-xs text-green-500 font-medium">Available</span>
+      ) : ownerDisplay ? (
         <Tooltip>
           <TooltipTrigger asChild>
             <div className="flex items-center gap-1.5 min-w-0 cursor-default">
@@ -740,23 +742,18 @@ function OwnerCell({ device, isAdmin, isOwner, isUnavailable, isDedicated, onRes
             {device.reserved_at ? `Reserved ${timeAgo(device.reserved_at)}` : 'Reservation date unknown'}
           </TooltipContent>
         </Tooltip>
-      )}
+      ) : null}
 
       <div className="flex items-center gap-1">
-        {device.is_available ? (
-          <Button size="sm" className="h-6 text-xs px-2" onClick={onReserve}>
-            Reserve
-          </Button>
-        ) : isOwner ? (
-          <Button size="sm" variant="outline" className="h-6 text-xs px-2 border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={onRelease}>
+        {isOwner ? (
+          <Button variant="outline" className="h-6 text-xs px-2 py-0 rounded-md border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={onRelease}>
             Release
           </Button>
         ) : (
-          <Button size="sm" variant="outline" className="h-6 text-xs px-2" onClick={onReserve}>
+          <Button variant="outline" className="h-6 text-xs px-2 py-0 rounded-md border-blue-500/50 text-blue-500 hover:bg-blue-500/10 hover:text-blue-500" onClick={onReserve}>
             Reserve
           </Button>
         )}
-
       </div>
     </div>
   )
