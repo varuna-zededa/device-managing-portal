@@ -1,8 +1,9 @@
-import { Server, LogOut, ChevronDown } from 'lucide-react'
+import { LogOut, ChevronDown } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import { useUser } from '@/context/UserContext'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,8 +33,16 @@ export function Header() {
     <header className="fixed top-0 inset-x-0 z-50 h-14 border-b border-border bg-background/95 backdrop-blur flex items-center px-4 gap-4">
       <div className="flex items-center gap-6 flex-1">
         <div className="flex items-center gap-2">
-          <Server className="w-5 h-5 text-primary" aria-hidden="true" />
-          <span className="font-semibold text-foreground">Device Portal</span>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <img src="/holocron.png" alt="Holocron" className="w-6 h-6 object-contain cursor-default" />
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              <p>A Holocron holds all knowledge — who owns what, what state it's in, and the full history.</p>
+              <p className="text-muted-foreground mt-0.5">May the Force be with your lab.</p>
+            </TooltipContent>
+          </Tooltip>
+          <span className="font-semibold text-foreground">Holocron</span>
         </div>
         <nav className="flex items-center gap-1">
           {[{ to: '/devices', label: 'Devices' }, { to: '/users', label: 'Users' }].map(({ to, label }) => (

@@ -22,7 +22,7 @@ def send_reservation_request(device, requester, owner, token):
     owner_email = owner.email if hasattr(owner, 'email') else str(owner)
     base_url = getattr(settings, 'PORTAL_BASE_URL', 'http://localhost:80').rstrip('/')
     confirm_url = f'{base_url}/confirm/{token}'
-    subject = f'[Device Portal] Reservation request for {device.name}'
+    subject = f'[Holocron] Reservation request for {device.name}'
     body = (
         f'{requester_name} has requested to reserve device "{device.name}".\n\n'
         f'Review and approve or reject the request here:\n{confirm_url}\n\n'
@@ -32,19 +32,19 @@ def send_reservation_request(device, requester, owner, token):
 
 
 def send_reservation_approved(device, requester_email):
-    subject = f'[Device Portal] Your request for {device.name} was approved'
+    subject = f'[Holocron] Your request for {device.name} was approved'
     body = f'Your reservation request for device "{device.name}" has been approved. The device is now yours.'
     _send(subject, body, [requester_email])
 
 
 def send_reservation_rejected(device, requester_email):
-    subject = f'[Device Portal] Your request for {device.name} was rejected'
+    subject = f'[Holocron] Your request for {device.name} was rejected'
     body = f'Your reservation request for device "{device.name}" has been rejected.'
     _send(subject, body, [requester_email])
 
 
 def send_force_assign_notice(device, displaced_owner_email, assignee_name):
-    subject = f'[Device Portal] Device {device.name} was reassigned'
+    subject = f'[Holocron] Device {device.name} was reassigned'
     body = (
         f'Device "{device.name}" has been force-assigned to {assignee_name} by an admin.\n'
         f'You are no longer the owner of this device.'
@@ -56,7 +56,7 @@ def send_out_of_order_alert(device):
     admin_emails = list(
         PortalUser.objects.filter(user_type='admin').values_list('email', flat=True)
     )
-    subject = f'[Device Portal] Device out of order: {device.name}'
+    subject = f'[Holocron] Device out of order: {device.name}'
     cluster_name = device.cluster.name if device.cluster else '—'
     location = f'{device.lab}'
     if device.location_detail:
@@ -74,7 +74,7 @@ def send_out_of_order_alert(device):
 
 
 def send_reservation_overridden(device, requester_email):
-    subject = f'[Device Portal] Your request for {device.name} was cancelled'
+    subject = f'[Holocron] Your request for {device.name} was cancelled'
     body = (
         f'Your pending reservation request for device "{device.name}" has been cancelled '
         f'because an admin force-assigned the device to another user.'
