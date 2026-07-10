@@ -136,6 +136,8 @@ class ImportView(APIView):
                               'status', 'cluster_device_name'):
                     if row.get(field) not in (None, ''):
                         defaults[field] = row[field]
+                if 'condition' in defaults:
+                    defaults['condition'] = _normalize_condition(defaults['condition'])
                 if model_obj:
                     defaults['model'] = model_obj
                 if cluster_obj:
@@ -186,6 +188,13 @@ _FIELD_ALIASES = {
 def _normalize_key(key):
     k = key.strip().lower().replace(' ', '_').replace('-', '_').rstrip('.')
     return _FIELD_ALIASES.get(k, k)
+
+
+def _normalize_condition(value):
+    """Convert any casing/spacing variant to the DB snake_case format."""
+    if not value:
+        return value
+    return value.strip().lower().replace(' ', '_').replace('-', '_')
 
 _TEMPLATE_HEADERS = [
     'name', 'serial_number', 'model', 'cluster', 'cluster_device_name',
