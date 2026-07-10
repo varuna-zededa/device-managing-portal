@@ -14,8 +14,8 @@ class ClusterListCreateView(APIView):
     def post(self, request):
         data = request.data.copy()
         if 'host' not in data or not data['host']:
-            name = data.get('name', '')
-            data['host'] = f'zedcontrol.{name}.zededa.net'
+            name = data.get('name', '').lower().strip()
+            data['host'] = f'zcloud.{name}.zededa.net'
         serializer = ClusterSerializer(data=data)
         if serializer.is_valid():
             serializer.save()

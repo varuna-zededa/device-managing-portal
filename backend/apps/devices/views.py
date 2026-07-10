@@ -64,7 +64,7 @@ class DeviceListCreateView(APIView):
     permission_classes = [IsPortalUser]
 
     def get(self, request):
-        qs = Device.objects.select_related('model', 'cluster').all()
+        qs = Device.objects.select_related('model', 'cluster', 'lab', 'team').all()
 
         q = request.query_params.get('q', '').strip()
         available = request.query_params.get('available', 'all').strip().lower()
@@ -75,9 +75,9 @@ class DeviceListCreateView(APIView):
         if team == 'unassigned':
             qs = qs.filter(team__isnull=True)
         elif team:
-            qs = qs.filter(team=team)
+            qs = qs.filter(team__name=team)
         if lab:
-            qs = qs.filter(lab=lab)
+            qs = qs.filter(lab__name=lab)
         if condition:
             qs = qs.filter(condition=condition)
 
@@ -135,7 +135,7 @@ class DeviceDetailView(APIView):
 
     def _get_device(self, pk):
         try:
-            return Device.objects.select_related('model', 'cluster').get(pk=pk)
+            return Device.objects.select_related('model', 'cluster', 'lab', 'team').get(pk=pk)
         except Device.DoesNotExist:
             return None
 
@@ -261,6 +261,8 @@ class DeviceForceAssignView(APIView):
         assignee_email = request.data.get('assignee_email', '').strip()
         if not assignee_email:
             return Response({'error': 'assignee_email is required'}, status=status.HTTP_400_BAD_REQUEST)
+        if not PortalUser.objects.filter(email=assignee_email).exists():
+            return Response({'error': f'{assignee_email!r} is not a registered user'}, status=status.HTTP_400_BAD_REQUEST)
 
         displaced_owner = device.owner_email
         overridden_emails = []

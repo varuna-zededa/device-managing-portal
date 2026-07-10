@@ -1,10 +1,13 @@
 import logging
+import re
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from .models import PortalUser
 from .serializers import PortalUserSerializer
 from utils.permissions import get_user_email, is_admin, IsAdminPortalUser
+
+_EMAIL_PREFIX_RE = re.compile(r'^[a-zA-Z0-9._-]+$')
 
 logger = logging.getLogger(__name__)
 
@@ -30,10 +33,15 @@ class UserListCreateView(APIView):
         email_prefix = request.data.get('email_prefix', '').strip()
         name = request.data.get('name', '').strip()
         team = request.data.get('team', '').strip()
-        user_type = request.data.get('user_type', 'team_member').strip()
+        user_type = request.data.get('user_type', 'member').strip()
 
         if not email_prefix:
             return Response({'error': 'email_prefix is required'}, status=status.HTTP_400_BAD_REQUEST)
+        if not _EMAIL_PREFIX_RE.match(email_prefix):
+            return Response(
+                {'error': 'email_prefix may only contain letters, digits, dots, hyphens, and underscores.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         email = f'{email_prefix}@zededa.com'
         data = {'name': name, 'email': email, 'team': team, 'user_type': user_type}

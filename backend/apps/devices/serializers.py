@@ -1,16 +1,50 @@
+import ipaddress
 import logging
 from rest_framework import serializers
-from .models import Device
+from .models import Device, Lab, CONDITION_CHOICES
 from apps.reservations.models import ReservationRequest
-from apps.users.models import PortalUser
+from apps.users.models import PortalUser, Team
 
 logger = logging.getLogger(__name__)
 
+VALID_CONDITIONS = [c[0] for c in CONDITION_CHOICES]
 
-class DeviceSerializer(serializers.ModelSerializer):
+
+class NullableSlugRelatedField(serializers.SlugRelatedField):
+    """SlugRelatedField that converts '' to None for nullable FK fields."""
+
+    def to_internal_value(self, data):
+        if data == '' or data is None:
+            return None
+        return super().to_internal_value(data)
+
+
+class _DeviceValidationMixin:
+    """Shared field-level validators used by both read/write serializers."""
+
+    def validate_name(self, value):
+        if not (value or '').strip():
+            raise serializers.ValidationError('Name must not be blank.')
+        return value.strip()
+
+    def validate_idrac_ip(self, value):
+        if not value:
+            return value
+        try:
+            ipaddress.ip_address(value.strip())
+        except ValueError:
+            raise serializers.ValidationError('Enter a valid IPv4 or IPv6 address.')
+        return value.strip()
+
+
+class DeviceSerializer(_DeviceValidationMixin, serializers.ModelSerializer):
     is_available = serializers.SerializerMethodField()
     owner_name = serializers.SerializerMethodField()
     pending_requester_email = serializers.SerializerMethodField()
+    lab = serializers.SlugRelatedField(queryset=Lab.objects.all(), slug_field='name')
+    team = NullableSlugRelatedField(
+        queryset=Team.objects.all(), slug_field='name', allow_null=True, required=False,
+    )
 
     class Meta:
         model = Device
@@ -68,7 +102,13 @@ class DeviceSerializer(serializers.ModelSerializer):
             return obj.owner_email
 
 
-class DeviceCreateSerializer(serializers.ModelSerializer):
+class DeviceCreateSerializer(_DeviceValidationMixin, serializers.ModelSerializer):
+    owner_email = serializers.EmailField(allow_blank=True, allow_null=True, required=False)
+    lab = serializers.SlugRelatedField(queryset=Lab.objects.all(), slug_field='name')
+    team = NullableSlugRelatedField(
+        queryset=Team.objects.all(), slug_field='name', allow_null=True, required=False,
+    )
+
     class Meta:
         model = Device
         fields = [
