@@ -26,13 +26,13 @@ const createSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   email_prefix: z.string().min(1, 'Email prefix is required').regex(/^[a-zA-Z0-9._-]+$/, 'Invalid email prefix'),
   team: z.string().min(1, 'Team is required'),
-  user_type: z.enum(['admin', 'team_member']),
+  user_type: z.enum(['admin', 'member']),
 })
 
 const editSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   team: z.string().min(1, 'Team is required'),
-  user_type: z.enum(['admin', 'team_member']),
+  user_type: z.enum(['admin', 'member']),
 })
 
 type CreateFormValues = z.infer<typeof createSchema>
@@ -83,12 +83,12 @@ export default function UsersPage() {
 
   const form = useForm<CreateFormValues>({
     resolver: zodResolver(createSchema),
-    defaultValues: { name: '', email_prefix: '', team: '', user_type: 'team_member' },
+    defaultValues: { name: '', email_prefix: '', team: '', user_type: 'member' },
   })
 
   const editForm = useForm<EditFormValues>({
     resolver: zodResolver(editSchema),
-    defaultValues: { name: '', team: '', user_type: 'team_member' },
+    defaultValues: { name: '', team: '', user_type: 'member' },
   })
 
   const mutation = useMutation({
@@ -113,7 +113,7 @@ export default function UsersPage() {
   })
 
   function openEdit(user: PortalUser) {
-    editForm.reset({ name: user.name, team: user.team, user_type: user.user_type as 'admin' | 'team_member' })
+    editForm.reset({ name: user.name, team: user.team, user_type: user.user_type as 'admin' | 'member' })
     setEditTarget(user)
   }
 
@@ -227,7 +227,7 @@ export default function UsersPage() {
                       <SelectTrigger><SelectValue /></SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="team_member">Team Member</SelectItem>
+                      <SelectItem value="member">Member</SelectItem>
                       <SelectItem value="admin">Admin</SelectItem>
                     </SelectContent>
                   </Select>
@@ -293,7 +293,7 @@ export default function UsersPage() {
                       <SelectTrigger><SelectValue /></SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="team_member">Team Member</SelectItem>
+                      <SelectItem value="member">Member</SelectItem>
                       <SelectItem value="admin">Admin</SelectItem>
                     </SelectContent>
                   </Select>

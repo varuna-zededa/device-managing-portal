@@ -50,7 +50,7 @@ const schema = z.object({
   description: z.string().optional(),
   location_detail: z.string().optional(),
   condition: z.string().default('normal'),
-  idrac_ip: z.string().optional(),
+  idrac_ip: z.union([z.literal(''), z.string().ip({ message: 'Enter a valid IPv4 or IPv6 address' })]).optional(),
   idrac_username: z.string().optional(),
   idrac_password: z.string().optional(),
   owner_email: z.string().optional(),
