@@ -42,6 +42,9 @@ export function ExportImportPanel() {
       a.download = `devices.${format}`
       a.click()
       URL.revokeObjectURL(url)
+      toast.success('Full inventory exported', {
+        description: 'All devices in the inventory were exported — not just the current view.',
+      })
     } catch {
       toast.error('Export failed')
     }
