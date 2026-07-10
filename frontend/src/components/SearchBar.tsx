@@ -11,6 +11,7 @@ const CONDITION_LABELS: Record<string, string> = {
   needs_repair: 'Needs Repair',
   temporarily_leased: 'Temporarily Leased',
   dedicated: 'Dedicated',
+  missing: 'Missing',
 }
 
 export interface SearchParams {
@@ -90,16 +91,16 @@ export function SearchBar({ value, onChange }: SearchBarProps) {
       </div>
 
       <Select
-        value={value.team ?? 'all'}
-        onValueChange={(v) => onChange({ ...value, team: v === 'all' ? undefined : v })}
+        value={value.condition ?? 'all'}
+        onValueChange={(v) => onChange({ ...value, condition: v === 'all' ? undefined : v })}
       >
-        <SelectTrigger className="h-9 w-36 text-sm">
-          <SelectValue placeholder="Team" />
+        <SelectTrigger className="h-9 w-44 text-sm">
+          <SelectValue placeholder="Condition" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="all">All Teams</SelectItem>
-          {teams.map((t) => (
-            <SelectItem key={t} value={t}>{t}</SelectItem>
+          <SelectItem value="all">All Conditions</SelectItem>
+          {conditions.map((c) => (
+            <SelectItem key={c} value={c}>{CONDITION_LABELS[c] ?? c}</SelectItem>
           ))}
         </SelectContent>
       </Select>
@@ -120,16 +121,17 @@ export function SearchBar({ value, onChange }: SearchBarProps) {
       </Select>
 
       <Select
-        value={value.condition ?? 'all'}
-        onValueChange={(v) => onChange({ ...value, condition: v === 'all' ? undefined : v })}
+        value={value.team ?? 'all'}
+        onValueChange={(v) => onChange({ ...value, team: v === 'all' ? undefined : v })}
       >
-        <SelectTrigger className="h-9 w-44 text-sm">
-          <SelectValue placeholder="Condition" />
+        <SelectTrigger className="h-9 w-36 text-sm">
+          <SelectValue placeholder="Team" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="all">All Conditions</SelectItem>
-          {conditions.map((c) => (
-            <SelectItem key={c} value={c}>{CONDITION_LABELS[c] ?? c}</SelectItem>
+          <SelectItem value="all">All Teams</SelectItem>
+          <SelectItem value="unassigned">Unassigned</SelectItem>
+          {teams.map((t) => (
+            <SelectItem key={t} value={t}>{t}</SelectItem>
           ))}
         </SelectContent>
       </Select>
