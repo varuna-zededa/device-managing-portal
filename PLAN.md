@@ -82,6 +82,9 @@ Each version follows the same 5-step cycle before shipping:
 
 **Scope:**
 
+- **Backend test suite** — Django test client covering critical paths: device CRUD, reservation
+  flow (reserve, approve, reject, expire, force-assign), auth/permission enforcement, and
+  ZedCloud status fetch; run automatically in GitHub Actions before the version bump on every PR
 - **Guest user type** — read-only access to the device index only; can see the full device table
   and expand panels but cannot reserve, release, edit, delete, fetch status, force-assign, or
   export; all action controls hidden in the UI; write endpoints reject guests with 403
