@@ -15,7 +15,7 @@ jobs:
       pull-requests: read  # needed for --generate-notes on GitHub Release
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # RELEASE_TOKEN: a PAT with repo write scope, needed when branch protection
           # does not allow GitHub Actions to bypass required pull requests.
