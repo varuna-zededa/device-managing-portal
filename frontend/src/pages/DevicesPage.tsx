@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getDevices } from '@/api/devices'
+import { getConfig } from '@/api/config'
 import { DeviceTable } from '@/components/DeviceTable'
 import { Header } from '@/components/Header'
 import { SearchBar, type SearchParams } from '@/components/SearchBar'
@@ -35,10 +36,16 @@ export default function DevicesPage() {
     try { sessionStorage.setItem(FILTER_SESSION_KEY, JSON.stringify(params)) } catch { /* storage unavailable */ }
   }
 
+  const { data: config } = useQuery({
+    queryKey: ['config'],
+    queryFn: getConfig,
+    staleTime: Infinity,
+  })
+
   const { data: devices = [], isLoading, isError, isFetching, refetch, dataUpdatedAt } = useQuery({
     queryKey: ['devices', searchParams],
     queryFn: () => getDevices(searchParams as Parameters<typeof getDevices>[0]),
-    refetchInterval: 15 * 60 * 1000,
+    refetchInterval: config?.device_list_refresh_ms ?? 5 * 60 * 1000,
     refetchIntervalInBackground: false,
   })
 

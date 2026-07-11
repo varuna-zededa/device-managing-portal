@@ -45,9 +45,9 @@ class Device(models.Model):
     status = models.CharField(max_length=50, blank=True, null=True)
     status_fetched_at = models.DateTimeField(blank=True, null=True)
     reserved_at = models.DateTimeField(blank=True, null=True)
-    last_comment_text = models.TextField(blank=True, null=True)
-    last_comment_by = models.CharField(max_length=200, blank=True, null=True)
-    last_comment_at = models.DateTimeField(blank=True, null=True)
+    last_purpose_text = models.TextField(blank=True, null=True)
+    last_purpose_by = models.CharField(max_length=200, blank=True, null=True)
+    last_purpose_at = models.DateTimeField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

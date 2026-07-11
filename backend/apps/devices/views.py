@@ -14,8 +14,8 @@ from .models import Device, Lab, CONDITION_CHOICES
 from .serializers import DeviceSerializer, DeviceCreateSerializer
 from apps.clusters.models import Cluster
 from apps.device_models.models import DeviceModel
-from apps.reservations.models import ReservationRequest, DeviceComment, OwnershipHistory
-from apps.reservations.serializers import DeviceCommentSerializer, OwnershipHistorySerializer
+from apps.reservations.models import ReservationRequest, DevicePurpose, OwnershipHistory
+from apps.reservations.serializers import DevicePurposeSerializer, OwnershipHistorySerializer
 from apps.users.models import Team, PortalUser
 from apps.vault.models import Vault
 from utils.crypto import encrypt, decrypt
@@ -98,7 +98,7 @@ class DeviceListCreateView(APIView):
                 | Q(model__customer_partner_name__icontains=q)
                 | Q(cluster__name__icontains=q)
                 | Q(eve_version__icontains=q)
-                | Q(last_comment_text__icontains=q)
+                | Q(last_purpose_text__icontains=q)
                 | Q(owner_email__in=owner_emails)
             )
 
@@ -438,12 +438,12 @@ class DeviceStatusView(APIView):
             return Response({'error': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
 
 
-class DeviceCommentListCreateView(APIView):
+class DevicePurposeView(APIView):
     permission_classes = [IsPortalUser]
 
     def get(self, request, pk):
-        comments = DeviceComment.objects.filter(device_id=pk).order_by('-created_at')[:10]
-        serializer = DeviceCommentSerializer(comments, many=True)
+        entries = DevicePurpose.objects.filter(device_id=pk).order_by('-created_at')[:10]
+        serializer = DevicePurposeSerializer(entries, many=True)
         return Response(serializer.data)
 
     def post(self, request, pk):
@@ -454,30 +454,38 @@ class DeviceCommentListCreateView(APIView):
 
         author_email = get_user_email(request)
         text = request.data.get('text', '').strip()
+
         if not text:
-            return Response({'error': 'text is required'}, status=status.HTTP_400_BAD_REQUEST)
+            if not is_admin(author_email) and device.owner_email != author_email:
+                return Response({'error': 'Only the device owner or an admin can clear the purpose.'}, status=status.HTTP_403_FORBIDDEN)
+            device.last_purpose_text = None
+            device.last_purpose_by = None
+            device.last_purpose_at = None
+            device.save(update_fields=['last_purpose_text', 'last_purpose_by', 'last_purpose_at', 'updated_at'])
+            return Response({}, status=status.HTTP_200_OK)
 
-        comment = DeviceComment.objects.create(device=device, author_email=author_email, text=text)
+        entry = DevicePurpose.objects.create(device=device, author_email=author_email, text=text)
 
-        old_ids = DeviceComment.objects.filter(device=device).order_by('-created_at').values_list('id', flat=True)[10:]
+        old_ids = DevicePurpose.objects.filter(device=device).order_by('-created_at').values_list('id', flat=True)[10:]
         if old_ids:
-            DeviceComment.objects.filter(id__in=list(old_ids)).delete()
+            DevicePurpose.objects.filter(id__in=list(old_ids)).delete()
 
-        device.last_comment_text = comment.text
-        device.last_comment_by = author_email
-        device.last_comment_at = comment.created_at
-        device.save(update_fields=['last_comment_text', 'last_comment_by', 'last_comment_at', 'updated_at'])
+        device.last_purpose_text = entry.text
+        device.last_purpose_by = author_email
+        device.last_purpose_at = entry.created_at
+        device.save(update_fields=['last_purpose_text', 'last_purpose_by', 'last_purpose_at', 'updated_at'])
 
-        return Response(DeviceCommentSerializer(comment).data, status=status.HTTP_201_CREATED)
+        return Response(DevicePurposeSerializer(entry).data, status=status.HTTP_201_CREATED)
 
 
 class DeviceOwnershipHistoryView(APIView):
     permission_classes = [IsAdminPortalUser]
 
     def get(self, request, pk):
-        history = OwnershipHistory.objects.filter(device_id=pk).order_by('-changed_at')[:50]
-        serializer = OwnershipHistorySerializer(history, many=True)
-        return Response(serializer.data)
+        entries = list(OwnershipHistory.objects.filter(device_id=pk).order_by('-changed_at')[:51])
+        has_more = len(entries) == 51
+        serializer = OwnershipHistorySerializer(entries[:50], many=True)
+        return Response({'results': serializer.data, 'has_more': has_more})
 
 
 class ChoicesView(APIView):

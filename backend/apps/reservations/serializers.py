@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import ReservationRequest, DeviceComment, OwnershipHistory
+from .models import ReservationRequest, DevicePurpose, OwnershipHistory
 
 
 class ReservationRequestSerializer(serializers.ModelSerializer):
@@ -19,9 +19,9 @@ class PendingReservationSerializer(ReservationRequestSerializer):
         read_only_fields = ReservationRequestSerializer.Meta.read_only_fields + ['token']
 
 
-class DeviceCommentSerializer(serializers.ModelSerializer):
+class DevicePurposeSerializer(serializers.ModelSerializer):
     class Meta:
-        model = DeviceComment
+        model = DevicePurpose
         fields = ['id', 'device', 'author_email', 'text', 'created_at']
         read_only_fields = ['author_email', 'created_at']
 

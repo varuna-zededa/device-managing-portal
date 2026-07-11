@@ -56,14 +56,14 @@ class DeviceSerializer(_DeviceValidationMixin, serializers.ModelSerializer):
             'lab', 'location_detail', 'condition',
             'idrac_ip', 'idrac_username',
             'eve_version', 'device_connectivity', 'status', 'status_fetched_at', 'reserved_at',
-            'last_comment_text', 'last_comment_by', 'last_comment_at',
+            'last_purpose_text', 'last_purpose_by', 'last_purpose_at',
             'created_at', 'updated_at', 'is_available', 'pending_requester_email', 'pending_requester_name',
         ]
         read_only_fields = [
             'serial_number', 'created_at', 'updated_at',
             'status', 'status_fetched_at', 'reserved_at',
             'owner_email',
-            'last_comment_text', 'last_comment_by', 'last_comment_at',
+            'last_purpose_text', 'last_purpose_by', 'last_purpose_at',
         ]
 
     def to_representation(self, instance):

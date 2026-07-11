@@ -1,8 +1,8 @@
-import React, { useState, useMemo, Fragment } from 'react'
-import { ChevronRight, MoreHorizontal, RefreshCw, Clock, ExternalLink } from 'lucide-react'
+import React, { useState, useMemo, Fragment, useRef } from 'react'
+import { ChevronRight, MoreHorizontal, RefreshCw, Clock, ExternalLink, X } from 'lucide-react'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { releaseDevice, deleteDevice, type Device } from '@/api/devices'
+import { releaseDevice, deleteDevice, setDevicePurpose, type Device } from '@/api/devices'
 import { useUser } from '@/context/UserContext'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -198,7 +198,7 @@ function ExpandPanel({ device }: { device: Device }) {
             </div>
           </div>
 
-          {/* Card 3: IDRAC + Notes */}
+          {/* Card 3: IDRAC + Description */}
           <div className="bg-card rounded-md border border-border p-4 space-y-4">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-foreground mb-2">IDRAC</p>
@@ -220,7 +220,7 @@ function ExpandPanel({ device }: { device: Device }) {
               <CopyableField label="Credentials" value={device.idrac_username ?? '—'} mono />
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-foreground mb-2">Notes</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-foreground mb-2">Description</p>
               <p className="text-sm text-foreground whitespace-pre-wrap break-words">
                 {device.description ?? '—'}
               </p>
@@ -272,6 +272,30 @@ export function DeviceTable({
   const [colOrder, setColOrder] = useState<ColId[]>(loadColOrder)
   const [dragCol, setDragCol] = useState<ColId | null>(null)
   const [dragOverCol, setDragOverCol] = useState<ColId | null>(null)
+
+  const [editingPurposeId, setEditingPurposeId] = useState<number | null>(null)
+  const [editingPurposeText, setEditingPurposeText] = useState('')
+  const purposeInputRef = useRef<HTMLTextAreaElement>(null)
+
+  const purposeMutation = useMutation({
+    mutationFn: ({ id, text }: { id: number; text: string }) => setDevicePurpose(id, text),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['devices'] }),
+    onError: () => toast.error('Failed to save purpose'),
+  })
+
+  const startEditPurpose = (device: Device) => {
+    setEditingPurposeId(device.id)
+    setEditingPurposeText(device.last_purpose_text ?? '')
+    setTimeout(() => purposeInputRef.current?.focus(), 0)
+  }
+
+  const savePurpose = (device: Device, overrideText?: string) => {
+    const text = (overrideText !== undefined ? overrideText : editingPurposeText).trim()
+    setEditingPurposeId(null)
+    if (text !== (device.last_purpose_text ?? '')) {
+      purposeMutation.mutate({ id: device.id, text })
+    }
+  }
 
   const releaseMutation = useMutation({
     mutationFn: (id: number) => releaseDevice(id),
@@ -411,7 +435,7 @@ export function DeviceTable({
       >Status</ResizableTableHead>
     ),
     comment: (
-      <ResizableTableHead columnId="comment" defaultWidth={200} {...mkDragProps('comment')}>Comment</ResizableTableHead>
+      <ResizableTableHead columnId="comment" defaultWidth={200} {...mkDragProps('comment')}>Purpose</ResizableTableHead>
     ),
   }
 
@@ -511,13 +535,46 @@ export function DeviceTable({
       </ResizableTableCell>
     ),
     comment: (
-      <ResizableTableCell columnId="comment">
-        {device.last_comment_text ? (
-          <div className="line-clamp-2 text-xs text-foreground">
-            {device.last_comment_text}
+      <ResizableTableCell columnId="comment" truncate={false}>
+        {editingPurposeId === device.id ? (
+          <div className="flex items-start gap-1">
+            <textarea
+              ref={purposeInputRef}
+              value={editingPurposeText}
+              onChange={e => setEditingPurposeText(e.target.value)}
+              onBlur={() => savePurpose(device)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); savePurpose(device) }
+                if (e.key === 'Escape') { setEditingPurposeId(null) }
+              }}
+              rows={2}
+              className="flex-1 resize-none rounded border border-border bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+            <button
+              type="button"
+              title="Clear purpose"
+              onMouseDown={e => e.preventDefault()}
+              onClick={() => savePurpose(device, '')}
+              className="mt-0.5 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <X className="w-3 h-3" />
+            </button>
           </div>
         ) : (
-          <span className="text-foreground text-xs">—</span>
+          <div
+            role="button"
+            tabIndex={0}
+            title="Click to edit purpose"
+            onClick={() => startEditPurpose(device)}
+            onKeyDown={e => e.key === 'Enter' && startEditPurpose(device)}
+            className="min-h-[2rem] cursor-text rounded px-1 py-0.5 hover:bg-muted/50"
+          >
+            {device.last_purpose_text ? (
+              <span className="line-clamp-2 text-xs text-foreground">{device.last_purpose_text}</span>
+            ) : (
+              <span className="text-xs text-muted-foreground italic">Add purpose…</span>
+            )}
+          </div>
         )}
       </ResizableTableCell>
     ),
@@ -712,14 +769,20 @@ interface OwnerCellProps {
 function OwnerCell({ device, isAdmin, isOwner, isUnavailable, isDedicated, onReserve, onRelease }: OwnerCellProps) {
   if (isDedicated) {
     return (
-      <Badge variant="info" className="text-xs">
-        {device.team ?? 'Dedicated'}
-      </Badge>
+      <div className="flex justify-center w-full">
+        <Badge variant="info" className="text-xs">
+          {device.team ?? 'Dedicated'}
+        </Badge>
+      </div>
     )
   }
 
   if (isUnavailable) {
-    return <Badge variant="destructive" className="text-xs">UNAVAILABLE</Badge>
+    return (
+      <div className="flex justify-center w-full">
+        <Badge variant="destructive" className="text-xs">UNAVAILABLE</Badge>
+      </div>
+    )
   }
 
   const ownerDisplay = device.owner_name ?? device.owner_email

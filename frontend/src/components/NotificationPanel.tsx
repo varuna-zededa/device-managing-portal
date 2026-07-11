@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Bell, Check, X } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getPendingReservations, getMyReservations, approveReservation, rejectReservation } from '@/api/reservations'
+import { getConfig } from '@/api/config'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -24,16 +25,22 @@ export function NotificationBell() {
   const { currentUser } = useUser()
   const qc = useQueryClient()
 
+  const { data: config } = useQuery({
+    queryKey: ['config'],
+    queryFn: getConfig,
+    staleTime: Infinity,
+  })
+
   const { data: pending = [] } = useQuery({
     queryKey: ['reservations', 'pending'],
     queryFn: getPendingReservations,
-    refetchInterval: 60_000,
+    refetchInterval: config?.notification_refresh_ms ?? 30_000,
   })
 
   const { data: mine = [] } = useQuery({
     queryKey: ['reservations', 'mine'],
     queryFn: getMyReservations,
-    refetchInterval: 60_000,
+    refetchInterval: config?.notification_refresh_ms ?? 30_000,
   })
 
   const approveMutation = useMutation({

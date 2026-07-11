@@ -6,7 +6,7 @@ from .views import (
     DeviceForceAssignView,
     DeviceReleaseView,
     DeviceStatusView,
-    DeviceCommentListCreateView,
+    DevicePurposeView,
     DeviceOwnershipHistoryView,
 )
 
@@ -17,6 +17,6 @@ urlpatterns = [
     path('<int:pk>/force-assign/', DeviceForceAssignView.as_view()),
     path('<int:pk>/release/', DeviceReleaseView.as_view()),
     path('<int:pk>/status/', DeviceStatusView.as_view()),
-    path('<int:pk>/comments/', DeviceCommentListCreateView.as_view()),
+    path('<int:pk>/purpose/', DevicePurposeView.as_view()),
     path('<int:pk>/ownership-history/', DeviceOwnershipHistoryView.as_view()),
 ]
