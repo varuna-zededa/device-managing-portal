@@ -792,7 +792,7 @@ resolved.
 
 - Any logged-in user can set the purpose on any device at any time
 - Editable **inline** in the device table — click the Purpose cell to open a textarea; Enter saves,
-  Escape or blur cancels; an × button clears the field
+  blur saves; Escape cancels; an × button clears the field
 - Clearing (posting empty text) is restricted to the **current device owner or an admin**
 - On save: new `DevicePurpose` row inserted; oldest row pruned if count exceeds 10 per device
 - **On any ownership change** (reserve, release, force-assign, auto-approve): all `DevicePurpose`
