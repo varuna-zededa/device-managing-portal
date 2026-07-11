@@ -355,9 +355,9 @@
     "status": "Online",
     "status_fetched_at": "2026-07-09T12:39:15.693Z",
     "reserved_at": "2026-07-10T13:38:34.743Z",
-    "last_comment_text": null,
-    "last_comment_by": null,
-    "last_comment_at": null,
+    "last_purpose_text": null,
+    "last_purpose_by": null,
+    "last_purpose_at": null,
     "created_at": "2026-07-09T10:29:30.842Z",
     "updated_at": "2026-07-10T13:38:34.743Z"
   }
@@ -391,9 +391,9 @@
     "status": "Suspect",
     "status_fetched_at": "2026-07-09T12:39:18.191Z",
     "reserved_at": "2026-07-10T15:59:49.803Z",
-    "last_comment_text": null,
-    "last_comment_by": null,
-    "last_comment_at": null,
+    "last_purpose_text": null,
+    "last_purpose_by": null,
+    "last_purpose_at": null,
     "created_at": "2026-07-09T10:30:58.295Z",
     "updated_at": "2026-07-10T15:59:49.803Z"
   }
@@ -432,9 +432,9 @@
     "status": "Online",
     "status_fetched_at": "2026-07-09T12:37:44.921Z",
     "reserved_at": "2026-07-09T12:50:57.922Z",
-    "last_comment_text": null,
-    "last_comment_by": null,
-    "last_comment_at": null,
+    "last_purpose_text": null,
+    "last_purpose_by": null,
+    "last_purpose_at": null,
     "created_at": "2026-07-09T10:32:45.907Z",
     "updated_at": "2026-07-09T12:50:57.921Z"
   }
@@ -468,9 +468,9 @@
     "status": "Online",
     "status_fetched_at": "2026-07-09T12:59:10.990Z",
     "reserved_at": "2026-07-09T12:45:32.107Z",
-    "last_comment_text": null,
-    "last_comment_by": null,
-    "last_comment_at": null,
+    "last_purpose_text": null,
+    "last_purpose_by": null,
+    "last_purpose_at": null,
     "created_at": "2026-07-09T10:39:10.475Z",
     "updated_at": "2026-07-09T12:59:10.990Z"
   }
@@ -509,9 +509,9 @@
     "status": "Suspect",
     "status_fetched_at": "2026-07-09T12:59:20.272Z",
     "reserved_at": null,
-    "last_comment_text": null,
-    "last_comment_by": null,
-    "last_comment_at": null,
+    "last_purpose_text": null,
+    "last_purpose_by": null,
+    "last_purpose_at": null,
     "created_at": "2026-07-09T10:40:11.001Z",
     "updated_at": "2026-07-09T12:59:20.272Z"
   }
@@ -550,9 +550,9 @@
     "status": "Online",
     "status_fetched_at": "2026-07-09T12:59:27.715Z",
     "reserved_at": null,
-    "last_comment_text": null,
-    "last_comment_by": null,
-    "last_comment_at": null,
+    "last_purpose_text": null,
+    "last_purpose_by": null,
+    "last_purpose_at": null,
     "created_at": "2026-07-09T10:41:13.001Z",
     "updated_at": "2026-07-09T12:59:27.715Z"
   }
@@ -586,9 +586,9 @@
     "status": "Suspect",
     "status_fetched_at": "2026-07-09T12:59:32.322Z",
     "reserved_at": null,
-    "last_comment_text": null,
-    "last_comment_by": null,
-    "last_comment_at": null,
+    "last_purpose_text": null,
+    "last_purpose_by": null,
+    "last_purpose_at": null,
     "created_at": "2026-07-09T10:42:06.126Z",
     "updated_at": "2026-07-09T12:59:32.322Z"
   }
@@ -627,9 +627,9 @@
     "status": "Online",
     "status_fetched_at": "2026-07-09T12:39:25.898Z",
     "reserved_at": "2026-07-09T12:45:02.625Z",
-    "last_comment_text": null,
-    "last_comment_by": null,
-    "last_comment_at": null,
+    "last_purpose_text": null,
+    "last_purpose_by": null,
+    "last_purpose_at": null,
     "created_at": "2026-07-09T10:43:18.877Z",
     "updated_at": "2026-07-09T12:45:02.625Z"
   }
@@ -668,9 +668,9 @@
     "status": "Suspect",
     "status_fetched_at": "2026-07-09T12:39:22.817Z",
     "reserved_at": null,
-    "last_comment_text": null,
-    "last_comment_by": null,
-    "last_comment_at": null,
+    "last_purpose_text": null,
+    "last_purpose_by": null,
+    "last_purpose_at": null,
     "created_at": "2026-07-09T10:44:11.935Z",
     "updated_at": "2026-07-09T12:39:22.817Z"
   }
@@ -709,9 +709,9 @@
     "status": "Online",
     "status_fetched_at": "2026-07-09T12:59:07.979Z",
     "reserved_at": "2026-07-09T12:45:28.791Z",
-    "last_comment_text": null,
-    "last_comment_by": null,
-    "last_comment_at": null,
+    "last_purpose_text": null,
+    "last_purpose_by": null,
+    "last_purpose_at": null,
     "created_at": "2026-07-09T10:46:51.918Z",
     "updated_at": "2026-07-09T12:59:07.979Z"
   }
@@ -760,9 +760,9 @@
     "status": "Online",
     "status_fetched_at": "2026-07-10T06:38:48.105Z",
     "reserved_at": "2026-07-10T15:55:11.230Z",
-    "last_comment_text": null,
-    "last_comment_by": null,
-    "last_comment_at": null,
+    "last_purpose_text": null,
+    "last_purpose_by": null,
+    "last_purpose_at": null,
     "created_at": "2026-07-10T06:36:31.679Z",
     "updated_at": "2026-07-10T15:55:11.231Z"
   }
@@ -811,9 +811,9 @@
     "status": "Online",
     "status_fetched_at": "2026-07-10T06:38:48.598Z",
     "reserved_at": null,
-    "last_comment_text": null,
-    "last_comment_by": null,
-    "last_comment_at": null,
+    "last_purpose_text": null,
+    "last_purpose_by": null,
+    "last_purpose_at": null,
     "created_at": "2026-07-10T06:36:31.681Z",
     "updated_at": "2026-07-10T06:38:48.598Z"
   }
@@ -862,9 +862,9 @@
     "status": "Online",
     "status_fetched_at": "2026-07-10T06:38:48.981Z",
     "reserved_at": null,
-    "last_comment_text": null,
-    "last_comment_by": null,
-    "last_comment_at": null,
+    "last_purpose_text": null,
+    "last_purpose_by": null,
+    "last_purpose_at": null,
     "created_at": "2026-07-10T06:36:31.682Z",
     "updated_at": "2026-07-10T06:38:48.981Z"
   }
@@ -908,9 +908,9 @@
     "status": "Online",
     "status_fetched_at": "2026-07-10T06:38:49.358Z",
     "reserved_at": null,
-    "last_comment_text": null,
-    "last_comment_by": null,
-    "last_comment_at": null,
+    "last_purpose_text": null,
+    "last_purpose_by": null,
+    "last_purpose_at": null,
     "created_at": "2026-07-10T06:36:31.684Z",
     "updated_at": "2026-07-10T06:38:49.358Z"
   }
@@ -954,9 +954,9 @@
     "status": "Online",
     "status_fetched_at": "2026-07-10T06:38:49.697Z",
     "reserved_at": null,
-    "last_comment_text": null,
-    "last_comment_by": null,
-    "last_comment_at": null,
+    "last_purpose_text": null,
+    "last_purpose_by": null,
+    "last_purpose_at": null,
     "created_at": "2026-07-10T06:36:31.685Z",
     "updated_at": "2026-07-10T06:38:49.697Z"
   }
@@ -990,9 +990,9 @@
     "status": "Online",
     "status_fetched_at": "2026-07-10T06:38:50.045Z",
     "reserved_at": null,
-    "last_comment_text": null,
-    "last_comment_by": null,
-    "last_comment_at": null,
+    "last_purpose_text": null,
+    "last_purpose_by": null,
+    "last_purpose_at": null,
     "created_at": "2026-07-10T06:36:31.687Z",
     "updated_at": "2026-07-10T06:38:50.045Z"
   }
@@ -1026,9 +1026,9 @@
     "status": "Online",
     "status_fetched_at": "2026-07-10T06:38:50.409Z",
     "reserved_at": null,
-    "last_comment_text": null,
-    "last_comment_by": null,
-    "last_comment_at": null,
+    "last_purpose_text": null,
+    "last_purpose_by": null,
+    "last_purpose_at": null,
     "created_at": "2026-07-10T06:36:31.689Z",
     "updated_at": "2026-07-10T06:38:50.409Z"
   }
@@ -1067,9 +1067,9 @@
     "status": "Online",
     "status_fetched_at": "2026-07-10T06:38:51.077Z",
     "reserved_at": null,
-    "last_comment_text": null,
-    "last_comment_by": null,
-    "last_comment_at": null,
+    "last_purpose_text": null,
+    "last_purpose_by": null,
+    "last_purpose_at": null,
     "created_at": "2026-07-10T06:36:31.691Z",
     "updated_at": "2026-07-10T06:38:51.077Z"
   }
@@ -1108,9 +1108,9 @@
     "status": "Online",
     "status_fetched_at": "2026-07-10T06:38:51.404Z",
     "reserved_at": null,
-    "last_comment_text": null,
-    "last_comment_by": null,
-    "last_comment_at": null,
+    "last_purpose_text": null,
+    "last_purpose_by": null,
+    "last_purpose_at": null,
     "created_at": "2026-07-10T06:36:31.692Z",
     "updated_at": "2026-07-10T06:38:51.404Z"
   }
@@ -1149,9 +1149,9 @@
     "status": "Online",
     "status_fetched_at": "2026-07-10T06:38:51.777Z",
     "reserved_at": null,
-    "last_comment_text": null,
-    "last_comment_by": null,
-    "last_comment_at": null,
+    "last_purpose_text": null,
+    "last_purpose_by": null,
+    "last_purpose_at": null,
     "created_at": "2026-07-10T06:36:31.693Z",
     "updated_at": "2026-07-10T06:38:51.777Z"
   }
@@ -1190,9 +1190,9 @@
     "status": "Online",
     "status_fetched_at": "2026-07-10T06:38:52.429Z",
     "reserved_at": null,
-    "last_comment_text": null,
-    "last_comment_by": null,
-    "last_comment_at": null,
+    "last_purpose_text": null,
+    "last_purpose_by": null,
+    "last_purpose_at": null,
     "created_at": "2026-07-10T06:36:31.694Z",
     "updated_at": "2026-07-10T06:38:52.429Z"
   }
@@ -1231,9 +1231,9 @@
     "status": "Online",
     "status_fetched_at": "2026-07-10T06:38:53.763Z",
     "reserved_at": null,
-    "last_comment_text": null,
-    "last_comment_by": null,
-    "last_comment_at": null,
+    "last_purpose_text": null,
+    "last_purpose_by": null,
+    "last_purpose_at": null,
     "created_at": "2026-07-10T06:36:31.696Z",
     "updated_at": "2026-07-10T06:38:53.763Z"
   }
@@ -1267,9 +1267,9 @@
     "status": "Online",
     "status_fetched_at": "2026-07-10T06:38:54.260Z",
     "reserved_at": null,
-    "last_comment_text": null,
-    "last_comment_by": null,
-    "last_comment_at": null,
+    "last_purpose_text": null,
+    "last_purpose_by": null,
+    "last_purpose_at": null,
     "created_at": "2026-07-10T06:36:31.698Z",
     "updated_at": "2026-07-10T06:38:54.260Z"
   }
@@ -1303,9 +1303,9 @@
     "status": "Online",
     "status_fetched_at": "2026-07-10T06:38:54.748Z",
     "reserved_at": null,
-    "last_comment_text": null,
-    "last_comment_by": null,
-    "last_comment_at": null,
+    "last_purpose_text": null,
+    "last_purpose_by": null,
+    "last_purpose_at": null,
     "created_at": "2026-07-10T06:36:31.699Z",
     "updated_at": "2026-07-10T06:38:54.748Z"
   }
@@ -1339,9 +1339,9 @@
     "status": "Online",
     "status_fetched_at": "2026-07-10T06:38:55.110Z",
     "reserved_at": null,
-    "last_comment_text": null,
-    "last_comment_by": null,
-    "last_comment_at": null,
+    "last_purpose_text": null,
+    "last_purpose_by": null,
+    "last_purpose_at": null,
     "created_at": "2026-07-10T06:36:31.701Z",
     "updated_at": "2026-07-10T06:38:55.110Z"
   }
@@ -1375,9 +1375,9 @@
     "status": "Online",
     "status_fetched_at": "2026-07-10T06:38:55.461Z",
     "reserved_at": null,
-    "last_comment_text": null,
-    "last_comment_by": null,
-    "last_comment_at": null,
+    "last_purpose_text": null,
+    "last_purpose_by": null,
+    "last_purpose_at": null,
     "created_at": "2026-07-10T06:36:31.702Z",
     "updated_at": "2026-07-10T06:38:55.461Z"
   }
@@ -1421,9 +1421,9 @@
     "status": "Suspect",
     "status_fetched_at": "2026-07-10T06:38:55.803Z",
     "reserved_at": null,
-    "last_comment_text": null,
-    "last_comment_by": null,
-    "last_comment_at": null,
+    "last_purpose_text": null,
+    "last_purpose_by": null,
+    "last_purpose_at": null,
     "created_at": "2026-07-10T06:36:31.703Z",
     "updated_at": "2026-07-10T06:38:55.803Z"
   }
@@ -1462,9 +1462,9 @@
     "status": "Suspect",
     "status_fetched_at": "2026-07-10T06:38:56.153Z",
     "reserved_at": null,
-    "last_comment_text": null,
-    "last_comment_by": null,
-    "last_comment_at": null,
+    "last_purpose_text": null,
+    "last_purpose_by": null,
+    "last_purpose_at": null,
     "created_at": "2026-07-10T06:36:31.705Z",
     "updated_at": "2026-07-10T06:38:56.153Z"
   }
@@ -1498,9 +1498,9 @@
     "status": "Suspect",
     "status_fetched_at": "2026-07-10T06:38:56.525Z",
     "reserved_at": null,
-    "last_comment_text": null,
-    "last_comment_by": null,
-    "last_comment_at": null,
+    "last_purpose_text": null,
+    "last_purpose_by": null,
+    "last_purpose_at": null,
     "created_at": "2026-07-10T06:36:31.706Z",
     "updated_at": "2026-07-10T06:38:56.525Z"
   }
@@ -1539,9 +1539,9 @@
     "status": "Suspect",
     "status_fetched_at": "2026-07-10T06:38:56.864Z",
     "reserved_at": null,
-    "last_comment_text": null,
-    "last_comment_by": null,
-    "last_comment_at": null,
+    "last_purpose_text": null,
+    "last_purpose_by": null,
+    "last_purpose_at": null,
     "created_at": "2026-07-10T06:36:31.708Z",
     "updated_at": "2026-07-10T06:38:56.864Z"
   }
@@ -1580,9 +1580,9 @@
     "status": "Suspect",
     "status_fetched_at": "2026-07-10T06:38:57.192Z",
     "reserved_at": null,
-    "last_comment_text": null,
-    "last_comment_by": null,
-    "last_comment_at": null,
+    "last_purpose_text": null,
+    "last_purpose_by": null,
+    "last_purpose_at": null,
     "created_at": "2026-07-10T06:36:31.709Z",
     "updated_at": "2026-07-10T06:38:57.193Z"
   }
@@ -1621,9 +1621,9 @@
     "status": "Suspect",
     "status_fetched_at": "2026-07-10T06:38:57.522Z",
     "reserved_at": null,
-    "last_comment_text": null,
-    "last_comment_by": null,
-    "last_comment_at": null,
+    "last_purpose_text": null,
+    "last_purpose_by": null,
+    "last_purpose_at": null,
     "created_at": "2026-07-10T06:36:31.710Z",
     "updated_at": "2026-07-10T06:38:57.522Z"
   }
@@ -1662,9 +1662,9 @@
     "status": "Online",
     "status_fetched_at": "2026-07-10T08:43:44.785Z",
     "reserved_at": null,
-    "last_comment_text": null,
-    "last_comment_by": null,
-    "last_comment_at": null,
+    "last_purpose_text": null,
+    "last_purpose_by": null,
+    "last_purpose_at": null,
     "created_at": "2026-07-10T06:36:31.712Z",
     "updated_at": "2026-07-10T08:43:44.785Z"
   }
@@ -1703,9 +1703,9 @@
     "status": "Online",
     "status_fetched_at": "2026-07-10T06:38:58.232Z",
     "reserved_at": null,
-    "last_comment_text": null,
-    "last_comment_by": null,
-    "last_comment_at": null,
+    "last_purpose_text": null,
+    "last_purpose_by": null,
+    "last_purpose_at": null,
     "created_at": "2026-07-10T06:36:31.713Z",
     "updated_at": "2026-07-10T06:38:58.232Z"
   }
@@ -1744,9 +1744,9 @@
     "status": "Online",
     "status_fetched_at": "2026-07-10T06:38:58.581Z",
     "reserved_at": null,
-    "last_comment_text": null,
-    "last_comment_by": null,
-    "last_comment_at": null,
+    "last_purpose_text": null,
+    "last_purpose_by": null,
+    "last_purpose_at": null,
     "created_at": "2026-07-10T06:36:31.714Z",
     "updated_at": "2026-07-10T06:38:58.581Z"
   }
@@ -1780,9 +1780,9 @@
     "status": "Suspect",
     "status_fetched_at": "2026-07-10T08:37:39.252Z",
     "reserved_at": null,
-    "last_comment_text": null,
-    "last_comment_by": null,
-    "last_comment_at": null,
+    "last_purpose_text": null,
+    "last_purpose_by": null,
+    "last_purpose_at": null,
     "created_at": "2026-07-10T06:36:31.716Z",
     "updated_at": "2026-07-10T08:37:39.252Z"
   }
@@ -1821,9 +1821,9 @@
     "status": "Suspect",
     "status_fetched_at": "2026-07-10T06:38:59.290Z",
     "reserved_at": null,
-    "last_comment_text": null,
-    "last_comment_by": null,
-    "last_comment_at": null,
+    "last_purpose_text": null,
+    "last_purpose_by": null,
+    "last_purpose_at": null,
     "created_at": "2026-07-10T06:36:31.717Z",
     "updated_at": "2026-07-10T06:38:59.290Z"
   }
