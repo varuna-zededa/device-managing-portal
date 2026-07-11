@@ -132,6 +132,9 @@ docker compose up -d
 
 # 4. Verify services are running
 docker compose ps
+
+# 5. Create a Django superuser (required to access /admin/ for managing labs, teams, and site config)
+docker compose exec backend python manage.py createsuperuser
 ```
 
 The portal will be accessible at `http://<vm-ip>/` within ~30 seconds of startup.
