@@ -88,6 +88,10 @@ export function Header() {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
+            <div className="px-2 py-1.5">
+              <p className="text-xs text-muted-foreground/50">v{__APP_VERSION__}</p>
+            </div>
+            <DropdownMenuSeparator />
             <DropdownMenuItem onClick={logout} className="text-destructive focus:text-destructive gap-2">
               <LogOut className="w-4 h-4" aria-hidden="true" />
               Log out
