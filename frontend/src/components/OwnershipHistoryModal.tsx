@@ -66,6 +66,11 @@ export function OwnershipHistoryModal({ device, open, onOpenChange }: OwnershipH
                 </div>
               </div>
             ))}
+            <p className="text-xs text-muted-foreground pt-1 pl-10">
+              {history.length === 50
+                ? 'Most recent 50 entries shown'
+                : `${history.length} ${history.length === 1 ? 'entry' : 'entries'}`}
+            </p>
           </div>
         )}
       </DialogContent>
