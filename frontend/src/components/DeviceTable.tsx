@@ -542,7 +542,7 @@ export function DeviceTable({
               ref={purposeInputRef}
               value={editingPurposeText}
               onChange={e => setEditingPurposeText(e.target.value)}
-              onBlur={() => setEditingPurposeId(null)}
+              onBlur={() => savePurpose(device)}
               onKeyDown={e => {
                 if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); savePurpose(device) }
                 if (e.key === 'Escape') { setEditingPurposeId(null) }

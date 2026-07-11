@@ -456,6 +456,8 @@ class DevicePurposeView(APIView):
         text = request.data.get('text', '').strip()
 
         if not text:
+            if not is_admin(author_email) and device.owner_email != author_email:
+                return Response({'error': 'Only the device owner or an admin can clear the purpose.'}, status=status.HTTP_403_FORBIDDEN)
             device.last_purpose_text = None
             device.last_purpose_by = None
             device.last_purpose_at = None
@@ -480,9 +482,10 @@ class DeviceOwnershipHistoryView(APIView):
     permission_classes = [IsAdminPortalUser]
 
     def get(self, request, pk):
-        history = OwnershipHistory.objects.filter(device_id=pk).order_by('-changed_at')[:50]
-        serializer = OwnershipHistorySerializer(history, many=True)
-        return Response(serializer.data)
+        entries = list(OwnershipHistory.objects.filter(device_id=pk).order_by('-changed_at')[:51])
+        has_more = len(entries) == 51
+        serializer = OwnershipHistorySerializer(entries[:50], many=True)
+        return Response({'results': serializer.data, 'has_more': has_more})
 
 
 class ChoicesView(APIView):

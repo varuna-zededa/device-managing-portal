@@ -43,7 +43,7 @@ class ExportView(APIView):
                 'cluster', 'cluster_device_name', 'model', 'customer_partner_name',
                 'team', 'owner_email', 'lab', 'location_detail', 'condition',
                 'idrac_ip', 'idrac_username', 'eve_version', 'device_connectivity',
-                'status', 'last_comment_text', 'created_at', 'updated_at',
+                'status', 'last_purpose_text', 'created_at', 'updated_at',
             ]
             writer.writerow(header)
             for d in devices:
@@ -57,7 +57,7 @@ class ExportView(APIView):
                     d.condition, d.idrac_ip or '', d.idrac_username or '',
                     d.eve_version or '',
                     json.dumps(d.device_connectivity) if d.device_connectivity else '',
-                    d.status or '', d.last_comment_text or '',
+                    d.status or '', d.last_purpose_text or '',
                     d.created_at.isoformat(), d.updated_at.isoformat(),
                 ])
             response = HttpResponse(output.getvalue(), content_type='text/csv')

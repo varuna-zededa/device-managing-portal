@@ -109,12 +109,17 @@ export async function getDevicePurpose(id: number): Promise<DevicePurpose[]> {
   return res.data
 }
 
-export async function setDevicePurpose(id: number, text: string): Promise<DevicePurpose> {
+export async function setDevicePurpose(id: number, text: string): Promise<DevicePurpose | Record<string, never>> {
   const res = await client.post(`/devices/${id}/purpose/`, { text })
   return res.data
 }
 
-export async function getOwnershipHistory(id: number): Promise<OwnershipHistory[]> {
+export interface OwnershipHistoryResponse {
+  results: OwnershipHistory[]
+  has_more: boolean
+}
+
+export async function getOwnershipHistory(id: number): Promise<OwnershipHistoryResponse> {
   const res = await client.get(`/devices/${id}/ownership-history/`)
   return res.data
 }

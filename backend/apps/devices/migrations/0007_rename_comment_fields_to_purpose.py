@@ -5,6 +5,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('devices', '0006_device_lab_team_fk_condition_check'),
+        ('reservations', '0002_rename_devicecomment_to_devicepurpose'),
     ]
 
     operations = [

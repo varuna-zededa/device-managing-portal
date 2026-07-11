@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { getOwnershipHistory, type Device } from '@/api/devices'
+import { getOwnershipHistory, type Device, type OwnershipHistory } from '@/api/devices'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
@@ -17,11 +17,13 @@ interface OwnershipHistoryModalProps {
 }
 
 export function OwnershipHistoryModal({ device, open, onOpenChange }: OwnershipHistoryModalProps) {
-  const { data: history = [], isLoading } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ['ownership-history', device.id],
     queryFn: () => getOwnershipHistory(device.id),
     enabled: open,
   })
+  const history: OwnershipHistory[] = data?.results ?? []
+  const hasMore = data?.has_more ?? false
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -67,7 +69,7 @@ export function OwnershipHistoryModal({ device, open, onOpenChange }: OwnershipH
               </div>
             ))}
             <p className="text-xs text-muted-foreground pt-1 pl-10">
-              {history.length === 50
+              {hasMore
                 ? 'Most recent 50 entries shown'
                 : `${history.length} ${history.length === 1 ? 'entry' : 'entries'}`}
             </p>
