@@ -234,8 +234,11 @@ id          int   PK auto
 name        str
 email       str   unique — identity anchor
 team        FK    → Team.id (PROTECT, NOT NULL)
-user_type   enum  admin | member
+user_type   enum  admin | member | guest
 ```
+- `guest` — read-only; can log in and view the device table and expand panels; cannot perform any
+  write operation (reserve, release, edit, delete, fetch status, force-assign, export/import);
+  all action controls hidden in the UI; `/users` page inaccessible (redirects to `/devices`)
 
 ### Vault  *(per-user ZedCloud bearer tokens)*
 ```
@@ -505,6 +508,9 @@ STATUS_MAP = {
 - `UserContext` checks `localStorage` on mount; if empty → redirect to `/login`
 - Admin-only nav links (e.g. Users page) hidden for non-admin users; direct URL access returns a
   403-style message
+- Guest users: `/devices` is the only accessible route; `/users` and any other route redirects to
+  `/devices`; all action buttons (Reserve, Release, Edit, Delete, Fetch Status, Force Assign,
+  Export/Import) are hidden; the Actions column (3-dot menu) is not rendered
 
 **SSO upgrade path:**
 - Gateway/proxy injects a verified `X-User-Email` header from JWT claim and strips the client-
@@ -694,20 +700,20 @@ Edit Device modal. The Comment column in the primary row already surfaces the ne
 Release is **owner-only** — admins cannot release a device they do not own (same restriction as members).
 The Release button uses red outline styling (`border-destructive/50 text-destructive`) to visually distinguish it from the blue outline Reserve button. Available devices show a plain green "Available" label above the Reserve button in place of the owner avatar.
 
-| Scenario | Member sees | Admin sees |
-|---|---|---|
-| Device owned by logged-in user | Red outline "Release" button | Red outline "Release" button |
-| Device owned by someone else | Green "Available" text + blue outline "Reserve" | Green "Available" text + blue outline "Reserve" |
-| Device available (no owner) | Green "Available" text + blue outline "Reserve" | Green "Available" text + blue outline "Reserve" |
-| Device condition = `dedicated` | Team name chip (e.g. "ST") — no Reserve button | Team name chip — no Reserve button |
+| Scenario | Guest sees | Member sees | Admin sees |
+|---|---|---|---|
+| Device owned by logged-in user | Owner name only — no button | Red outline "Release" button | Red outline "Release" button |
+| Device owned by someone else | Owner name only — no button | Green "Available" text + blue outline "Reserve" | Green "Available" text + blue outline "Reserve" |
+| Device available (no owner) | Green "Available" text — no button | Green "Available" text + blue outline "Reserve" | Green "Available" text + blue outline "Reserve" |
+| Device condition = `dedicated` | Team name chip — no button | Team name chip (e.g. "ST") — no Reserve button | Team name chip — no Reserve button |
 
 ### Actions Column (3-dot menu)
-| Scenario | Member sees | Admin sees |
-|---|---|---|
-| Own device | Edit | Edit, Delete |
-| Someone else's device | Edit | Edit, Force Assign, Delete |
-| Available device | Edit | Edit, Delete |
-| Someone else's device with pending request | Edit | Edit, Force Assign, Delete |
+| Scenario | Guest sees | Member sees | Admin sees |
+|---|---|---|---|
+| Own device | — (column hidden) | Edit | Edit, Delete |
+| Someone else's device | — (column hidden) | Edit | Edit, Force Assign, Delete |
+| Available device | — (column hidden) | Edit | Edit, Delete |
+| Someone else's device with pending request | — (column hidden) | Edit | Edit, Force Assign, Delete |
 
 ### Force Assign Dialog
 - Pre-selects the pending requester (if one exists) with a visible "has a pending request" label
@@ -1161,3 +1167,4 @@ device-managing-portal/
 | 55 | Export filename | `holocron_device_inventory_{YYYYMMDD_HHMMSS}.{ext}`; post-download toast informs user that full inventory was exported regardless of current filters |
 | 56 | Available label in Owner column | Available devices show a plain green "Available" text in the Owner column (no pill/badge) above the Reserve button; replaces the empty owner slot |
 | 57 | Reserve button unified | Single Reserve button definition for both direct-reserve and request-reserve flows (blue outline style); backend decides whether to transfer immediately or create a pending request based on device state |
+| 58 | Guest user type | Third user_type value (`guest`) added alongside admin and member; guests can view the device table and expand panels only; all write operations hidden in UI and rejected 403 by backend; Users page inaccessible; Actions column not rendered for guests |
