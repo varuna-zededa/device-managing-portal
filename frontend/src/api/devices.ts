@@ -24,9 +24,9 @@ export interface Device {
   is_available: boolean
   pending_requester_email: string | null
   pending_requester_name: string | null
-  last_comment_text: string | null
-  last_comment_by: string | null
-  last_comment_at: string | null
+  last_purpose_text: string | null
+  last_purpose_by: string | null
+  last_purpose_at: string | null
   created_at: string
   updated_at: string
 }
@@ -39,7 +39,7 @@ export interface DevicesQueryParams {
   condition?: string
 }
 
-export interface DeviceComment {
+export interface DevicePurpose {
   id: number
   device: number
   author_email: string
@@ -104,13 +104,13 @@ export async function fetchDeviceStatus(
   return res.data
 }
 
-export async function getDeviceComments(id: number): Promise<DeviceComment[]> {
-  const res = await client.get(`/devices/${id}/comments/`)
+export async function getDevicePurpose(id: number): Promise<DevicePurpose[]> {
+  const res = await client.get(`/devices/${id}/purpose/`)
   return res.data
 }
 
-export async function addDeviceComment(id: number, text: string): Promise<DeviceComment> {
-  const res = await client.post(`/devices/${id}/comments/`, { text })
+export async function setDevicePurpose(id: number, text: string): Promise<DevicePurpose> {
+  const res = await client.post(`/devices/${id}/purpose/`, { text })
   return res.data
 }
 

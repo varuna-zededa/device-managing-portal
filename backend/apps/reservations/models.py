@@ -20,7 +20,7 @@ class ReservationRequest(models.Model):
         return f'{self.device} <- {self.requester_email}'
 
 
-class DeviceComment(models.Model):
+class DevicePurpose(models.Model):
     device = models.ForeignKey('devices.Device', on_delete=models.CASCADE)
     author_email = models.CharField(max_length=200)
     text = models.TextField()
