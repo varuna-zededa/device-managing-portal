@@ -82,6 +82,12 @@ Each version follows the same 5-step cycle before shipping:
 
 **Scope:**
 
+- **Guest user type** — read-only access to the device index only; can see the full device table
+  and expand panels but cannot reserve, release, edit, delete, fetch status, force-assign, or
+  export; all action controls hidden in the UI; write endpoints reject guests with 403
+- **OpenAPI + Swagger** — auto-generate OpenAPI 3.0 spec from DRF views using `drf-spectacular`;
+  serve interactive Swagger UI at `/api/docs/`; serves as the authoritative API contract and
+  prerequisite for a future MCP server
 - **Bulk actions** (admin) — release or force-assign multiple devices at once from the table
 - **Device tags** — free-form labels for ad-hoc grouping beyond the fixed Team/Lab enums
 - **Device edit history** — field-level audit log for all device record changes; useful for
@@ -171,6 +177,9 @@ Each version follows the same 5-step cycle before shipping:
   `ThemeProvider` already exist and are wired; Tailwind v4 CSS variables already carry `dark:`
   support; work is an audit of `dark:` classes on extracted components + `ThemeProvider` wrapper,
   not a build from scratch
+- **MCP server** *(on popular request only)* — expose portal operations (list devices, reserve,
+  release, fetch status) as Claude Code MCP tools; built on the V2 OpenAPI spec and V3 SSO auth;
+  only pursued if the team actively requests it after adopting the portal
 
 **Cycle:**
 - [ ] Wireframes
