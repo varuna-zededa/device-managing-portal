@@ -91,6 +91,9 @@ if not EMAIL_HOST:
 
 PORTAL_BASE_URL = env('PORTAL_BASE_URL', default='http://localhost:80')
 
+DEVICE_LIST_REFRESH_MS = env.int('DEVICE_LIST_REFRESH_MS', default=300_000)   # 5 min
+NOTIFICATION_REFRESH_MS = env.int('NOTIFICATION_REFRESH_MS', default=30_000)  # 30 sec
+
 if DEBUG:
     CORS_ALLOW_ALL_ORIGINS = True
 else:
