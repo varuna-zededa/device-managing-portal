@@ -34,7 +34,7 @@ It contains exact file paths, code patterns, and checklists for every common imp
 
 ### Labs and Teams — DB-backed, never hardcoded
 - `Lab` model in `apps/devices/models.py`; `Team` model in `apps/users/models.py`
-- `GET /api/choices/` queries these tables at runtime — do not hardcode lab or team lists anywhere
+- `GET /api/v1/choices/` queries these tables at runtime — do not hardcode lab or team lists anywhere
 - Add new labs/teams via Django admin; no code change required
 - Pre-seeded labs: Bangalore Lab, Bangalore Office Space, Berlin Lab, SanJose Lab, CoreSite Lab, Home Lab
 - Pre-seeded teams: EVE, PLATFORM, ST
@@ -84,6 +84,14 @@ It contains exact file paths, code patterns, and checklists for every common imp
 
 ---
 
+## Device Purpose
+- Denormalized cache fields on Device: `last_purpose_text`, `last_purpose_by`, `last_purpose_at` — **not** `last_comment_*`
+- API endpoint: `POST /api/v1/devices/{id}/purpose/` — **not** `/comments/`
+- Model is `DevicePurpose` in `apps/reservations/models.py` — **not** `DeviceComment`
+- Clearing (empty text POST) requires the device owner or an admin — enforced in `DevicePurposeView.post`
+
+---
+
 ## Never do
 
 - Do **not** hardcode lab names or team names as enums or string lists in frontend or backend
@@ -98,3 +106,5 @@ It contains exact file paths, code patterns, and checklists for every common imp
 - Do **not** read `request.META.get('HTTP_X_USER_EMAIL')` directly in views — use `get_user_email(request)` from `utils.permissions`
 - Do **not** omit `permission_classes` on any view — `DEFAULT_PERMISSION_CLASSES = []`, so undecorated views are fully public
 - Do **not** use `?format=` query param for export — use `?fmt=` to avoid DRF content-negotiation 404
+- Do **not** reference `last_comment_text`, `DeviceComment`, or `/comments/` — the model, fields, and endpoint were renamed to `DevicePurpose`, `last_purpose_*`, and `/purpose/`
+- Do **not** allow any portal user to clear device purpose — check `is_admin(email) or device.owner_email == email` first

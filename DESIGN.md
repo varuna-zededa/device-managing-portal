@@ -196,16 +196,14 @@ device_connectivity  json   nullable; JSONField — one entry per IPv4 address o
 status               str      nullable; "Unknown" after 404
 status_fetched_at    datetime nullable; timestamp of last successful ZedCloud status fetch; displayed as relative time in Status tooltip
 reserved_at          datetime nullable; timestamp when the current owner acquired the device (set on reserve / force-assign / approval; cleared on release); backfilled from OwnershipHistory on migration
-last_comment_text    str      nullable; denormalized cache of newest DeviceComment (for list view — avoids N+1)
-last_comment_by      str      nullable; author name of newest comment
-last_comment_at      datetime nullable
+last_purpose_text    str      nullable; denormalized cache of newest DevicePurpose entry (for list view — avoids N+1)
+last_purpose_by      str      nullable; author email of newest purpose entry
+last_purpose_at      datetime nullable
 created_at           datetime
 updated_at           datetime
 ```
 
-**Derived (not stored):** `is_available = (owner_email IS NULL) AND condition NOT IN (out_of_order,
-temporarily_leased, dedicated, missing)`. Used by both the Available/Reserved filter and the status badge — a
-device with a blocking condition is **never** "Available" even though it has no owner.
+**Derived (not stored):** `is_available = (owner_email IS NULL) AND condition NOT IN (out_of_order, temporarily_leased, dedicated, missing)`. Used by both the Available/Reserved filter and the status badge — a device with a blocking condition is **never** "Available" even though it has no owner.
 
 **Required on creation:** name, serial_number, model, lab
 **Optional on creation:** description, cluster_id, cluster_device_name, team, owner_email,
@@ -262,19 +260,19 @@ token            str      unique random 32-byte hex token (for email approve/rej
 ```
 **Constraint:** at most one `status=pending` request per device at a time.
 
-### DeviceComment
+### DevicePurpose
 ```
 id            int      PK auto
 device_id     int      FK → Device.id
-author_email  str      FK → User.email — who set the comment
-text          str      the purpose/comment text
+author_email  str      FK → User.email — who set the purpose
+text          str      the purpose text
 created_at    datetime
 ```
-- Stores the last **10** comments per device (oldest pruned automatically on write)
+- Stores the last **10** purpose entries per device (oldest pruned automatically on write)
 - Cleared entirely when ownership changes (reserve, release, force-assign, auto-approve)
-- Any logged-in user can add a comment, not just the owner
-- On write/clear, also update the denormalized `Device.last_comment_*` cache fields so the device
-  list (which shows the newest comment per row) needs no per-row join
+- Any logged-in user can set the purpose; **clearing** (posting empty text) requires the device owner or an admin
+- On write/clear, also update the denormalized `Device.last_purpose_*` cache fields so the device
+  list (which shows the newest purpose per row) needs no per-row join
 
 ### OwnershipHistory
 ```
@@ -313,7 +311,7 @@ POST /api/v1/models            any user; body: {name, customer_partner_name?}
 GET    /api/v1/devices          ?q=<search>&available=<true|false|all>
                                 &team=<ST|EVE|PLATFORM>&lab=<lab name>
                                 &condition=<normal|out_of_order|needs_repair|temporarily_leased|dedicated>
-                                q matches: name, model, cluster, owner name, eve_version, comment text,
+                                q matches: name, model, cluster, owner name, eve_version, purpose text,
                                 customer_partner_name (via device model)
                                 team / lab / condition are exact-match filter selects (combinable)
 POST   /api/v1/devices          add; body: DeviceCreate; duplicate serial_number → 400 "Serial number already exists"
@@ -328,16 +326,23 @@ POST   /api/v1/devices/{id}/status           body: {bearer_token}
                                              saves bearer_token to Vault, calls ZedCloud, updates device
 ```
 
-### Device Comments
+### Device Purpose
 ```
-GET  /api/v1/devices/{id}/comments          list last 10 comments, newest first; any logged-in user
-POST /api/v1/devices/{id}/comments          body: {text}; author from X-User-Email
-                                             auto-prunes to 10 entries after insert
+GET  /api/v1/devices/{id}/purpose/           list last 10 purpose entries, newest first; any logged-in user
+POST /api/v1/devices/{id}/purpose/           body: {text}; author from X-User-Email
+                                             empty text = clear (owner or admin only); auto-prunes to 10 entries after insert
 ```
 
 ### Device Ownership History
 ```
-GET  /api/v1/devices/{id}/ownership-history   admin only; newest 50 records, newest first
+GET  /api/v1/devices/{id}/ownership-history   admin only; returns {results: [...], has_more: bool}; newest 50 records, newest first
+```
+
+### Frontend Config
+```
+GET  /api/v1/config/   public; returns {device_list_refresh_ms: int, notification_refresh_ms: int}
+                        values read from DEVICE_LIST_REFRESH_MS / NOTIFICATION_REFRESH_MS env vars
+                        defaults: 300000 (5 min) and 30000 (30 sec); frontend caches with staleTime: Infinity
 ```
 
 ### Choices
@@ -562,7 +567,7 @@ Admin force-assign (bypasses approval):
 
 All ownership changes (reserve, release, force-assign, auto-approve, expiry with no change):
   → Append row to OwnershipHistory
-  → Clear all DeviceComment rows for that device on any transfer of ownership
+  → Clear all DevicePurpose rows for that device on any transfer of ownership
 ```
 
 ### Notifications
@@ -615,7 +620,7 @@ current filtered set:
 ### Search & Filter
 - **Single search box** — debounced 300ms — placeholder lists all searchable fields; matches
   against: Name, Model, Customer/Partner name, Cluster name, Owner (name), EVE version,
-  **last comment text** (case-insensitive partial match)
+  **last purpose text** (case-insensitive partial match)
 - **Available / Reserved / All** — chip toggle (uses the derived `is_available` rule, so blocking-
   condition devices never count as Available)
 - **Condition / Lab / Team** — three exact-match filter selects (in this order) beside the chip toggle;
@@ -640,7 +645,7 @@ record on demand.
 | Lab | Lab location; always set |
 | Owner | Green "Available" text for available devices; avatar + name for owned devices; blue outline Reserve button for all non-owner users; red outline Release button for owner; "UNAVAILABLE" badge for blocking conditions; hover tooltip shows "Reserved X days ago" |
 | Status | Color-coded badge (see Status Badge Colors below) + **"Refresh"** link below; hover tooltip shows "Last refresh: X mins ago" |
-| Comment / Purpose | Newest comment (2-line truncated) from denormalized cache; "—" if none |
+| Purpose | Newest purpose entry (2-line truncated) from denormalized cache; "—" if none; click to edit inline |
 | Actions | 3-dot dropdown only — fixed last; not reorderable |
 
 **Column reordering:** All columns between chevron and Actions can be dragged by their header grip
@@ -683,9 +688,9 @@ being hidden. This makes the panel predictable — the same layout every time re
 
 Fields **not** in the expand panel (they have their own primary-row columns): Serial No, Team, Lab.
 Condition is communicated by the row's left-border color and the Name-column badge; change it via
-Edit Device modal. The Comment column in the primary row already surfaces the newest comment.
+Edit Device modal. The Purpose column in the primary row already surfaces the newest purpose entry.
 
-**Sortable columns:** All columns except Comment. Sort key is the primary value (e.g. Owner sorts by owner name/email, Status sorts by status string). Empty values always sort last regardless of direction.
+**Sortable columns:** All columns except Purpose. Sort key is the primary value (e.g. Owner sorts by owner name/email, Status sorts by status string). Empty values always sort last regardless of direction.
 
 ### List states (wireframed in `states.html`)
 | State | Behavior |
@@ -783,15 +788,17 @@ resolved.
 
 ---
 
-## Device Comments (Purpose / Usage)
+## Device Purpose
 
-- Any logged-in user can set the purpose/comment on any device at any time
-- Editable via the **Edit Device** dialog — a textarea with a "Save" button and a collapsible
-  history panel below it
-- On save: new `DeviceComment` row inserted; oldest row pruned if count exceeds 10
-- History shows: comment text + author name + timestamp, newest first
-- **On any ownership change** (reserve, release, force-assign, auto-approve): all comments for the
-  device are deleted — the slate is cleared for the new owner
+- Any logged-in user can set the purpose on any device at any time
+- Editable **inline** in the device table — click the Purpose cell to open a textarea; Enter saves,
+  Escape or blur cancels; an × button clears the field
+- Clearing (posting empty text) is restricted to the **current device owner or an admin**
+- On save: new `DevicePurpose` row inserted; oldest row pruned if count exceeds 10 per device
+- **On any ownership change** (reserve, release, force-assign, auto-approve): all `DevicePurpose`
+  rows for the device are deleted — the slate is cleared for the new owner
+- Manual clear via the UI nulls only the `last_purpose_*` cache fields on Device; history rows are
+  only bulk-deleted on ownership transfers
 
 ---
 
@@ -823,9 +830,9 @@ GET /api/v1/admin/export?fmt=<csv|json>
 **Exported fields:** id, name, serial_number, description, cluster (name), cluster_device_name,
 model (name), customer_partner_name (from model), team, owner_email, lab, location_detail,
 condition, idrac_ip, idrac_username, eve_version, device_connectivity, status,
-last_comment_text, created_at, updated_at
+last_purpose_text, created_at, updated_at
 
-**Not exported:** idrac_password_enc, Vault bearer tokens, ownership history, device comments
+**Not exported:** idrac_password_enc, Vault bearer tokens, ownership history, device purpose history
 
 ### Import template
 ```
@@ -848,7 +855,7 @@ Body: file=<csv or json>, mode=<create_only|update_or_create>
 - `create_only` — inserts new rows only; silently skips rows where serial_number already exists
 - `update_or_create` — upserts by serial_number; updates matching rows, inserts new ones
 - Returns a summary: `{created: N, updated: N, skipped: N, errors: [{row, reason}]}`
-- Import does **not** touch ownership history or device comments — device fields only
+- Import does **not** touch ownership history or device purpose history — device fields only
 - Encrypted fields (idrac_password, bearer tokens) cannot be imported; must be set manually after import
 - **Required import columns:** name, serial_number, model (name), lab
 - Unknown model names → auto-create a new DeviceModel; unknown cluster names → auto-create a new Cluster with zcloud. host prefix; lab and team must already exist — unknown values are rejected with a per-row validation error
@@ -902,9 +909,11 @@ GET /api/v1/admin/latency/
 ---
 
 ## Auto-Refresh
-- Device table polls `GET /api/v1/devices` every **15 minutes** while the browser tab is active
-- Uses `setInterval` with a visibility check (`document.visibilityState === 'visible'`) — pauses
-  when tab is hidden
+- Device table polls `GET /api/v1/devices` every **5 minutes** (default) while the browser tab is active
+- Notification panel polls every **30 seconds** (default)
+- Both intervals are configurable via `DEVICE_LIST_REFRESH_MS` and `NOTIFICATION_REFRESH_MS` env vars;
+  served to the frontend at startup via `GET /api/v1/config/`
+- Polling pauses when the tab is hidden (`refetchIntervalInBackground: false`)
 
 ---
 
@@ -1122,10 +1131,10 @@ device-managing-portal/
 | 10 | Update permissions | Any user (for device fields); any user with token (for status) |
 | 11 | 404 from ZedCloud | Clear eve_version, device_connectivity, status → "Unknown" |
 | 12 | 403 from ZedCloud | Re-prompt in dialog; do not update Vault |
-| 13 | Auto-refresh | Every 15 minutes; pauses when tab is hidden |
+| 13 | Auto-refresh | Device list every 5 min, notifications every 30 sec (defaults); configurable via DEVICE_LIST_REFRESH_MS / NOTIFICATION_REFRESH_MS env vars via GET /api/v1/config/ |
 | 14 | Search UX | Single debounced (300ms) text box; Team/Lab/Condition are separate filter selects |
 | 15 | Availability filter | Available / Reserved / All chip toggle |
-| 16 | Sortable columns | All columns except Comment; empty values always sort last |
+| 16 | Sortable columns | All columns except Purpose; empty values always sort last |
 | 17 | Required fields | Name, Serial Number, Model, Lab — Cluster and Name-in-Cluster are optional (only needed for ZedCloud status fetch) |
 | 18 | Cluster field | Dropdown (short name); backed by Cluster table in DB |
 | 19 | Cluster list management | Any user can add new cluster via UI; stored in DB |
@@ -1138,12 +1147,12 @@ device-managing-portal/
 | 26 | User email input | Prefix only; "@zededa.com" fixed suffix in UI; stored as full email |
 | 28 | Team values | DB-backed Team model; pre-seeded ST/EVE/PLATFORM; add new teams via Django admin; all dropdowns refresh on next page load |
 | 27 | Admin-only pages | Users page (`/users`) visible in nav only to Admin users |
-| 29 | Device comments | Any user can write; last 10 kept; cleared on ownership transfer |
+| 29 | Device purpose | Any user can write; clearing requires owner or admin; last 10 entries kept; bulk-deleted on ownership transfer |
 | 30 | Ownership history | Append-only; never deleted; admin-only via API and UI |
 | 31 | Device condition | Enum: normal / out_of_order / needs_repair / temporarily_leased / dedicated / missing; changed via Edit Device modal; values stored as snake_case; displayed as title-case in UI |
 | 34 | Table layout | Compact primary row + chevron-expand panel; secondary fields in expand panel |
 | 35 | Device list filters | Available/Reserved/All chip + Team/Lab/Condition selects, server-side |
-| 36 | Latest comment in list | Denormalized on Device (last_comment_text/by/at) to avoid N+1 join |
+| 36 | Latest purpose in list | Denormalized on Device (last_purpose_text/by/at) to avoid N+1 join |
 | 37 | "Available" semantics | owner is null AND condition not in (out_of_order, temporarily_leased, dedicated, missing) |
 | 38 | Viewport scope | Desktop-first; internal workstation tool; responsive/mobile layout out of scope |
 | 39 | List states | Loading, empty, no-results, load-error, stale — wireframed in states.html |

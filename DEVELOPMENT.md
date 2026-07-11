@@ -45,7 +45,8 @@ Django admin (create superuser first): `python manage.py createsuperuser` → `/
 ```
 backend/
 ├── config/settings.py           all settings; reads .env via django-environ
-├── config/urls.py               /api/* routing; /admin/
+│                                DEVICE_LIST_REFRESH_MS / NOTIFICATION_REFRESH_MS — auto-refresh intervals
+├── config/urls.py               /api/* routing; /admin/; VersionView; ConfigView (GET /api/v1/config/)
 ├── apps/clusters/               Cluster model + CRUD
 ├── apps/device_models/          DeviceModel (name + customer_partner_name)
 ├── apps/devices/
@@ -331,6 +332,18 @@ if (!isAdmin) return <Navigate to="/devices" replace />
 - [ ] `frontend/src/components/DeviceTable.tsx` — add to `isUnavailable` if it blocks reserve UI
 - [ ] `frontend/src/components/SearchBar.tsx` — add to `CONDITION_LABELS`
 - [ ] Run `makemigrations` + `migrate`
+
+### Device Purpose
+- Model: `apps/reservations/models.py` → `DevicePurpose` (device FK, author_email, text, created_at)
+- Serializer: `apps/reservations/serializers.py` → `DevicePurposeSerializer`
+- View: `apps/devices/views.py` → `DevicePurposeView` at `GET/POST /api/v1/devices/{id}/purpose/`
+- Denormalized cache on Device: `last_purpose_text`, `last_purpose_by`, `last_purpose_at` — updated on every write and cleared on ownership transfer
+- **Clear rule:** POST with empty `text` clears the purpose; only the device owner or an admin may clear — others receive 403
+
+### Frontend config endpoint
+- `GET /api/v1/config/` (public) — returns `{device_list_refresh_ms, notification_refresh_ms}`
+- Frontend fetches at startup in `DevicesPage.tsx` and `NotificationPanel.tsx` with `staleTime: Infinity`
+- Override defaults (`300000` / `30000`) via `DEVICE_LIST_REFRESH_MS` / `NOTIFICATION_REFRESH_MS` in `.env`
 
 ### New Lab or Team
 No code changes. Django admin → Labs (or Teams) → Add.
