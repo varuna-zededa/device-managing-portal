@@ -1,0 +1,328 @@
+import * as React from "react";
+import { cn } from "@/lib/utils";
+import { useColumnResize } from "@/hooks/useColumnResize";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableFooter,
+  TableHead,
+  TableRow,
+  TableCell,
+  TableCaption,
+} from "@/components/ui/table";
+import { TruncatedCell } from "@/components/ui/truncated-cell";
+import { CopyButton } from "@/components/ui/copy-button";
+import { ChevronUp, ChevronDown, ChevronsUpDown, GripVertical } from "lucide-react";
+
+interface ResizableTableContextValue {
+  columnWidths: Record<string, number>;
+  startResize: (columnId: string, startX: number) => void;
+  setColumnWidth: (columnId: string, width: number) => void;
+  beginKeyboardResize: () => void;
+  endKeyboardResize: () => void;
+  registerColumn: (columnId: string, config?: Omit<ColumnConfig, "id">) => void;
+  autoFitColumns: () => void;
+}
+
+const ResizableTableContext = React.createContext<ResizableTableContextValue | null>(null);
+
+const useResizableTable = () => {
+  const context = React.useContext(ResizableTableContext);
+  if (!context) {
+    throw new Error("Resizable table components must be used within a ResizableTable");
+  }
+  return context;
+};
+
+interface ColumnConfig {
+  id: string;
+  minWidth?: number;
+  defaultWidth?: number;
+}
+
+interface ResizableTableProps extends React.HTMLAttributes<HTMLTableElement> {
+  tableId: string;
+  children: React.ReactNode;
+  persistWidths?: boolean;
+  autoFitToContainer?: boolean;
+  onAutoFitReady?: () => void;
+  leadingColumns?: number;
+  externalColumnOrder?: string[];
+}
+
+const ResizableTable = React.forwardRef<HTMLTableElement, ResizableTableProps>(
+  ({ className, tableId, children, persistWidths = true, autoFitToContainer = true, onAutoFitReady, leadingColumns = 0, externalColumnOrder, ...props }, ref) => {
+    const [columns, setColumns] = React.useState<ColumnConfig[]>([]);
+    const [columnOrder, setColumnOrder] = React.useState<string[]>([]);
+    const [containerWidth, setContainerWidth] = React.useState(0);
+
+    const containerRef = React.useRef<HTMLDivElement>(null);
+    const keyboardResizingRef = React.useRef(false);
+
+    const { columnWidths, startResize, isResizing, resetWidths, setColumnWidths } = useColumnResize({
+      tableId,
+      columns,
+      persistToStorage: persistWidths,
+    });
+
+    const registerColumn = React.useCallback((columnId: string, config: Omit<ColumnConfig, "id"> = {}) => {
+      setColumns((prev) => {
+        const existing = prev.find((c) => c.id === columnId);
+        if (existing) return prev;
+        const newCol = { id: columnId, ...config };
+        return [...prev, newCol];
+      });
+      setColumnOrder((prev) => {
+        if (prev.includes(columnId)) return prev;
+        return [...prev, columnId];
+      });
+    }, []);
+
+    const setColumnWidth = React.useCallback((columnId: string, width: number) => {
+      const col = columns.find((c) => c.id === columnId);
+      const minWidth = col?.minWidth ?? 30;
+      setColumnWidths((prev) => ({ ...prev, [columnId]: Math.max(minWidth, width) }));
+    }, [columns, setColumnWidths]);
+
+    const beginKeyboardResize = React.useCallback(() => {
+      keyboardResizingRef.current = true;
+    }, []);
+
+    const endKeyboardResize = React.useCallback(() => {
+      keyboardResizingRef.current = false;
+    }, []);
+
+    const autoFitColumns = React.useCallback(() => {
+      if (!containerRef.current || isResizing || keyboardResizingRef.current) return;
+      const totalRegistered = columnOrder.length;
+      if (totalRegistered === 0) return;
+      const cw = containerRef.current.clientWidth;
+      if (cw === 0) return;
+      const fixedCols = leadingColumns;
+      const fixedWidth = columnOrder.slice(0, fixedCols).reduce((sum, id) => sum + (columnWidths[id] ?? 150), 0);
+      const remaining = cw - fixedWidth;
+      const resizableCols = columnOrder.slice(fixedCols);
+      if (resizableCols.length === 0) return;
+      const totalResizable = resizableCols.reduce((sum, id) => sum + (columnWidths[id] ?? 150), 0);
+      if (totalResizable === 0) return;
+      const scale = remaining / totalResizable;
+      const newWidths: Record<string, number> = { ...columnWidths };
+      resizableCols.forEach((id) => {
+        const col = columns.find((c) => c.id === id);
+        const minWidth = col?.minWidth ?? 30;
+        newWidths[id] = Math.max(minWidth, Math.floor((columnWidths[id] ?? 150) * scale));
+      });
+      setColumnWidths(newWidths);
+      onAutoFitReady?.();
+    }, [columnOrder, columnWidths, columns, isResizing, leadingColumns, onAutoFitReady, setColumnWidths]);
+
+    React.useEffect(() => {
+      const el = containerRef.current;
+      if (!el) return;
+      const observer = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          setContainerWidth(entry.contentRect.width);
+        }
+      });
+      observer.observe(el);
+      return () => observer.disconnect();
+    }, []);
+
+    React.useEffect(() => {
+      if (autoFitToContainer && containerWidth > 0 && !isResizing && !keyboardResizingRef.current) {
+        autoFitColumns();
+      }
+    }, [containerWidth]);
+
+    const colGroup = React.useMemo(() => {
+      const order = externalColumnOrder ?? columnOrder;
+      if (order.length === 0) return null;
+      return (
+        <colgroup>
+          {order.map((id, i) => (
+            <col key={id} style={i < leadingColumns ? undefined : { width: columnWidths[id] ?? 150 }} />
+          ))}
+        </colgroup>
+      );
+    }, [externalColumnOrder, columnOrder, columnWidths, leadingColumns]);
+
+    return (
+      <ResizableTableContext.Provider
+        value={{ columnWidths, startResize, setColumnWidth, beginKeyboardResize, endKeyboardResize, registerColumn, autoFitColumns }}
+      >
+        <div ref={containerRef} className="relative w-full overflow-x-auto">
+          <table
+            ref={ref}
+            className={cn("w-full caption-bottom text-sm border-collapse", className)}
+            style={{ borderCollapse: "collapse" }}
+            {...props}
+          >
+            {colGroup}
+            {children}
+          </table>
+        </div>
+      </ResizableTableContext.Provider>
+    );
+  },
+);
+ResizableTable.displayName = "ResizableTable";
+
+interface ResizableTableHeadProps extends React.ThHTMLAttributes<HTMLTableCellElement> {
+  columnId: string;
+  minWidth?: number;
+  defaultWidth?: number;
+  isLast?: boolean;
+  tooltipContent?: React.ReactNode;
+  enableTooltip?: boolean;
+  sortDirection?: "asc" | "desc" | null;
+  onSort?: () => void;
+  sortLeading?: React.ReactNode;
+}
+
+function SortIcon({ sortDirection, onSort }: { sortDirection?: "asc" | "desc" | null; onSort?: () => void }) {
+  if (sortDirection === "asc") return <ChevronUp aria-hidden="true" className="h-3.5 w-3.5 ml-1 shrink-0" />;
+  if (sortDirection === "desc") return <ChevronDown aria-hidden="true" className="h-3.5 w-3.5 ml-1 shrink-0" />;
+  if (onSort) return <ChevronsUpDown aria-hidden="true" className="h-3.5 w-3.5 ml-1 shrink-0 opacity-40" />;
+  return null;
+}
+
+const ResizableTableHead = React.forwardRef<HTMLTableCellElement, ResizableTableHeadProps>(
+  ({ className, columnId, minWidth = 60, defaultWidth = 150, isLast = false, tooltipContent, enableTooltip = true, sortDirection, onSort, sortLeading, draggable, children, onClick, ...props }, ref) => {
+    const { columnWidths, startResize, registerColumn } = useResizableTable();
+
+    React.useEffect(() => {
+      registerColumn(columnId, { minWidth, defaultWidth });
+    }, [columnId, minWidth, defaultWidth, registerColumn]);
+
+    const width = columnWidths[columnId] ?? defaultWidth;
+
+    return (
+      <th
+        ref={ref}
+        scope="col"
+        draggable={draggable}
+        className={cn(
+          "relative h-12 px-4 text-left align-middle font-medium text-muted-foreground select-none",
+          onSort && "cursor-pointer hover:text-foreground",
+          draggable && "cursor-grab active:cursor-grabbing",
+          className,
+        )}
+        style={{ width, overflow: "hidden" }}
+        onClick={onSort ? (e) => { e.stopPropagation(); onSort(); } : onClick}
+        {...props}
+      >
+        <div className="flex items-center min-w-0">
+          {draggable && (
+            <GripVertical aria-hidden="true" className="w-3 h-3 mr-1 text-muted-foreground/40 shrink-0 pointer-events-none" />
+          )}
+          {sortLeading}
+          {onSort ? (
+            <button
+              type="button"
+              className="flex items-center min-w-0 truncate text-inherit"
+              tabIndex={-1}
+              onClick={(e) => { e.stopPropagation(); onSort(); }}
+            >
+              <span className="truncate">{children}</span>
+              <SortIcon sortDirection={sortDirection} onSort={onSort} />
+            </button>
+          ) : (
+            <span className="truncate">{children}</span>
+          )}
+        </div>
+        {!isLast && (
+          <div
+            draggable={false}
+            className="resize-handle"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              startResize(columnId, e.clientX);
+            }}
+          />
+        )}
+      </th>
+    );
+  },
+);
+ResizableTableHead.displayName = "ResizableTableHead";
+
+function extractText(children: React.ReactNode): string {
+  if (typeof children === "string") return children;
+  if (typeof children === "number") return String(children);
+  if (Array.isArray(children)) return children.map(extractText).join("");
+  if (React.isValidElement(children)) {
+    const props = children.props as { children?: React.ReactNode };
+    return extractText(props.children);
+  }
+  return "";
+}
+
+const COPYABLE_COLUMNS = new Set([
+  "name", "title", "description", "serialNumber", "eveVersion",
+  "location", "hardwareModel", "fqdn", "path", "region", "subnet",
+  "gateway", "domain", "dns", "url", "version", "model",
+  "id", "uuid", "email", "username",
+]);
+
+interface ResizableTableCellProps extends React.TdHTMLAttributes<HTMLTableCellElement> {
+  columnId: string;
+  truncate?: boolean;
+  tooltipContent?: React.ReactNode;
+  copyValue?: string;
+}
+
+const ResizableTableCell = React.forwardRef<HTMLTableCellElement, ResizableTableCellProps>(
+  ({ className, columnId, children, truncate = true, tooltipContent, copyValue, ...props }, ref) => {
+    const shouldCopy = copyValue !== undefined || COPYABLE_COLUMNS.has(columnId);
+    const textForCopy = copyValue ?? (shouldCopy ? extractText(children) : "");
+    const showCopy = shouldCopy && textForCopy.length > 0 && textForCopy !== "—" && textForCopy !== "-";
+
+    return (
+      <td
+        ref={ref}
+        className={cn("p-4 align-middle [&:has([role=checkbox])]:pr-0 group/cell", className)}
+        style={{ overflow: "hidden", maxWidth: 0 }}
+        {...props}
+      >
+        {truncate ? (
+          <div className="flex items-center gap-1 min-w-0">
+            <TruncatedCell tooltipContent={tooltipContent} className="truncate flex-1 min-w-0" maxWidth={400}>
+              {children}
+            </TruncatedCell>
+            {showCopy && (
+              <CopyButton
+                value={textForCopy}
+                className="opacity-0 group-hover/cell:opacity-100 transition-opacity"
+              />
+            )}
+          </div>
+        ) : (
+          children
+        )}
+      </td>
+    );
+  },
+);
+ResizableTableCell.displayName = "ResizableTableCell";
+
+const useAutoFitColumns = () => {
+  const context = React.useContext(ResizableTableContext);
+  return context?.autoFitColumns ?? null;
+};
+
+export {
+  ResizableTable,
+  ResizableTableHead,
+  ResizableTableCell,
+  useAutoFitColumns,
+  TableHeader,
+  TableBody,
+  TableFooter,
+  TableRow,
+  TableCaption,
+  Table,
+  TableHead,
+  TableCell,
+};

@@ -1,0 +1,72 @@
+name: Bump version on PR merge
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+jobs:
+  bump-version:
+    # Only run when the PR was actually merged, not just closed
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read  # needed for --generate-notes on GitHub Release
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # RELEASE_TOKEN: a PAT with repo write scope, needed when branch protection
+          # does not allow GitHub Actions to bypass required pull requests.
+          # If your branch protection has "Allow github-actions[bot] to bypass",
+          # you can remove RELEASE_TOKEN and the fallback (|| github.token) alone suffices.
+          token: ${{ secrets.RELEASE_TOKEN || github.token }}
+          fetch-depth: 0
+
+      - name: Determine bump type from PR labels
+        id: bump
+        env:
+          LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
+        run: |
+          if echo "$LABELS" | grep -q '"major"'; then
+            BUMP_TYPE=major
+          elif echo "$LABELS" | grep -q '"minor"'; then
+            BUMP_TYPE=minor
+          else
+            # Default to patch — covers both explicit "patch" label and no label
+            BUMP_TYPE=patch
+          fi
+
+          echo "PR labels : $LABELS"
+          echo "Bump type : $BUMP_TYPE"
+
+          chmod +x scripts/bump_version.sh
+          ./scripts/bump_version.sh "$BUMP_TYPE"
+
+          echo "type=$BUMP_TYPE"       >> "$GITHUB_OUTPUT"
+          echo "version=$(cat VERSION)" >> "$GITHUB_OUTPUT"
+
+      - name: Commit, tag, and push
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add VERSION backend/VERSION frontend/package.json
+          git commit -m "chore: bump version to ${{ steps.bump.outputs.version }} [${{ steps.bump.outputs.type }}]"
+
+          git tag -a "v${{ steps.bump.outputs.version }}" \
+                  -m "v${{ steps.bump.outputs.version }}"
+
+          git push origin main
+          git push origin --tags
+
+      - name: Create GitHub Release
+        if: steps.bump.outputs.type == 'major'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
+        run: |
+          gh release create "v${{ steps.bump.outputs.version }}" \
+            --title "v${{ steps.bump.outputs.version }}" \
+            --generate-notes \
+            --latest

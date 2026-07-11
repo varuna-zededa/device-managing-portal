@@ -1,0 +1,22 @@
+services:
+  backend:
+    build: ./backend
+    env_file: .env
+    volumes:
+      - sqlite_data:/app/data
+      - static_files:/app/static
+    expose:
+      - "8000"
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "80:80"
+    volumes:
+      - static_files:/static
+    depends_on:
+      - backend
+
+volumes:
+  sqlite_data:
+  static_files:

@@ -18,9 +18,9 @@ Each version follows the same 5-step cycle before shipping:
 1. **Wireframes** — static HTML mockups covering all new UI surfaces for the version
 2. **Backend implementation details** — finalize API design, data model changes, and any new
    infrastructure decisions; update DESIGN.md
-3. **Team feedback** — share wireframes + implementation details with the team; collect input
-4. **Update** — incorporate feedback into wireframes and DESIGN.md
-5. **Full implementation** — backend + frontend + Docker + seed data
+3. **Frontend + Integration** — build frontend components and wire up backend integration
+4. **Team feedback + Update based on feedback** — share with team; collect input; incorporate into wireframes and DESIGN.md
+5. **Deploy and test** — backend + frontend + Docker + seed data; deploy and validate end-to-end
 
 ---
 
@@ -35,21 +35,24 @@ Each version follows the same 5-step cycle before shipping:
 - Serial number verification on status fetch; silent skip if ZedCloud returns no serial
 - `device_connectivity` JSONField — one entry per IPv4 on any up+uplink interface
 - Name in Cluster as dedicated table column; cluster + cluster_device_name optional
-- Device conditions: `normal · out_of_order · needs_repair · temporarily_leased · dedicated`
+- Device conditions: `normal · out_of_order · needs_repair · temporarily_leased · dedicated · missing`; badge labels shown in title case; values stored as snake_case and normalized on CSV import
+- Summary bar below "Devices" heading: total · available · reserved · online · needs repair · out of order · leased · missing; non-zero counts only for problem states; reflects active filters; hidden during load
+- Lab and Team backed by DB models (Lab, Team); add via Django admin; all dropdowns refresh on next page load — no code changes needed to add new labs or teams
+- All device table columns sortable (except Comment); empty values sort last; Users page columns also sortable
 - `dedicated` condition: team name chip in Owner column; Reserve disabled; blue row
 - Device comments / purpose; ownership history (admin)
 - Notifications: in-app bell (always) + email via SMTP (if configured)
 - Search by customer/partner name; condition filter includes `dedicated`
 - Export / Import CSV & JSON (admin); upsert by serial number; drag-drop UI with preview
-- User management page (admin)
+- User management page (admin): list, add, edit (name/team/role)
 - All 5 table states: loading, empty, no-results, load-error, stale
 
 **Cycle:**
 - [x] Wireframes — see `wireframes/` (index, admin_index, modals, states, confirm, users)
-- [ ] Backend implementation details
-- [ ] Team feedback
-- [ ] Update based on feedback
-- [ ] Full implementation
+- [x] Backend implementation details
+- [ ] Frontend + Integration
+- [ ] Team feedback + Update based on feedback
+- [ ] Deploy and test
 
 **Implementation tasks:**
 - [ ] Backend — Django + DRF: models, migrations, API endpoints, ZedCloud status fetch,
@@ -95,9 +98,9 @@ Each version follows the same 5-step cycle before shipping:
 **Cycle:**
 - [ ] Wireframes
 - [ ] Backend implementation details
-- [ ] Team feedback
-- [ ] Update based on feedback
-- [ ] Full implementation
+- [ ] Frontend + Integration
+- [ ] Team feedback + Update based on feedback
+- [ ] Deploy and test
 
 **Implementation tasks:**
 - Note: `BulkActionBar`, `GlobalSearch`, and `tags-display` are already extracted in v1 —
@@ -118,9 +121,9 @@ Each version follows the same 5-step cycle before shipping:
 **Cycle:**
 - [ ] Wireframes
 - [ ] Backend implementation details
-- [ ] Team feedback
-- [ ] Update based on feedback
-- [ ] Full implementation
+- [ ] Frontend + Integration
+- [ ] Team feedback + Update based on feedback
+- [ ] Deploy and test
 
 > **Note:** Initiate SSO IdP setup with IT/infra during v2 development — client credentials and
 > SAML/OIDC config from the identity provider are needed before v3 can ship. Starting late causes
@@ -148,9 +151,9 @@ Each version follows the same 5-step cycle before shipping:
 **Cycle:**
 - [ ] Wireframes
 - [ ] Backend implementation details
-- [ ] Team feedback
-- [ ] Update based on feedback
-- [ ] Full implementation
+- [ ] Frontend + Integration
+- [ ] Team feedback + Update based on feedback
+- [ ] Deploy and test
 
 **Implementation tasks:**
 
@@ -172,9 +175,9 @@ Each version follows the same 5-step cycle before shipping:
 **Cycle:**
 - [ ] Wireframes
 - [ ] Backend implementation details
-- [ ] Team feedback
-- [ ] Update based on feedback
-- [ ] Full implementation
+- [ ] Frontend + Integration
+- [ ] Team feedback + Update based on feedback
+- [ ] Deploy and test
 
 **Implementation tasks:**
 
@@ -182,9 +185,9 @@ Each version follows the same 5-step cycle before shipping:
 
 ## v1 Design Additions (incorporated into DESIGN.md and wireframes)
 
-- **Serial number verification on status refresh** — ZedCloud response `hardwareInfo.serialNum`
-  compared to `Device.serial_number`; mismatch → reject update, surface error with device name,
-  cluster name, expected serial, actual serial; absent serial → skip silently
+- **Serial number verification on status refresh** — `minfo.serialNumber` (primary) or
+  `hardwareInfo.serialNum` (fallback) compared to `Device.serial_number`; mismatch → reject update,
+  surface error with device name, cluster name, expected serial, actual serial; absent serial → skip silently
 - **`device_connectivity` field** — replaces separate ssh_ips/ssh_macs; JSONField
   `[{ip, mac, interface_name}]` — one entry per IPv4; shown as `interface · mac · ip` in expand panel
 - **Name in Cluster column** — `cluster_device_name` shown as a dedicated column in the primary
@@ -198,4 +201,7 @@ Each version follows the same 5-step cycle before shipping:
   known names: BOBST · SLB · OnLogic · Emmerson · Shell · Toyota
 - **Export / Import (admin only)** — `GET /api/admin/export?format=csv|json` downloads full device
   snapshot; `POST /api/admin/import` upserts by serial_number with `create_only` or
-  `update_or_create` mode; frontend drag-drop picker with 5-row preview and result summary modal
+  `update_or_create` mode; frontend drag-drop picker with 5-row preview and result summary modal;
+  `GET /api/admin/import-template/` serves a ready-to-fill CSV template
+- **Import forgiving parsing** — column headers normalised (strip/lowercase/underscore + alias map);
+  `condition` field value normalised to snake_case on import ("Needs Repair" → `needs_repair`)

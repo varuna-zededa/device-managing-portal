@@ -1,0 +1,14 @@
+changelog:
+  categories:
+    - title: "New features"
+      labels:
+        - minor
+    - title: "Bug fixes & patches"
+      labels:
+        - patch
+    - title: "Other"
+      labels:
+        - "*"
+  exclude:
+    labels:
+      - major  # the shipping PR itself is not a feature entry
