@@ -10,13 +10,14 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.clusters.models import Cluster
+from apps.notifications.models import Notification
 from services.zedcloud import fetch_enterprise_self, ENTERPRISE_STATE_ACTIVE
 from utils.crypto import encrypt
 from utils.permissions import IsAdminPortalUser
 
 from .models import Enterprise
 from .serializers import EnterpriseReadSerializer, EnterpriseUpdateSerializer
-from .sync import sync_enterprise, verify_enterprise_names
+from .sync import apply_candidates, sync_enterprise, verify_enterprise_names, _emit_token_expired
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +67,13 @@ class EnterpriseDetailView(APIView):
                 status=status.HTTP_502_BAD_GATEWAY,
             )
 
+        # If ZedCloud returned no enterprise ID we cannot verify token identity — reject.
+        if not info['zcloud_id']:
+            return Response(
+                {'error': 'ZedCloud did not return an enterprise ID; cannot verify token identity.'},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
         # Enforce enterprise ID match — reject tokens that belong to a different enterprise.
         # Skip the check only if we have never stored a zcloud_id (enterprise was imported
         # before verification ever ran), in which case we store the discovered ID.
@@ -91,18 +99,27 @@ class EnterpriseDetailView(APIView):
         enterprise.bearer_token_enc = encrypt(bearer_token)
         enterprise.name_verified = True
         enterprise.is_active = True  # re-activates if the enterprise was previously inactive
+        update_fields = list(validated.keys()) + ['bearer_token_enc', 'name_verified', 'is_active']
         if info['zcloud_id']:
             enterprise.zcloud_id = info['zcloud_id']
-        enterprise.save()
+            update_fields.append('zcloud_id')
+        enterprise.save(update_fields=update_fields)
 
         # Run a full device sync in the background — this clears last_sync_status='token_expired'
         # and re-includes the enterprise in future hourly sync cycles.
         def _sync_after_token_rotation():
             try:
-                sync_enterprise(enterprise)
+                seen, candidates = sync_enterprise(enterprise)
+                apply_candidates(candidates, timezone.now())
                 enterprise.last_sync_status = 'ok'
                 enterprise.last_sync_error = None
+                Notification.objects.filter(kind='token_expired', enterprise=enterprise).delete()
                 logger.info('Post-token-rotation sync succeeded for enterprise %s', enterprise.name)
+            except httpx.HTTPStatusError as exc:
+                code = exc.response.status_code
+                enterprise.last_sync_status = 'token_expired' if code in (401, 403) else 'error'
+                enterprise.last_sync_error = f'HTTP {code}'
+                logger.warning('Post-token-rotation sync HTTP error for enterprise %s: %s', enterprise.name, exc)
             except Exception as exc:
                 enterprise.last_sync_status = 'error'
                 enterprise.last_sync_error = str(exc)
@@ -119,6 +136,12 @@ class EnterpriseDetailView(APIView):
         enterprise = self._get(pk)
         if not enterprise:
             return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+        from apps.devices.models import Device  # noqa: PLC0415
+        if Device.objects.filter(enterprise=enterprise).exists():
+            return Response(
+                {'error': 'Cannot delete enterprise with linked inventory devices. Unassign devices first.'},
+                status=status.HTTP_409_CONFLICT,
+            )
         enterprise.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -132,13 +155,16 @@ class EnterpriseSyncView(APIView):
         except Enterprise.DoesNotExist:
             return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
         try:
-            sync_enterprise(enterprise)
+            seen, candidates = sync_enterprise(enterprise)
+            apply_candidates(candidates, timezone.now())
             enterprise.last_sync_status = 'ok'
             enterprise.last_sync_error = None
         except httpx.HTTPStatusError as exc:
             code = exc.response.status_code
             enterprise.last_sync_status = 'token_expired' if code in (401, 403) else 'error'
             enterprise.last_sync_error = f'HTTP {code}'
+            if code in (401, 403):
+                _emit_token_expired(enterprise)
         except Exception as exc:
             enterprise.last_sync_status = 'error'
             enterprise.last_sync_error = str(exc)
@@ -227,6 +253,21 @@ class ClusterImportView(APIView):
                 existing = Enterprise.objects.filter(name=ent_name, cluster=cluster).first()
                 if existing:
                     if on_conflict == 'overwrite':
+                        try:
+                            info = fetch_enterprise_self(cluster.host, bearer_token)
+                        except httpx.HTTPStatusError as exc:
+                            errors.append(
+                                f'Token rejected for enterprise "{ent_name}": HTTP {exc.response.status_code}'
+                            )
+                            continue
+                        except httpx.RequestError as exc:
+                            errors.append(f'Cannot reach ZedCloud for enterprise "{ent_name}": {exc}')
+                            continue
+                        if existing.zcloud_id and info['zcloud_id'] and info['zcloud_id'] != existing.zcloud_id:
+                            errors.append(
+                                f'Token for enterprise "{ent_name}" belongs to a different ZedCloud enterprise (ID mismatch)'
+                            )
+                            continue
                         existing.bearer_token_enc = encrypt(bearer_token)
                         existing.name_verified = False  # re-verify against ZedCloud
                         existing.save(update_fields=['bearer_token_enc', 'name_verified'])

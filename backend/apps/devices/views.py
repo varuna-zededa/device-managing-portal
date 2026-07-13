@@ -419,14 +419,12 @@ class DeviceStatusView(APIView):
                 if device_name:
                     device.cluster_device_name = device_name
 
-            device.enterprise = enterprise
-            device.cluster = enterprise.cluster
             device.eve_version = eve_version
             device.device_connectivity = device_connectivity
             device.status = dev_status
             device.status_fetched_at = timezone.now()
             device.save(update_fields=[
-                'enterprise', 'cluster', 'cluster_device_name',
+                'cluster_device_name',
                 'eve_version', 'device_connectivity', 'status', 'status_fetched_at', 'updated_at',
             ])
             return Response(DeviceSerializer(device).data)
@@ -542,7 +540,7 @@ class UntrackedDeviceListView(APIView):
 
 
 class MoveToInventoryView(APIView):
-    permission_classes = [IsPortalUser]
+    permission_classes = [IsAdminPortalUser]
 
     def post(self, request, pk):
         try:

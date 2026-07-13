@@ -62,7 +62,8 @@ class DeviceSerializer(_DeviceValidationMixin, serializers.ModelSerializer):
         read_only_fields = [
             'serial_number', 'created_at', 'updated_at',
             'status', 'status_fetched_at', 'reserved_at',
-            'owner_email', 'enterprise',
+            'owner_email', 'enterprise', 'cluster', 'cluster_device_name',
+            'eve_version', 'device_connectivity',
             'last_purpose_text', 'last_purpose_by', 'last_purpose_at',
         ]
 
