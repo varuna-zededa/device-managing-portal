@@ -76,3 +76,21 @@ def fetch_device_status(
     dev_status: str = STATUS_MAP.get(run_state, 'Unknown')
 
     return eve_version, connectivity if connectivity else None, dev_status
+
+
+def fetch_enterprise_devices(host: str, bearer_token: str) -> list[dict]:
+    """Paginate GET /v1/devices/status and return all device records."""
+    headers = {'Authorization': f'Bearer {bearer_token}'}
+    all_devices: list[dict] = []
+    page_num = 1
+    while True:
+        url = f'https://{host}/v1/devices/status?next.pageSize=200&next.pageNum={page_num}'
+        response = _client.get(url, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+        all_devices.extend(data.get('list', []))
+        total_pages = data.get('next', {}).get('totalPages', 1)
+        if page_num >= total_pages:
+            break
+        page_num += 1
+    return all_devices
