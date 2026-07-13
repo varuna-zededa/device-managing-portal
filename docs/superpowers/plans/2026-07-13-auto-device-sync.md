@@ -298,8 +298,12 @@ git commit -m "feat: add enterprise FK to Device and UntrackedDevice model"
 
 **Interfaces:**
 - Produces: `fetch_enterprise_devices(host: str, bearer_token: str) -> list[dict]`
-- Produces: `sync_enterprise(enterprise) -> None` (single enterprise sync, raises on failure)
+- Produces: `sync_enterprise(enterprise) -> tuple[set[str], list[dict]]` (returns seen serials + candidate dicts; device writes deferred for cross-enterprise conflict resolution)
 - Produces: `sync_all_enterprises() -> None` (called by APScheduler)
+- Produces: `_apply_inventory_candidate(candidate, now) -> None` (writes a single resolved candidate to Device/UntrackedDevice)
+- Produces: `apply_candidates(candidates, now) -> None` (applies candidates directly; used by single-enterprise paths)
+
+> **Note:** Cross-enterprise conflict resolution was implemented in this task (session 2026-07-13). The original design used a `sync_enterprise() -> None` signature with immediate device writes. The implemented approach defers all writes and resolves conflicts using a tier-based run-state priority map (`_RUN_STATE_TIER`) after all enterprises are processed. `RUN_STATE_UNPROVISIONED` and `RUN_STATE_PROVISIONED` are skipped at intake (`_SKIPPED_STATES`). A `SUSPECT` winner marks `needs_repair` only — it does not overwrite other device fields. The boolean flag approach (is_online/is_suspect) was considered and rejected in favour of the tier map.
 
 - [ ] **Step 1: Add `fetch_enterprise_devices` to zedcloud.py**
 

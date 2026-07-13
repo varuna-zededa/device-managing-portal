@@ -140,62 +140,93 @@ Used only when user triggers manual refresh without changing enterprise.
 
 ### Hourly sync algorithm
 
+`sync_enterprise(enterprise) -> tuple[set[str], list[dict]]` processes a single enterprise and returns `(seen_serials, candidates)`. Device writes are deferred to allow cross-enterprise conflict resolution in the caller.
+
+`_SKIPPED_STATES = {'RUN_STATE_UNPROVISIONED', 'RUN_STATE_PROVISIONED'}` — devices in these states are skipped at intake: not added to `seen_serials`, not added to candidates, not upserted into `UntrackedDevice`.
+
 ```python
+_RUN_STATE_TIER = {
+    'RUN_STATE_ONLINE': 1,
+    'RUN_STATE_PREPARING_POWEROFF': 1,
+    'RUN_STATE_PREPARED_POWEROFF': 1,
+    'RUN_STATE_REBOOTING': 2,
+    'RUN_STATE_BOOTING': 2,
+    'RUN_STATE_BASEOS_UPDATING': 2,
+    'RUN_STATE_MAINTENANCE_MODE': 2,
+    'RUN_STATE_POWERING_OFF': 3,
+    'RUN_STATE_OFFLINE': 4,
+    'RUN_STATE_SUSPECT': 5,
+}
+# States not in map → tier 99 (lowest priority)
+
 sync_all_enterprises():
-  seen_serials = set()
+  all_seen_serials = set()
+  all_candidates = {}   # serial -> winning candidate dict
+  exclude_from_missing = set()
 
   for each Enterprise where is_active=True:
+    if enterprise.last_sync_status == 'token_expired':
+      exclude_from_missing.add(enterprise.id)
+      continue  # skip — token is known-expired; do not falsely mark devices missing
+
     try:
-      paginate GET /v1/devices/status (page size 200):
-        for each device in page.list:
-          if minfo.serialNumber == "": skip
+      (seen, candidates) = sync_enterprise(enterprise)
+      all_seen_serials |= seen
 
-          seen_serials.add(minfo.serialNumber)
-          inventory_device = Device.filter(serial_number=minfo.serialNumber).first()
-
-          if inventory_device:
-            update device: status, eve_version, cluster_device_name,
-                           cluster (= enterprise.cluster), enterprise,
-                           device_connectivity, status_fetched_at
-            if inventory_device.condition == 'missing':
-              reset condition to 'normal'  # device reappeared
-
-          else:
-            UntrackedDevice.update_or_create(
-              defaults={name, model, run_state, eve_version,
-                        device_connectivity, last_seen_at},
-              serial_number=minfo.serialNumber, enterprise=enterprise
-            )
-            set first_seen_at only on create  # via `if created:` branch; not in defaults dict
+      # Conflict resolution: for each candidate, keep the one with the lower tier
+      for candidate in candidates:
+        serial = candidate['serial_number']
+        run_state = candidate['run_state']
+        tier = _RUN_STATE_TIER.get(run_state, 99)
+        if serial not in all_candidates:
+          all_candidates[serial] = candidate
+        else:
+          existing_tier = _RUN_STATE_TIER.get(all_candidates[serial]['run_state'], 99)
+          if tier < existing_tier:
+            all_candidates[serial] = candidate
+          # tie-break: first_seen_at (earlier wins) — handled inside sync_enterprise
 
       enterprise.last_sync_status = 'ok'
       enterprise.last_sync_error = None
 
     except HTTP 401 / 403:
       enterprise.last_sync_status = 'token_expired'
+      exclude_from_missing.add(enterprise.id)
       send_immediate_token_expiry_email(enterprise)
       Notification.objects.get_or_create(kind='token_expired', enterprise=enterprise, ...)
 
     except other error:
       enterprise.last_sync_status = 'error'
       enterprise.last_sync_error = str(exception)
+      exclude_from_missing.add(enterprise.id)
       # no notification record — transient failures go to nightly email only
 
     finally:
       enterprise.last_sync_at = now()
       enterprise.save()
 
+  # Apply phase: write winning candidates to inventory / UntrackedDevice.
+  # SUSPECT winner: only mark condition='needs_repair' on condition='normal' devices;
+  # do NOT update eve_version, enterprise, cluster, connectivity, or other fields.
+  apply_candidates(all_candidates.values(), now)
+
   # Mark MISSING — only devices that were previously tracked and not seen this cycle.
-  # Guard: enterprises that errored or returned zero devices do NOT contribute to seen_serials,
-  # so their devices are excluded from this update to prevent false positives.
-  # Only enterprises that completed successfully (status='ok') add to seen_serials.
+  # Guard: enterprises that errored, had token_expired, or returned zero devices do NOT
+  # contribute to seen_serials — their devices are excluded from this update.
   Device.filter(
     enterprise__isnull=False,
     condition='normal'
   ).exclude(
-    serial_number__in=seen_serials
+    serial_number__in=all_seen_serials
+  ).exclude(
+    enterprise_id__in=exclude_from_missing
   ).update(condition='missing')
 ```
+
+**Token rotation** (`EnterpriseDetailView.patch()`):
+- After updating bearer token: calls `fetch_enterprise_self()` and verifies `zcloud_id` match — rejects tokens belonging to a different enterprise
+- Re-activates `is_active=True` if ZedCloud returns ACTIVE state
+- Runs background `sync_enterprise()` + `apply_candidates()` to clear `last_sync_status='token_expired'` immediately after rotation
 
 ### Nightly digest email (midnight)
 
