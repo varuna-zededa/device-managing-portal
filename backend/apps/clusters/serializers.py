@@ -8,10 +8,11 @@ _HOST_RE = re.compile(r'^zcloud\.[a-z0-9][a-z0-9-]*\.zededa\.(net|dev)$')
 
 class ClusterSerializer(serializers.ModelSerializer):
     enterprises = EnterpriseReadSerializer(many=True, read_only=True)
+    device_count = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Cluster
-        fields = ['id', 'name', 'host', 'enterprises']
+        fields = ['id', 'name', 'host', 'enterprises', 'device_count']
 
     def validate_name(self, value):
         if not (value or '').strip():

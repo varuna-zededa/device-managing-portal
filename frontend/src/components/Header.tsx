@@ -31,9 +31,9 @@ export function Header() {
 
   const navItems = [
     { to: '/devices', label: 'Devices' },
-    { to: '/users', label: 'Users' },
-    { to: '/untracked-devices', label: 'Untracked' },
+    { to: '/untracked-devices', label: 'Untracked Devices' },
     { to: '/cluster-enterprises', label: 'Clusters & Enterprises' },
+    { to: '/users', label: 'Users' },
   ]
 
   return (
