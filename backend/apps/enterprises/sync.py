@@ -5,6 +5,7 @@ from django.utils import timezone
 
 from services.zedcloud import STATUS_MAP, fetch_enterprise_devices
 from utils.crypto import decrypt
+from utils.email import send_token_expiry_alert
 
 logger = logging.getLogger(__name__)
 
@@ -114,12 +115,7 @@ def sync_all_enterprises() -> None:
             if code in (401, 403):
                 enterprise.last_sync_status = 'token_expired'
                 enterprise.last_sync_error = f'HTTP {code}'
-                # TODO(task-4): send_token_expiry_alert — import here once utils/email.py exposes it
-                try:
-                    from utils.email import send_token_expiry_alert  # noqa: PLC0415
-                    send_token_expiry_alert(enterprise)
-                except ImportError:
-                    pass
+                send_token_expiry_alert(enterprise)
                 Notification.objects.create(
                     kind='token_expired',
                     title=f'Token expired — {enterprise.name} on {enterprise.cluster.name}',
