@@ -38,7 +38,10 @@ def sync_enterprise(enterprise) -> set[str]:
     now = timezone.now()
 
     for d in raw_devices:
-        serial = d.get('minfo', {}).get('serialNumber', '')
+        serial = (
+            d.get('minfo', {}).get('serialNumber', '')
+            or d.get('hardwareInfo', {}).get('serialNum', '')
+        )
         if not serial:
             continue
 
@@ -98,6 +101,7 @@ def sync_all_enterprises() -> None:
 
     logger.info('Starting sync_all_enterprises')
     all_seen_serials: set[str] = set()
+    failed_enterprise_ids: list[int] = []
 
     for enterprise in Enterprise.objects.filter(is_active=True).select_related('cluster'):
         try:
@@ -129,18 +133,23 @@ def sync_all_enterprises() -> None:
                 enterprise.last_sync_status = 'error'
                 enterprise.last_sync_error = f'HTTP {code}'
             logger.warning('ZedCloud HTTP %s for enterprise %s', code, enterprise.name)
+            failed_enterprise_ids.append(enterprise.pk)
         except Exception as exc:
             enterprise.last_sync_status = 'error'
             enterprise.last_sync_error = str(exc)
             logger.exception('Sync failed for enterprise %s', enterprise.name)
+            failed_enterprise_ids.append(enterprise.pk)
         finally:
             enterprise.last_sync_at = timezone.now()
             enterprise.save(update_fields=['last_sync_at', 'last_sync_status', 'last_sync_error'])
 
     # Mark MISSING: inventory devices with enterprise assigned, condition=normal, not seen this cycle
+    # Exclude failed enterprises to prevent false-missing marks when sync fails mid-cycle
     Device.objects.filter(
         enterprise__isnull=False,
         condition='normal',
+    ).exclude(
+        enterprise_id__in=failed_enterprise_ids,
     ).exclude(serial_number__in=all_seen_serials).update(condition='missing')
 
     logger.info('sync_all_enterprises complete. Seen serials: %d', len(all_seen_serials))
