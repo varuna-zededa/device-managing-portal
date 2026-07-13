@@ -51,7 +51,7 @@ class DeviceSerializer(_DeviceValidationMixin, serializers.ModelSerializer):
         model = Device
         fields = [
             'id', 'name', 'serial_number', 'description', 'cluster_device_name',
-            'model', 'cluster',
+            'model', 'cluster', 'enterprise',
             'team', 'owner_email', 'owner_name',
             'lab', 'location_detail', 'condition',
             'idrac_ip', 'idrac_username',
@@ -62,7 +62,7 @@ class DeviceSerializer(_DeviceValidationMixin, serializers.ModelSerializer):
         read_only_fields = [
             'serial_number', 'created_at', 'updated_at',
             'status', 'status_fetched_at', 'reserved_at',
-            'owner_email',
+            'owner_email', 'enterprise',
             'last_purpose_text', 'last_purpose_by', 'last_purpose_at',
         ]
 
@@ -78,6 +78,10 @@ class DeviceSerializer(_DeviceValidationMixin, serializers.ModelSerializer):
             'name': instance.cluster.name,
             'host': instance.cluster.host,
         } if instance.cluster_id else None
+        ret['enterprise'] = {
+            'id': instance.enterprise_id,
+            'name': instance.enterprise.name,
+        } if instance.enterprise_id else None
         return ret
 
     def get_is_available(self, obj):

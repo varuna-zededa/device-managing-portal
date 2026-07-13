@@ -24,7 +24,6 @@ INSTALLED_APPS = [
     'apps.device_models',
     'apps.devices',
     'apps.users',
-    'apps.vault',
     'apps.reservations',
     'apps.admin_tools',
     'apps.enterprises',
