@@ -69,7 +69,7 @@ function StatusBadge({ runState }: { runState: string }) {
 function ExpandPanel({ device }: { device: UntrackedDevice }) {
   return (
     <tr>
-      <td colSpan={8} className="p-0 bg-muted/30">
+      <td colSpan={COLUMN_ORDER.length} className="p-0 bg-muted/30">
         <div className="grid grid-cols-3 gap-4 p-4 border-b border-border">
           <div className="bg-card rounded-md border border-border p-4 space-y-4">
             <div>
