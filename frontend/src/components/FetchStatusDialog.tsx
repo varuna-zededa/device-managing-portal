@@ -4,22 +4,18 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { fetchDeviceStatus, type Device } from '@/api/devices'
-import { getClusters } from '@/api/clusters'
-import { getVaultStatus } from '@/api/vault'
+import { getChoices } from '@/api/choices'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from '@/components/ui/dialog'
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/components/ui/form'
-import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { SearchableSelect } from '@/components/ui/searchable-select'
 import { toast } from '@/components/ui/sonner'
 import { AlertTriangle } from 'lucide-react'
 
 const schema = z.object({
-  cluster_id: z.string().optional(),
-  cluster_device_name: z.string().optional(),
-  bearer_token: z.string().optional(),
+  enterprise_id: z.string().optional(),
 })
 
 type FormValues = z.infer<typeof schema>
@@ -34,61 +30,46 @@ export function FetchStatusDialog({ device, open, onOpenChange }: FetchStatusDia
   const [apiError, setApiError] = useState<string | null>(null)
   const qc = useQueryClient()
 
-  const { data: clusters = [] } = useQuery({ queryKey: ['clusters'], queryFn: getClusters })
+  const { data: choices } = useQuery({ queryKey: ['choices'], queryFn: getChoices, staleTime: Infinity })
+
+  const enterpriseOptions = (choices?.enterprises ?? []).map((e) => ({
+    value: e.id.toString(),
+    label: `${e.name} — ${e.cluster_name}`,
+  }))
+
+  const currentEnterpriseId = (device as any).enterprise?.id?.toString() ?? ''
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: {
-      cluster_id: device.cluster?.id?.toString() ?? '',
-      cluster_device_name: device.cluster_device_name ?? '',
-      bearer_token: '',
-    },
+    defaultValues: { enterprise_id: currentEnterpriseId },
   })
-
-  const clusterId = form.watch('cluster_id')
-  const clusterIdNum = clusterId ? parseInt(clusterId) : null
-
-  const { data: vaultStatus } = useQuery({
-    queryKey: ['vault', clusterIdNum],
-    queryFn: () => getVaultStatus(clusterIdNum!),
-    enabled: !!clusterIdNum,
-  })
-
-  const clusterOptions = clusters.map((c) => ({
-    value: c.id.toString(),
-    label: c.name,
-    hint: c.host,
-  }))
 
   const mutation = useMutation({
     mutationFn: (values: FormValues) =>
       fetchDeviceStatus(device.id, {
-        cluster_id: values.cluster_id ? parseInt(values.cluster_id) : undefined,
-        cluster_device_name: values.cluster_device_name || undefined,
-        bearer_token: values.bearer_token || undefined,
+        enterprise_id: values.enterprise_id ? parseInt(values.enterprise_id) : undefined,
       }),
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ['devices'] })
       if (data.status === 'Unknown' && data.eve_version === 'Unknown') {
-        const clusterName = clusters.find((c) => c.id.toString() === form.getValues('cluster_id'))?.name ?? 'cluster'
-        toast(`${device.name} not found on ${clusterName}`)
+        toast(`${device.name} not found in enterprise`)
       } else {
         toast.success('Status refreshed')
       }
       onOpenChange(false)
     },
     onError: (err: unknown) => {
-      const status = (err as { response?: { status?: number; data?: { error?: string; detail?: string; expected?: string; actual?: string } } })?.response?.status
-      const data = (err as { response?: { data?: { error?: string; detail?: string; expected?: string; actual?: string } } })?.response?.data
-      if (status === 409) {
-        setApiError(`Serial mismatch — Expected: ${data?.expected ?? '?'} · Got: ${data?.actual ?? '?'}`)
-      } else if (status === 403) {
+      const s = (err as any)?.response?.status
+      const d = (err as any)?.response?.data
+      if (s === 409) {
+        setApiError(`Serial mismatch — Expected: ${d?.expected ?? '?'} · Got: ${d?.actual ?? '?'}`)
+      } else if (s === 403) {
         setApiError('Bearer token invalid or expired')
-      } else if (status === 404) {
-        toast(`${device.name} not found on cluster`)
+      } else if (s === 404) {
+        toast(`${device.name} not found in selected enterprise`)
         onOpenChange(false)
       } else {
-        setApiError(data?.error ?? data?.detail ?? `Error ${status}`)
+        setApiError(d?.error ?? d?.detail ?? `Error ${s}`)
       }
     },
   })
@@ -98,54 +79,26 @@ export function FetchStatusDialog({ device, open, onOpenChange }: FetchStatusDia
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle>Refresh Status — {device.name}</DialogTitle>
-          <DialogDescription>Fetch the current status from ZedCloud.</DialogDescription>
+          <DialogDescription>Fetch current status from ZedCloud via an enterprise credential.</DialogDescription>
         </DialogHeader>
         <Form {...form}>
           <form
-            onSubmit={form.handleSubmit((v) => { setApiError(null); mutation.mutate(v); })}
+            onSubmit={form.handleSubmit((v) => { setApiError(null); mutation.mutate(v) })}
             className="space-y-4"
           >
             <FormField
               control={form.control}
-              name="cluster_id"
+              name="enterprise_id"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Cluster</FormLabel>
+                  <FormLabel>Enterprise</FormLabel>
                   <FormControl>
                     <SearchableSelect
-                      options={clusterOptions}
-                      value={field.value}
+                      options={enterpriseOptions}
+                      value={field.value ?? ''}
                       onValueChange={field.onChange}
-                      placeholder="Select cluster..."
+                      placeholder="Select enterprise..."
                       hintBelow
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="cluster_device_name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Name in Cluster</FormLabel>
-                  <FormControl><Input {...field} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="bearer_token"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Bearer Token</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="password"
-                      placeholder={vaultStatus?.has_token ? '●●●● (vault token available)' : 'Paste token...'}
-                      {...field}
                     />
                   </FormControl>
                   <FormMessage />

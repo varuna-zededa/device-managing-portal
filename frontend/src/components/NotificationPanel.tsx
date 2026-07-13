@@ -1,8 +1,10 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Bell, Check, X } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getPendingReservations, getMyReservations, approveReservation, rejectReservation } from '@/api/reservations'
 import { getConfig } from '@/api/config'
+import { getNotifications, markNotificationRead, markAllNotificationsRead, type PortalNotification } from '@/api/notifications'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -22,7 +24,8 @@ function timeAgo(dateStr: string): string {
 
 export function NotificationBell() {
   const [open, setOpen] = useState(false)
-  const { currentUser } = useUser()
+  const { currentUser, isAdmin } = useUser()
+  const navigate = useNavigate()
   const qc = useQueryClient()
 
   const { data: config } = useQuery({
@@ -53,8 +56,35 @@ export function NotificationBell() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['reservations'] }),
   })
 
+  const { data: adminNotifications = [] } = useQuery({
+    queryKey: ['notifications'],
+    queryFn: getNotifications,
+    enabled: isAdmin,
+    refetchInterval: config?.notification_refresh_ms ?? 30_000,
+  })
+
+  const markReadMut = useMutation({
+    mutationFn: (id: number) => markNotificationRead(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['notifications'] }),
+  })
+
+  const markAllReadMut = useMutation({
+    mutationFn: markAllNotificationsRead,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['notifications'] }),
+  })
+
+  function handleNotificationClick(n: PortalNotification) {
+    markReadMut.mutate(n.id)
+    if (n.kind === 'token_expired' || n.kind === 'sync_error') {
+      navigate('/cluster-enterprises')
+    }
+    setOpen(false)
+  }
+
+  const unreadAdminCount = adminNotifications.filter((n) => !n.is_read).length
+
   const actionable = pending.filter((r) => r.status === 'pending')
-  const count = actionable.length
+  const count = actionable.length + unreadAdminCount
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -142,7 +172,37 @@ export function NotificationBell() {
           </div>
         )}
 
-        {actionable.length === 0 && mine.length === 0 && (
+        {isAdmin && adminNotifications.length > 0 && (
+          <div>
+            <div className="px-3 pt-3 pb-1 flex items-center justify-between">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">System Alerts</p>
+              {unreadAdminCount > 0 && (
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground hover:text-foreground"
+                  onClick={() => markAllReadMut.mutate()}
+                >
+                  Mark all read
+                </button>
+              )}
+            </div>
+            {adminNotifications.slice(0, 10).map((n) => (
+              <div
+                key={n.id}
+                className={cn(
+                  'px-3 py-2 hover:bg-muted/50 border-b border-border/50 cursor-pointer',
+                  !n.is_read && 'bg-muted/20',
+                )}
+                onClick={() => handleNotificationClick(n)}
+              >
+                <p className={cn('text-sm font-medium', !n.is_read && 'text-foreground')}>{n.title}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{timeAgo(n.created_at)}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {actionable.length === 0 && mine.length === 0 && (!isAdmin || adminNotifications.length === 0) && (
           <div className="py-8 text-center text-sm text-foreground">
             No notifications
           </div>
