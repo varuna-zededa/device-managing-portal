@@ -134,7 +134,10 @@ def send_nightly_digest():
     if problem_enterprises:
         lines.append(f'--- Enterprises with Errors ({len(problem_enterprises)}) ---')
         for e in problem_enterprises:
-            lines.append(f'  {e.name} on {e.cluster.name}  status={e.last_sync_status}  error={e.last_sync_error or "—"}')
+            lines.append(
+                f'  {e.name} on {e.cluster.name}  status={e.last_sync_status}'
+                f'  error={e.last_sync_error or "—"}'
+            )
         lines.append('')
 
     _send('[Holocron] Nightly Digest', '\n'.join(lines), admin_emails)

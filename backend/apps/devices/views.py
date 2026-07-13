@@ -373,12 +373,11 @@ class DeviceStatusView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        bearer_token = decrypt(bytes(enterprise.bearer_token_enc))
-
         same_enterprise = (not enterprise_id or enterprise.pk == device.enterprise_id)
         use_single = same_enterprise and bool(device.cluster_device_name)
 
         try:
+            bearer_token = decrypt(bytes(enterprise.bearer_token_enc))
             if use_single:
                 eve_version, device_connectivity, dev_status = fetch_device_status(
                     cluster=enterprise.cluster,
@@ -387,9 +386,16 @@ class DeviceStatusView(APIView):
                     device=device,
                 )
             else:
+                from apps.enterprises.sync import _extract_eve_version, _extract_connectivity  # noqa: PLC0415
                 raw_devices = fetch_enterprise_devices(enterprise.cluster.host, bearer_token)
                 matched = next(
-                    (d for d in raw_devices if d.get('minfo', {}).get('serialNumber') == device.serial_number),
+                    (
+                        d for d in raw_devices
+                        if (
+                            d.get('minfo', {}).get('serialNumber', '')
+                            or d.get('hardwareInfo', {}).get('serialNum', '')
+                        ) == device.serial_number
+                    ),
                     None,
                 )
                 if not matched:
@@ -399,19 +405,11 @@ class DeviceStatusView(APIView):
                     )
                 run_state = matched.get('runState', 'RUN_STATE_UNKNOWN')
                 dev_status = STATUS_MAP.get(run_state, 'Unknown')
-                eve_version = next(
-                    (sw['shortVersion'] for sw in matched.get('swInfo', []) if sw.get('activated')), None,
-                )
-                connectivity = []
-                for iface in matched.get('netStatusList', []):
-                    if iface.get('up') and iface.get('uplink'):
-                        mac = iface.get('macAddr', '')
-                        iface_name = iface.get('ifName', '')
-                        for ip in iface.get('ipAddrs', []):
-                            if ip and ':' not in ip:
-                                connectivity.append({'ip': ip, 'mac': mac, 'interface_name': iface_name})
-                device_connectivity = connectivity or None
-                device.cluster_device_name = matched.get('name', '')
+                eve_version = _extract_eve_version(matched.get('swInfo', []))
+                device_connectivity = _extract_connectivity(matched.get('netStatusList', []))
+                device_name = matched.get('name')
+                if device_name:
+                    device.cluster_device_name = device_name
 
             device.enterprise = enterprise
             device.cluster = enterprise.cluster

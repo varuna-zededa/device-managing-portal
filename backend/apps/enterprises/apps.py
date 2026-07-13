@@ -1,6 +1,10 @@
-import sys
+import logging
 import os
+import sys
+
 from django.apps import AppConfig
+
+logger = logging.getLogger(__name__)
 
 
 class EnterprisesConfig(AppConfig):
@@ -8,17 +12,25 @@ class EnterprisesConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
 
     def ready(self):
-        # In Django dev server: the reloader process spawns a child with RUN_MAIN=true.
-        # Only start the scheduler in the child (or in production where sys.argv has no 'runserver').
-        if 'runserver' in sys.argv and os.environ.get('RUN_MAIN') != 'true':
+        if 'runserver' in sys.argv:
+            # Dev server: the reloader spawns a child with RUN_MAIN=true.
+            # Only start in the child to avoid double-scheduling.
+            if os.environ.get('RUN_MAIN') != 'true':
+                return
+        elif not os.environ.get('START_SCHEDULER'):
+            # Production (gunicorn, uwsgi) and management commands (migrate, shell, etc.):
+            # require explicit opt-in via START_SCHEDULER=true so manage.py commands
+            # don't inadvertently start background threads before tables exist, and so
+            # gunicorn workers don't each start their own scheduler.
             return
         self._start_scheduler()
 
     def _start_scheduler(self):
         try:
             from apscheduler.schedulers.background import BackgroundScheduler
-            from apscheduler.triggers.interval import IntervalTrigger
             from apscheduler.triggers.cron import CronTrigger
+            from apscheduler.triggers.interval import IntervalTrigger
+
             from apps.enterprises.sync import sync_all_enterprises
             from utils.email import send_nightly_digest
 
@@ -39,8 +51,6 @@ class EnterprisesConfig(AppConfig):
                 max_instances=1,
             )
             scheduler.start()
-            import logging
-            logging.getLogger(__name__).info('APScheduler started (sync every 1h, digest at midnight UTC)')
+            logger.info('APScheduler started (sync every 1h, digest at midnight UTC)')
         except Exception as exc:
-            import logging
-            logging.getLogger(__name__).exception('Failed to start APScheduler: %s', exc)
+            logger.exception('Failed to start APScheduler: %s', exc)

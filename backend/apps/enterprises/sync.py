@@ -24,7 +24,7 @@ def _extract_connectivity(net_status_list: list) -> list | None:
 
 def _extract_eve_version(sw_info: list) -> str | None:
     return next(
-        (sw['shortVersion'] for sw in sw_info if sw.get('activated')),
+        (sw.get('shortVersion') for sw in sw_info if sw.get('activated')),
         None,
     )
 
@@ -102,12 +102,17 @@ def sync_all_enterprises() -> None:
 
     logger.info('Starting sync_all_enterprises')
     all_seen_serials: set[str] = set()
-    failed_enterprise_ids: list[int] = []
+    # Enterprises excluded from missing-mark: failed syncs + syncs that returned zero devices.
+    # Zero-device results are excluded because an empty response may be transient (all devices
+    # rebooting, network blip) and we should not mark healthy inventory devices as missing.
+    exclude_from_missing: list[int] = []
 
     for enterprise in Enterprise.objects.filter(is_active=True).select_related('cluster'):
         try:
             seen = sync_enterprise(enterprise)
             all_seen_serials.update(seen)
+            if not seen:
+                exclude_from_missing.append(enterprise.pk)
             enterprise.last_sync_status = 'ok'
             enterprise.last_sync_error = None
         except httpx.HTTPStatusError as exc:
@@ -115,37 +120,43 @@ def sync_all_enterprises() -> None:
             if code in (401, 403):
                 enterprise.last_sync_status = 'token_expired'
                 enterprise.last_sync_error = f'HTTP {code}'
-                send_token_expiry_alert(enterprise)
-                Notification.objects.create(
+                # Dedup: only notify if there is no unread token_expired notification for this
+                # enterprise already — prevents email/notification spam on every sync cycle.
+                _, created = Notification.objects.get_or_create(
                     kind='token_expired',
+                    is_read=False,
                     title=f'Token expired — {enterprise.name} on {enterprise.cluster.name}',
-                    body=(
-                        f'Bearer token for enterprise "{enterprise.name}" on cluster '
-                        f'"{enterprise.cluster.name}" ({enterprise.cluster.host}) is invalid or expired. '
-                        f'Update it in the Clusters & Enterprises tab.'
-                    ),
+                    defaults={
+                        'body': (
+                            f'Bearer token for enterprise "{enterprise.name}" on cluster '
+                            f'"{enterprise.cluster.name}" ({enterprise.cluster.host}) is invalid or expired. '
+                            f'Update it in the Clusters & Enterprises tab.'
+                        ),
+                    },
                 )
+                if created:
+                    send_token_expiry_alert(enterprise)
             else:
                 enterprise.last_sync_status = 'error'
                 enterprise.last_sync_error = f'HTTP {code}'
             logger.warning('ZedCloud HTTP %s for enterprise %s', code, enterprise.name)
-            failed_enterprise_ids.append(enterprise.pk)
+            exclude_from_missing.append(enterprise.pk)
         except Exception as exc:
             enterprise.last_sync_status = 'error'
             enterprise.last_sync_error = str(exc)
             logger.exception('Sync failed for enterprise %s', enterprise.name)
-            failed_enterprise_ids.append(enterprise.pk)
+            exclude_from_missing.append(enterprise.pk)
         finally:
             enterprise.last_sync_at = timezone.now()
             enterprise.save(update_fields=['last_sync_at', 'last_sync_status', 'last_sync_error'])
 
-    # Mark MISSING: inventory devices with enterprise assigned, condition=normal, not seen this cycle
-    # Exclude failed enterprises to prevent false-missing marks when sync fails mid-cycle
+    # Mark MISSING: inventory devices with enterprise assigned, condition=normal, not seen this cycle.
+    # Exclude enterprises that failed or returned zero devices to prevent false-missing marks.
     Device.objects.filter(
         enterprise__isnull=False,
         condition='normal',
     ).exclude(
-        enterprise_id__in=failed_enterprise_ids,
+        enterprise_id__in=exclude_from_missing,
     ).exclude(serial_number__in=all_seen_serials).update(condition='missing')
 
     logger.info('sync_all_enterprises complete. Seen serials: %d', len(all_seen_serials))
