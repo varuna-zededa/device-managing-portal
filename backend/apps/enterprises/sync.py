@@ -158,12 +158,12 @@ def _apply_inventory_candidate(candidate: dict, now) -> None:
     # data from a SUSPECT device.  This prevents a single-enterprise manual sync from
     # clobbering a device's cluster assignment when it is healthy in another enterprise.
     if candidate['run_state'] == _SUSPECT_STATE:
-        if device.condition == 'normal':
+        if device.condition in ('normal', 'missing'):
             device.condition = 'needs_repair'
-            device.save(update_fields=['condition'])
+            device.save(update_fields=['condition', 'updated_at'])
         return
 
-    update_fields = ['enterprise', 'cluster', 'eve_version', 'device_connectivity', 'status', 'status_fetched_at']
+    update_fields = ['enterprise', 'cluster', 'eve_version', 'device_connectivity', 'status', 'status_fetched_at', 'updated_at']
     device.enterprise = candidate['enterprise']
     device.cluster = candidate['cluster']
     if candidate['cluster_device_name']:
@@ -202,7 +202,7 @@ def _emit_token_expired(enterprise) -> None:
         send_token_expiry_alert(enterprise)
 
 
-def sync_enterprise(enterprise) -> tuple[set[str], list[dict]]:
+def sync_enterprise(enterprise, *, purge: bool = True) -> tuple[set[str], list[dict]]:
     """
     Fetch and process device data for one enterprise. Raises on failure.
 
@@ -215,7 +215,8 @@ def sync_enterprise(enterprise) -> tuple[set[str], list[dict]]:
     """
     from apps.devices.models import Device, UntrackedDevice  # noqa: PLC0415
 
-    _purge_invalid_untracked()
+    if purge:
+        _purge_invalid_untracked()
 
     try:
         bearer_token = decrypt(bytes(enterprise.bearer_token_enc))
@@ -336,6 +337,7 @@ def sync_all_enterprises() -> None:
     from apps.enterprises.models import Enterprise  # noqa: PLC0415
     from apps.notifications.models import Notification  # noqa: PLC0415
 
+    _purge_invalid_untracked()  # once per hourly cycle, not once per enterprise
     logger.info('Starting sync_all_enterprises')
     all_seen_serials: set[str] = set()
     # Enterprises excluded from the missing-mark: failed syncs, zero-device responses,
@@ -354,7 +356,7 @@ def sync_all_enterprises() -> None:
         sync_ok = False
         candidates: list[dict] = []
         try:
-            seen, candidates = sync_enterprise(enterprise)
+            seen, candidates = sync_enterprise(enterprise, purge=False)
             all_seen_serials.update(seen)
             if not seen:
                 exclude_from_missing.append(enterprise.pk)
@@ -406,7 +408,10 @@ def sync_all_enterprises() -> None:
         if candidate['run_state'] == _SUSPECT_STATE:
             # Best available state across every enterprise is SUSPECT — data is unreliable.
             # Skip updating device fields; mark needs_repair so the admin knows to investigate.
-            Device.objects.filter(serial_number=serial, condition='normal').update(condition='needs_repair')
+            # Also clears 'missing': the device is visible in ZedCloud again, just unreliable.
+            Device.objects.filter(
+                serial_number=serial, condition__in=('normal', 'missing'),
+            ).update(condition='needs_repair', updated_at=now)
             logger.info('Marked %s as needs_repair — best available run state is SUSPECT', serial)
         else:
             _apply_inventory_candidate(candidate, now)
@@ -419,7 +424,7 @@ def sync_all_enterprises() -> None:
         condition='normal',
     ).exclude(
         enterprise_id__in=exclude_from_missing,
-    ).exclude(serial_number__in=all_seen_serials).update(condition='missing')
+    ).exclude(serial_number__in=all_seen_serials).update(condition='missing', updated_at=now)
 
     logger.info('sync_all_enterprises complete. Seen serials: %d', len(all_seen_serials))
 
