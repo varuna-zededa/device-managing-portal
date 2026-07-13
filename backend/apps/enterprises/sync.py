@@ -131,6 +131,10 @@ def sync_enterprise(enterprise) -> tuple[set[str], list[dict]]:
     candidates: list[dict] = []
     now = timezone.now()
 
+    # First pass: collect eligible (serial, raw_device) pairs, skipping devices with no
+    # serial or in a skipped run state. This lets us bulk-fetch inventory matches in one
+    # query instead of one per device.
+    eligible: list[tuple[str, dict]] = []
     for d in raw_devices:
         serial = (
             d.get('minfo', {}).get('serialNumber', '')
@@ -138,15 +142,21 @@ def sync_enterprise(enterprise) -> tuple[set[str], list[dict]]:
         )
         if not serial:
             continue
-
-        run_state = d.get('runState', 'RUN_STATE_UNKNOWN')
-
         # UNPROVISIONED and PROVISIONED devices have not completed bootstrap and carry
         # no useful operational data. Exclude them entirely — not added to seen_serials,
         # candidates, or UntrackedDevice, and they don't affect the missing-mark.
-        if run_state in _SKIPPED_STATES:
+        if d.get('runState', 'RUN_STATE_UNKNOWN') in _SKIPPED_STATES:
             continue
+        eligible.append((serial, d))
 
+    # Single bulk query to check which serials exist in inventory.
+    inventory_by_serial: dict[str, Device] = {
+        dev.serial_number: dev
+        for dev in Device.objects.filter(serial_number__in=[s for s, _ in eligible])
+    }
+
+    for serial, d in eligible:
+        run_state = d.get('runState', 'RUN_STATE_UNKNOWN')
         seen_serials.add(serial)
         status_str = STATUS_MAP.get(run_state, 'Unknown')
         eve_version = _extract_eve_version(d.get('swInfo', []))
@@ -156,7 +166,7 @@ def sync_enterprise(enterprise) -> tuple[set[str], list[dict]]:
         device_name = d.get('name')
         zcloud_id = d.get('id', '')
 
-        inventory_device = Device.objects.filter(serial_number=serial).first()
+        inventory_device = inventory_by_serial.get(serial)
         if inventory_device:
             serials_in_inventory.add(serial)
             candidates.append({

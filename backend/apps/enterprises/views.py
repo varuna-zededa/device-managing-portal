@@ -263,7 +263,13 @@ class ClusterImportView(APIView):
                         except httpx.RequestError as exc:
                             errors.append(f'Cannot reach ZedCloud for enterprise "{ent_name}": {exc}')
                             continue
-                        if existing.zcloud_id and info['zcloud_id'] and info['zcloud_id'] != existing.zcloud_id:
+                        if not info['zcloud_id']:
+                            errors.append(
+                                f'ZedCloud did not return an enterprise ID for enterprise "{ent_name}"; '
+                                f'cannot verify token identity'
+                            )
+                            continue
+                        if existing.zcloud_id and info['zcloud_id'] != existing.zcloud_id:
                             errors.append(
                                 f'Token for enterprise "{ent_name}" belongs to a different ZedCloud enterprise (ID mismatch)'
                             )
