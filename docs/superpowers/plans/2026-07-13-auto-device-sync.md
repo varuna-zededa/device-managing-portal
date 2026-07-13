@@ -1184,7 +1184,7 @@ class UntrackedDeviceListView(APIView):
 
 
 class MoveToInventoryView(APIView):
-    permission_classes = [IsAdminPortalUser]
+    permission_classes = [IsPortalUser]
 
     def post(self, request, pk):
         try:
