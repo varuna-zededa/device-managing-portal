@@ -1,4 +1,5 @@
 import logging
+import re
 
 import httpx
 from django.utils import timezone
@@ -8,6 +9,92 @@ from utils.crypto import decrypt
 from utils.email import send_token_expiry_alert
 
 logger = logging.getLogger(__name__)
+
+# ── Serial / model filters ────────────────────────────────────────────────────
+
+# Well-known BIOS placeholders and test values that are not real hardware serials.
+_SERIAL_BLOCKLIST: frozenset[str] = frozenset({
+    '0',
+    'unknown',
+    'inventory',
+    'default string',
+    'to be filled by o.e.m.',
+    'not specified',
+    'not applicable',
+    'system serial number',
+    'chassis serial number',
+    'base board serial number',
+    'none',
+    'n/a',
+    'na',
+    'null',
+    'tbd',
+    'empty',
+    '9999998',
+    '500600',
+    '123456789',
+})
+
+# UUID-format serials (QEMU and cloud platforms generate these; not real hardware serials).
+_RE_UUID_SERIAL = re.compile(
+    r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{8,}$',
+    re.IGNORECASE,
+)
+
+# VMware VM serial format: "VMware-HH HH HH ... HH-HH HH ..."
+_RE_VMWARE_SERIAL = re.compile(r'^VMware-', re.IGNORECASE)
+
+# Model substrings that indicate a virtual or cloud-hosted device.
+# Matched case-insensitively; "standard pc (q35" catches Proxmox, FEDORA, and other
+# hypervisors that use the QEMU Q35 machine type but a different manufacturer name.
+_VIRTUAL_MODEL_KEYWORDS: tuple[str, ...] = (
+    'qemu',
+    'azure',
+    'aws',
+    'vmware',
+    'virtualbox',
+    'kvm virtual',
+    'standard pc (q35',
+)
+
+
+def _is_junk_serial(serial: str) -> bool:
+    """Return True for well-known placeholder or non-hardware serial numbers."""
+    s = serial.strip()
+    if not s or s.lower() in _SERIAL_BLOCKLIST:
+        return True
+    if _RE_UUID_SERIAL.match(s):
+        return True
+    if _RE_VMWARE_SERIAL.match(s):
+        return True
+    return False
+
+
+def _is_virtual_device(model: str) -> bool:
+    """Return True if the model string indicates a virtual or cloud-hosted device."""
+    m = model.lower()
+    return any(kw in m for kw in _VIRTUAL_MODEL_KEYWORDS)
+
+
+def _purge_invalid_untracked() -> None:
+    """Delete UntrackedDevice rows with junk serials or virtual-device models.
+
+    Runs at the start of every sync so stale rows ingested before the filters
+    existed (or no longer visible in ZedCloud) are cleaned up automatically.
+    """
+    from apps.devices.models import UntrackedDevice  # noqa: PLC0415
+
+    bad_pks = [
+        d.pk
+        for d in UntrackedDevice.objects.only('pk', 'serial_number', 'model')
+        if _is_junk_serial(d.serial_number) or _is_virtual_device(d.model or '')
+    ]
+    if bad_pks:
+        deleted, _ = UntrackedDevice.objects.filter(pk__in=bad_pks).delete()
+        logger.info('Purged %d invalid UntrackedDevice rows (junk serial or virtual model)', deleted)
+
+
+# ── Run-state priority ────────────────────────────────────────────────────────
 
 # Priority tier for cross-enterprise conflict resolution (lower number = higher priority).
 # When the same device serial appears in multiple enterprises, the enterprise whose
@@ -120,6 +207,8 @@ def sync_enterprise(enterprise) -> tuple[set[str], list[dict]]:
     """
     from apps.devices.models import Device, UntrackedDevice  # noqa: PLC0415
 
+    _purge_invalid_untracked()
+
     try:
         bearer_token = decrypt(bytes(enterprise.bearer_token_enc))
     except Exception as exc:
@@ -131,10 +220,11 @@ def sync_enterprise(enterprise) -> tuple[set[str], list[dict]]:
     candidates: list[dict] = []
     now = timezone.now()
 
-    # First pass: collect eligible (serial, raw_device) pairs, skipping devices with no
-    # serial or in a skipped run state. This lets us bulk-fetch inventory matches in one
-    # query instead of one per device.
+    # First pass: collect eligible (serial, raw_device) pairs.
+    # Filters applied here (earliest possible) so rejected serials are excluded from
+    # seen_serials, candidates, UntrackedDevice, and the missing-mark entirely.
     eligible: list[tuple[str, dict]] = []
+    junk_serials: set[str] = set()       # for bulk cleanup of pre-existing UntrackedDevice rows
     for d in raw_devices:
         serial = (
             d.get('minfo', {}).get('serialNumber', '')
@@ -147,6 +237,10 @@ def sync_enterprise(enterprise) -> tuple[set[str], list[dict]]:
         # candidates, or UntrackedDevice, and they don't affect the missing-mark.
         if d.get('runState', 'RUN_STATE_UNKNOWN') in _SKIPPED_STATES:
             continue
+        # Reject well-known placeholder/junk serial numbers and virtual-machine identifiers.
+        if _is_junk_serial(serial):
+            junk_serials.add(serial)
+            continue
         eligible.append((serial, d))
 
     # Single bulk query to check which serials exist in inventory.
@@ -154,6 +248,8 @@ def sync_enterprise(enterprise) -> tuple[set[str], list[dict]]:
         dev.serial_number: dev
         for dev in Device.objects.filter(serial_number__in=[s for s, _ in eligible])
     }
+
+    virtual_serials: set[str] = set()     # for bulk cleanup of pre-existing UntrackedDevice rows
 
     for serial, d in eligible:
         run_state = d.get('runState', 'RUN_STATE_UNKNOWN')
@@ -181,26 +277,39 @@ def sync_enterprise(enterprise) -> tuple[set[str], list[dict]]:
                 'run_state': run_state,
             })
         else:
-            # Use create_defaults (Django 4.1+) so first_seen_at is only set on creation
+            # Reject virtual/cloud devices from untracked — we only track physical hardware.
+            # We still allow inventory devices with virtual models to receive status updates
+            # (they were manually curated), so this check lives only in the untracked branch.
+            if _is_virtual_device(model_str):
+                virtual_serials.add(serial)
+                continue
+            # create_defaults supplies ALL fields for INSERT; defaults is UPDATE-only.
+            # first_seen_at is in create_defaults only so it is never overwritten.
+            _untracked_fields = {
+                'zcloud_id': zcloud_id,
+                'name': device_name or '',
+                'model': model_str,
+                'run_state': run_state,
+                'eve_version': eve_version,
+                'device_connectivity': connectivity,
+                'last_seen_at': now,
+            }
             UntrackedDevice.objects.update_or_create(
                 serial_number=serial,
                 enterprise=enterprise,
-                create_defaults={
-                    'first_seen_at': now,
-                },
-                defaults={
-                    'zcloud_id': zcloud_id,
-                    'name': device_name or '',
-                    'model': model_str,
-                    'run_state': run_state,
-                    'eve_version': eve_version,
-                    'device_connectivity': connectivity,
-                    'last_seen_at': now,
-                },
+                create_defaults={'first_seen_at': now, **_untracked_fields},
+                defaults=_untracked_fields,
             )
 
-    if serials_in_inventory:
-        UntrackedDevice.objects.filter(serial_number__in=serials_in_inventory).delete()
+    # Bulk-delete UntrackedDevice rows that are no longer eligible:
+    # - serials now matched to inventory (promoted or manually added)
+    # - junk/placeholder serials we started filtering this cycle
+    # - serials whose model was identified as a virtual/cloud device
+    stale_serials = serials_in_inventory | junk_serials | virtual_serials
+    if stale_serials:
+        UntrackedDevice.objects.filter(
+            serial_number__in=stale_serials, enterprise=enterprise,
+        ).delete()
 
     return seen_serials, candidates
 
