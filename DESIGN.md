@@ -1,5 +1,13 @@
 # Device Managing Portal — Design Document
 
+## Planned Changes
+
+| Feature | Spec |
+|---|---|
+| Automatic device sync — admin-managed enterprise credentials, hourly background poll, untracked devices, MISSING status | [docs/superpowers/specs/2026-07-13-auto-device-sync-design.md](docs/superpowers/specs/2026-07-13-auto-device-sync-design.md) |
+
+---
+
 ## Purpose
 A shared-device management web app for Zededa test teams. Engineers share physical EVE OS nodes and
 need visibility into ownership, live device status (EVE version, SSH IPs, run state), and quick
