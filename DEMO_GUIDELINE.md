@@ -17,7 +17,7 @@ initial working deployment. It contains:
 - Labs and teams
 - Device models and clusters
 - Devices with ownership, condition, and connectivity data
-- Vault tokens (encrypted — see note below)
+- Enterprise bearer tokens (encrypted — see note below)
 
 ### Deploying on a new VM
 
@@ -57,7 +57,7 @@ The portal will be available at `http://<vm-ip>/`.
 
 ### Encryption key requirement
 
-Vault bearer tokens and iDRAC passwords in the fixture are encrypted using the
+Enterprise bearer tokens and iDRAC passwords in the fixture are encrypted using the
 `ENCRYPTION_KEY` from `.env`. **Use the same key that was used when the fixture was
 exported**, otherwise those fields will be unreadable.
 

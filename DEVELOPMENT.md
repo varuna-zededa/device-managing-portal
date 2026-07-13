@@ -50,25 +50,35 @@ backend/
 ├── apps/clusters/               Cluster model + CRUD
 ├── apps/device_models/          DeviceModel (name + customer_partner_name)
 ├── apps/devices/
-│   ├── models.py                Device, Lab, CONDITION_CHOICES
-│   ├── views.py                 DeviceViewSet; UNAVAILABLE_CONDITIONS; _handle_condition_change; ChoicesView
+│   ├── models.py                Device, Lab, UntrackedDevice, CONDITION_CHOICES
+│   ├── views.py                 DeviceViewSet; UNAVAILABLE_CONDITIONS; _handle_condition_change; ChoicesView; UntrackedDeviceListView; MoveToInventoryView
 │   ├── serializers.py
 │   ├── admin.py                 Device, Lab registered
+│   ├── untracked_urls.py        /api/v1/untracked-devices/ routes
 │   └── migrations/
 ├── apps/users/
 │   ├── models.py                PortalUser, Team
 │   ├── views.py
 │   ├── admin.py                 PortalUser, Team registered
 │   └── migrations/
-├── apps/vault/                  Vault (encrypted tokens per user per cluster)
+├── apps/enterprises/            Enterprise model + CRUD + sync engine
+│   ├── models.py                Enterprise (name, cluster FK, bearer_token_enc, zcloud_id, is_active, name_verified, last_sync_*)
+│   ├── views.py                 EnterpriseDetailView, EnterpriseSyncView, ClusterExportView, ClusterImportView; ClusterEnterpriseListCreateView
+│   ├── sync.py                  sync_all_enterprises(), verify_enterprise_names()
+│   ├── apps.py                  APScheduler registration (1h sync + midnight nightly digest)
+│   ├── serializers.py
+│   └── urls.py                  /api/v1/enterprises/ routes
+├── apps/notifications/          Admin notification model
+│   ├── models.py                Notification (kind, enterprise FK, title, body, is_read)
+│   └── urls.py                  /api/v1/notifications/ routes
 ├── apps/reservations/
 │   ├── views.py                 reservation flow; _UNAVAILABLE_CONDITIONS (keep in sync with devices/views.py)
 │   └── models.py                ReservationRequest
 ├── apps/admin_tools/views.py    ExportView, ImportView, ImportTemplateView, LatencyView, _normalize_condition()
-├── services/zedcloud.py         fetch_device_status(); SerialMismatchError
+├── services/zedcloud.py         fetch_device_status(); fetch_enterprise_devices(); SerialMismatchError
 └── utils/
     ├── crypto.py                encrypt(str)->bytes; decrypt(bytes)->str
-    ├── email.py                 all outbound email functions
+    ├── email.py                 all outbound email functions (incl. token-expiry + nightly digest)
     └── permissions.py           get_user_email(), is_admin(); IsPortalUser, IsAdminPortalUser, IsOwnerOrAdmin
 ```
 
@@ -207,12 +217,13 @@ def fetch_device_status(
 ### Choices endpoint (`apps/devices/views.py` → `ChoicesView`)
 ```python
 return Response({
-    'labs':       list(Lab.objects.values_list('name', flat=True)),
-    'teams':      list(Team.objects.values_list('name', flat=True)),
-    'conditions': [c[0] for c in CONDITION_CHOICES],
+    'labs':        list(Lab.objects.values_list('name', flat=True)),
+    'teams':       list(Team.objects.values_list('name', flat=True)),
+    'conditions':  [c[0] for c in CONDITION_CHOICES],
+    'enterprises': list(Enterprise.objects.filter(is_active=True).values('id', 'name', cluster_name=F('cluster__name'))),
 })
 ```
-Do not hardcode lab or team lists here.
+Do not hardcode lab, team, or enterprise lists here. The `enterprises` list is used by the Fetch Status dialog dropdown.
 
 ### Migrations
 ```bash
@@ -232,20 +243,27 @@ frontend/src/
 │   ├── client.ts          axios instance; auto-injects X-User-Email from localStorage
 │   ├── devices.ts         device CRUD + reserve/release/status/history
 │   ├── users.ts           user CRUD
-│   └── choices.ts         getChoices() → {labs, teams, conditions}
+│   ├── choices.ts         getChoices() → {labs, teams, conditions, enterprises}
+│   ├── enterprises.ts     getClusters/createCluster/updateCluster/deleteCluster; createEnterprise/updateEnterprise/deleteEnterprise/syncEnterprise; ClusterExport/Import
+│   ├── notifications.ts   getNotifications/markNotificationRead/markAllNotificationsRead
+│   └── untracked.ts       getUntrackedDevices/moveToInventory
 ├── context/UserContext.tsx useUser() → {user, isAdmin}; redirects to /login if no session
 ├── components/
 │   ├── DeviceTable.tsx    CONDITION_STYLES, CONDITION_BADGE_STYLES, sort logic, expand panel
 │   ├── SearchBar.tsx      CONDITION_LABELS; filter order: availability→condition→lab→team
 │   ├── Header.tsx
-│   ├── NotificationPanel.tsx
+│   ├── NotificationPanel.tsx  admin notifications (token_expired/sync_error/name_mismatch/enterprise_inactive); name_mismatch has inline action buttons
 │   ├── DeviceFormModal.tsx
 │   ├── ReserveDialog.tsx
 │   ├── OwnershipHistoryModal.tsx
+│   ├── MoveToInventoryDialog.tsx
+│   ├── ImportClusterDialog.tsx
 │   └── ui/                shadcn/ui base components
 └── pages/
-    ├── DevicesPage.tsx    summary bar; passes filter state to SearchBar + DeviceTable
-    ├── UsersPage.tsx      sortable table; admin only
+    ├── DevicesPage.tsx           summary bar; passes filter state to SearchBar + DeviceTable
+    ├── UsersPage.tsx             sortable table; admin only
+    ├── ClusterEnterprisesPage.tsx  admin-only; manage clusters + enterprises; import/export
+    ├── UntrackedDevicesPage.tsx  devices seen in ZedCloud but not in inventory; cluster+enterprise dropdown filter; move-to-inventory action
     ├── LoginPage.tsx
     └── ConfirmReservationPage.tsx  /confirm/:token; no auth needed
 ```
@@ -269,7 +287,7 @@ const mutation = useMutation({
 })
 ```
 
-Cache keys in use: `['devices']`, `['users']`, `['choices']`, `['reservations','pending']`, `['reservations','mine']`.  
+Cache keys in use: `['devices']`, `['users']`, `['choices']`, `['reservations','pending']`, `['reservations','mine']`, `['notifications']`, `['clusters-enterprises']`, `['untracked-devices']`.  
 `choices` uses `staleTime: Infinity` — cache cleared on full page reload.
 
 ### Condition constants (both in `DeviceTable.tsx`)
@@ -344,6 +362,12 @@ if (!isAdmin) return <Navigate to="/devices" replace />
 - `GET /api/v1/config/` (public) — returns `{device_list_refresh_ms, notification_refresh_ms}`
 - Frontend fetches at startup in `DevicesPage.tsx` and `NotificationPanel.tsx` with `staleTime: Infinity`
 - Override defaults (`300000` / `30000`) via `DEVICE_LIST_REFRESH_MS` / `NOTIFICATION_REFRESH_MS` in `.env`
+
+### Enterprise sync
+- Sync engine: `apps/enterprises/sync.py` — `sync_all_enterprises()` iterates active enterprises, calls ZedCloud bulk device fetch, upserts `UntrackedDevice` rows, marks inventory devices missing/found
+- `verify_enterprise_names()`: called from a background thread after import (not scheduled); checks each enterprise's name against ZedCloud; on mismatch → `name_mismatch` notification; on inactive state → deactivate + `enterprise_inactive` notification; skips on decrypt/network error
+- APScheduler guard in `apps/enterprises/apps.py`: only starts in the child process under `runserver` (`RUN_MAIN=true`) or in production; prevents double-start on Django's reloader
+- Notification kinds: `token_expired` | `sync_error` | `name_mismatch` | `enterprise_inactive`; `unique_together = [('kind', 'enterprise')]` so repeated failures do not create duplicate rows
 
 ### New Lab or Team
 No code changes. Django admin → Labs (or Teams) → Add.

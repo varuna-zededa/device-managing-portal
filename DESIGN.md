@@ -246,15 +246,49 @@ user_type   enum  admin | member | guest
   write operation (reserve, release, edit, delete, fetch status, force-assign, export/import);
   all action controls hidden in the UI; `/users` page inaccessible (redirects to `/devices`)
 
-### Vault  *(per-user ZedCloud bearer tokens)*
+### Enterprise  *(admin-managed ZedCloud enterprise credentials)*
 ```
-id               int   PK auto
-user_email       str   FK → User.email
-cluster_id       int   FK → Cluster.id
-bearer_token_enc bytes AES-encrypted ZedCloud API bearer token
+id                int      PK auto
+name              str      enterprise name (from ZedCloud)
+cluster_id        int      FK → Cluster.id (CASCADE)
+bearer_token_enc  bytes    Fernet-encrypted ZedCloud API bearer token (write-only; never returned in API)
+zcloud_id         str      enterprise UUID from ZedCloud /v1/enterprises/self
+is_active         bool     False when ZedCloud reports the enterprise is not ENTERPRISE_STATE_ACTIVE
+name_verified     bool     True after verify_enterprise_names() confirms name matches ZedCloud; resets on token update or import overwrite
+last_sync_at      datetime nullable — when the last sync completed
+last_sync_status  enum     ok | error | token_expired
+last_sync_error   str      nullable — error detail from last failed sync
 ```
-**Constraint:** `unique_together = (user_email, cluster_id)`. (Django <5.2 has no native composite
-PK, so use a surrogate `id` + uniqueness constraint rather than a true composite key.)
+**Constraint:** `unique_together = ('name', 'cluster')`.
+
+### UntrackedDevice  *(devices seen in ZedCloud but not in inventory)*
+```
+id                  int      PK auto
+enterprise_id       int      FK → Enterprise.id (CASCADE)
+zcloud_id           str      device UUID in ZedCloud
+name                str      device name in ZedCloud
+serial_number       str
+model               str      (denormalized from ZedCloud response)
+run_state           str
+eve_version         str      nullable
+device_connectivity JSON     nullable
+first_seen_at       datetime
+last_seen_at        datetime
+```
+**Constraint:** `unique_together = ('serial_number', 'enterprise')`.
+
+### Notification  *(admin-facing in-app alerts from sync engine)*
+```
+id          int      PK auto
+kind        enum     token_expired | sync_error | name_mismatch | enterprise_inactive
+enterprise  FK       → Enterprise.id (CASCADE, nullable)
+title       str
+body        str
+created_at  datetime auto
+is_read     bool     default False
+read_at     datetime nullable
+```
+**Constraint:** `unique_together = [('kind', 'enterprise')]` — repeated failures update the existing notification rather than creating duplicates.
 
 ### ReservationRequest
 ```
@@ -329,9 +363,9 @@ DELETE /api/v1/devices/{id}     admin only (X-User-Email header)
 POST   /api/v1/devices/{id}/reserve          no body — requester identified via X-User-Email header
 POST   /api/v1/devices/{id}/force-assign     admin only; body: {assignee_email}
 POST   /api/v1/devices/{id}/release          owner only (X-User-Email header); 403 if requester ≠ owner
-POST   /api/v1/devices/{id}/status           body: {bearer_token}
+POST   /api/v1/devices/{id}/status           body: {enterprise_id}
                                              uses Device.cluster_id + cluster_device_name
-                                             saves bearer_token to Vault, calls ZedCloud, updates device
+                                             decrypts Enterprise.bearer_token_enc server-side, calls ZedCloud, updates device
 ```
 
 ### Device Purpose
@@ -371,11 +405,32 @@ PATCH /api/v1/users/{id}   admin only; body: any subset of {name, team, user_typ
                            email is identity — not editable via this endpoint
 ```
 
-### Vault
+### Clusters & Enterprises
 ```
-GET  /api/v1/vault/{cluster_id}    Header X-User-Email → {has_token: bool}
+GET    /api/v1/clusters/                       IsPortalUser  — list clusters with nested enterprises + sync status
+POST   /api/v1/clusters/                       IsAdminPortalUser — create cluster
+PATCH  /api/v1/clusters/{id}/                  IsAdminPortalUser — update name / host
+DELETE /api/v1/clusters/{id}/                  IsAdminPortalUser — blocked if enterprises exist
+POST   /api/v1/clusters/{id}/enterprises/      IsAdminPortalUser — add enterprise (bearer token only; name fetched from ZedCloud)
+PATCH  /api/v1/enterprises/{id}/               IsAdminPortalUser — update name / bearer token
+DELETE /api/v1/enterprises/{id}/               IsAdminPortalUser — remove enterprise
+POST   /api/v1/enterprises/{id}/sync/          IsAdminPortalUser — trigger immediate sync
+GET    /api/v1/clusters/export/                IsAdminPortalUser — download full cluster + enterprise config as JSON (bearer tokens excluded)
+POST   /api/v1/clusters/import/                IsAdminPortalUser — import cluster + enterprise config from JSON; triggers background verify
 ```
-(Vault write happens via `POST /api/v1/devices/{id}/status` — no separate upsert endpoint needed)
+
+### Untracked Devices
+```
+GET  /api/v1/untracked-devices/                IsPortalUser  — list devices seen in ZedCloud but absent from inventory; filterable by enterprise
+POST /api/v1/untracked-devices/{id}/move-to-inventory/  IsPortalUser — move untracked device into inventory as a new Device row
+```
+
+### Notifications
+```
+GET  /api/v1/notifications/                    IsAdminPortalUser — list unread admin notifications
+POST /api/v1/notifications/{id}/read/          IsAdminPortalUser — mark single notification read
+POST /api/v1/notifications/read-all/           IsAdminPortalUser — mark all notifications read
+```
 
 ### Reservation Requests
 ```
@@ -403,7 +458,7 @@ POST /api/v1/reservations/{token}/reject       no auth — token IS the auth; ex
 ## ZedCloud Status Fetch
 
 ### Auth
-Bearer token — personal, per user per cluster, stored in Vault.
+Bearer token — admin-managed, per enterprise, stored encrypted in `Enterprise.bearer_token_enc`.
 
 ```http
 GET https://{cluster.host}/api/v1/devices/name/{cluster_device_name}/status/info
@@ -415,7 +470,7 @@ Authorization: Bearer {token}
 |---|---|
 | Cluster | Device.cluster dropdown; editable — switching cluster updates the device record |
 | Name in Cluster | Device.cluster_device_name (editable — user can correct before fetching) |
-| Bearer Token | Masked (●●●●) if Vault has one; blank otherwise |
+| Enterprise | Dropdown of active enterprises for the selected cluster; the backend decrypts the token server-side |
 
 ### Response Parsing
 ```python
@@ -485,7 +540,7 @@ STATUS_MAP = {
 |---|---|---|
 | **200 (serial match or no serial in response)** | Update device row (eve_version, device_connectivity, status, status_fetched_at) | Dialog closes; table row refreshes |
 | **200 (serial mismatch)** | Do NOT update device | Dialog stays open; error: *"Serial mismatch — Expected: {expected} · Got: {actual}"* |
-| **401 / 403** | Do NOT update Vault | Dialog stays open; error: *"Bearer token invalid or expired"* |
+| **401 / 403** | Do NOT update device | Dialog stays open; error: *"Bearer token invalid or expired"* |
 | **404** | Set all live fields → `"Unknown"`; clear device_connectivity; stamp status_fetched_at | Dialog closes; toast: *"{device} not found on {cluster}."* |
 | **Other** | No device update | Dialog stays open; show HTTP status + body excerpt |
 
@@ -840,7 +895,7 @@ model (name), customer_partner_name (from model), team, owner_email, lab, locati
 condition, idrac_ip, idrac_username, eve_version, device_connectivity, status,
 last_purpose_text, created_at, updated_at
 
-**Not exported:** idrac_password_enc, Vault bearer tokens, ownership history, device purpose history
+**Not exported:** idrac_password_enc, enterprise bearer tokens, ownership history, device purpose history
 
 ### Import template
 ```
@@ -910,7 +965,7 @@ GET /api/v1/admin/latency/
 
 ## Encryption
 - **Key:** `ENCRYPTION_KEY` env var — base64 Fernet key generated once at deploy
-- **Encrypted fields:** `Device.idrac_password_enc`, `Vault.bearer_token_enc`
+- **Encrypted fields:** `Device.idrac_password_enc`, `Enterprise.bearer_token_enc`
 - `Device.idrac_username` is stored plaintext (not a credential by itself)
 - Encrypted blobs never exposed in API responses
 
@@ -1061,9 +1116,15 @@ device-managing-portal/
 │   │   │   ├── views.py
 │   │   │   ├── urls.py
 │   │   │   └── admin.py
-│   │   ├── vault/
-│   │   │   ├── models.py        Vault model
+│   │   ├── enterprises/
+│   │   │   ├── models.py        Enterprise model
 │   │   │   ├── serializers.py
+│   │   │   ├── views.py         CRUD + ClusterExportView + ClusterImportView + EnterpriseSyncView
+│   │   │   ├── sync.py          sync_all_enterprises(); verify_enterprise_names()
+│   │   │   ├── apps.py          APScheduler registration
+│   │   │   └── urls.py
+│   │   ├── notifications/
+│   │   │   ├── models.py        Notification model
 │   │   │   ├── views.py
 │   │   │   └── urls.py
 │   │   └── reservations/
@@ -1088,13 +1149,14 @@ device-managing-portal/
     │   ├── App.tsx
     │   ├── api/
     │   │   ├── client.ts        axios instance; auto-sends X-User-Email header
-    │   │   ├── choices.ts       getChoices() → {labs, teams, conditions}
+    │   │   ├── choices.ts       getChoices() → {labs, teams, conditions, enterprises}
     │   │   ├── devices.ts
     │   │   ├── users.ts
-    │   │   ├── clusters.ts
+    │   │   ├── enterprises.ts   clusters + enterprises CRUD + export/import
+    │   │   ├── notifications.ts getNotifications/markRead/markAllRead
+    │   │   ├── untracked.ts     getUntrackedDevices/moveToInventory
     │   │   ├── models.ts
     │   │   ├── reservations.ts
-    │   │   ├── vault.ts
     │   │   └── admin.ts
     │   ├── context/
     │   │   └── UserContext.tsx  current user in localStorage; provides useUser()
@@ -1112,10 +1174,12 @@ device-managing-portal/
     │   │   ├── ExportImportPanel.tsx  admin-only; drag-drop file picker, format/mode selectors, preview, result modal
     │   │   └── OwnershipHistoryModal.tsx
     │   └── pages/
-    │       ├── LoginPage.tsx              /login — user selection; redirects if already logged in
-    │       ├── DevicesPage.tsx            /devices — redirects to /login if no session
-    │       ├── UsersPage.tsx              /users — admin-only; redirects non-admin to /devices
-    │       └── ConfirmReservationPage.tsx  /confirm/:token — approve/reject reservation; no auth needed
+    │       ├── LoginPage.tsx                  /login — user selection; redirects if already logged in
+    │       ├── DevicesPage.tsx                /devices — redirects to /login if no session
+    │       ├── UsersPage.tsx                  /users — admin-only; redirects non-admin to /devices
+    │       ├── ClusterEnterprisesPage.tsx     /cluster-enterprises — admin-only; manage clusters + enterprises
+    │       ├── UntrackedDevicesPage.tsx       /untracked-devices — devices in ZedCloud not in inventory
+    │       └── ConfirmReservationPage.tsx     /confirm/:token — approve/reject reservation; no auth needed
     ├── package.json
     ├── vite.config.ts       proxy /api → :8000 in dev
     └── .env.example         VITE_API_BASE_URL
@@ -1128,7 +1192,7 @@ device-managing-portal/
 | # | Decision | Answer |
 |---|---|---|
 | 1 | IDRAC creds format | 2 fields: idrac_username (plain) + idrac_password_enc (encrypted) |
-| 2 | ZedCloud auth | Bearer token, personal per user per cluster, stored in Vault |
+| 2 | ZedCloud auth | Bearer token, admin-managed per enterprise per cluster, stored encrypted in Enterprise model |
 | 3 | SSH IPs | All IPv4s from uplink interfaces; stored as JSON array; displayed comma-separated |
 | 4 | Owner stored as | Email; display name looked up from User table |
 | 5 | Reservation notification | Email (if SMTP set) + in-app badge (always) |
@@ -1138,7 +1202,7 @@ device-managing-portal/
 | 9 | Admin force-assign | Bypasses approval; owner notified; pending requester notified if not the assignee |
 | 10 | Update permissions | Any user (for device fields); any user with token (for status) |
 | 11 | 404 from ZedCloud | Clear eve_version, device_connectivity, status → "Unknown" |
-| 12 | 403 from ZedCloud | Re-prompt in dialog; do not update Vault |
+| 12 | 403 from ZedCloud | Re-prompt in dialog; do not update device |
 | 13 | Auto-refresh | Device list every 5 min, notifications every 30 sec (defaults); configurable via DEVICE_LIST_REFRESH_MS / NOTIFICATION_REFRESH_MS env vars via GET /api/v1/config/ |
 | 14 | Search UX | Single debounced (300ms) text box; Team/Lab/Condition are separate filter selects |
 | 15 | Availability filter | Available / Reserved / All chip toggle |

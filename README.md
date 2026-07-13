@@ -15,7 +15,8 @@ Holocron is an internal web portal for Zededa test teams to manage shared physic
 - **Admin controls** — force-assign, bulk CSV import/export, user management
 - **Ownership history** — append-only audit log per device
 - **Email notifications** — reservation requests, approvals, out-of-order alerts
-- **Encrypted credentials** — iDRAC passwords and ZedCloud bearer tokens stored with Fernet encryption
+- **Encrypted credentials** — iDRAC passwords and enterprise ZedCloud bearer tokens stored with Fernet encryption
+- **Auto device sync** — hourly background poll per enterprise; untracked devices surfaced in their own page; admins notified of token expiry, name mismatches, and inactive enterprises
 
 ---
 
@@ -198,7 +199,8 @@ device-managing-portal/
 │   │   ├── reservations/     # ReservationRequest, ownership history
 │   │   ├── clusters/         # ZedCloud cluster registry
 │   │   ├── device_models/    # Hardware model catalog
-│   │   ├── vault/            # Encrypted bearer token storage
+│   │   ├── enterprises/      # Enterprise credentials + hourly sync engine
+│   │   ├── notifications/    # Admin in-app alerts from sync engine
 │   │   └── admin_tools/      # CSV import/export, latency tracking
 │   ├── utils/
 │   │   ├── permissions.py    # IsPortalUser, IsAdminPortalUser, get_user_email

@@ -52,7 +52,7 @@ It contains exact file paths, code patterns, and checklists for every common imp
 ### Encryption
 - Fernet key from `settings.ENCRYPTION_KEY` (env var)
 - Use `utils/crypto.py` — `encrypt(str) -> bytes`, `decrypt(bytes) -> str`
-- Encrypted fields: `Device.idrac_password_enc`, `Vault.bearer_token_enc`
+- Encrypted fields: `Device.idrac_password_enc`, `Enterprise.bearer_token_enc`
 - `Device.idrac_username` is plaintext
 - Never return encrypted fields in API responses
 
@@ -98,7 +98,7 @@ It contains exact file paths, code patterns, and checklists for every common imp
 - Do **not** use `name` to get the interface name from ZedCloud `netStatusList` — use `ifName`
 - Do **not** look only in `hardwareInfo.serialNum` for device serial — check `minfo.serialNumber` first
 - Do **not** store condition values as title-case in the DB
-- Do **not** return `idrac_password_enc` or `bearer_token_enc` in any API response
+- Do **not** return `idrac_password_enc` or `bearer_token_enc` (Enterprise) in any API response
 - Do **not** use Django's built-in User model for portal users — use `apps.users.models.PortalUser`
 - Do **not** catch email exceptions and pass silently — log them with `logger.warning()`
 - Do **not** forget to update both `UNAVAILABLE_CONDITIONS` locations when changing the unavailable set
@@ -108,3 +108,17 @@ It contains exact file paths, code patterns, and checklists for every common imp
 - Do **not** use `?format=` query param for export — use `?fmt=` to avoid DRF content-negotiation 404
 - Do **not** reference `last_comment_text`, `DeviceComment`, or `/comments/` — the model, fields, and endpoint were renamed to `DevicePurpose`, `last_purpose_*`, and `/purpose/`
 - Do **not** allow any portal user to clear device purpose — check `is_admin(email) or device.owner_email == email` first
+- Do **not** reference `apps/vault` or `Vault.bearer_token_enc` — the Vault app was removed; enterprise bearer tokens are stored in `Enterprise.bearer_token_enc` in `apps/enterprises`
+- Do **not** add a `/api/v1/vault/` route — it no longer exists; status fetch now uses an enterprise credential selected in the dialog
+
+### Enterprise sync
+- `Enterprise` model: `apps/enterprises/models.py` — fields: `name`, `cluster` (FK), `bearer_token_enc`, `zcloud_id`, `is_active`, `name_verified`, `last_sync_at`, `last_sync_status`, `last_sync_error`; `unique_together = ('name', 'cluster')`
+- Adding an enterprise: bearer token only — name is fetched from ZedCloud `/v1/enterprises/self`; creation blocked if ZedCloud returns state != `ENTERPRISE_STATE_ACTIVE`
+- `name_verified` resets to `False` on token update or import overwrite; set to `True` after `verify_enterprise_names()` confirms name matches ZedCloud
+- Post-import verification: a background thread calls `verify_enterprise_names()` after any import that creates/updates enterprises — this is **not** a scheduled job
+- APScheduler (in `apps/enterprises/apps.py`): runs `sync_all_enterprises` every 1 hour, `send_nightly_digest` at midnight UTC; there is **no** verify job in the scheduler
+
+### Notifications (admin)
+- `Notification` model: `apps/notifications/models.py` — kinds: `token_expired`, `sync_error`, `name_mismatch`, `enterprise_inactive`; has `enterprise` FK; `unique_together = [('kind', 'enterprise')]`
+- `name_mismatch` notifications have inline "Use ZedCloud name" / "Keep current name" action buttons in the UI
+- `enterprise_inactive` notifications navigate to the Clusters page on click
