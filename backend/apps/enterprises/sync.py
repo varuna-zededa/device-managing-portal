@@ -162,12 +162,14 @@ def _apply_inventory_candidate(candidate: dict, now) -> None:
     device.device_connectivity = candidate['device_connectivity']
     device.status = candidate['status']
     device.status_fetched_at = now
-    # Clear missing flag — device is reachable again
-    if device.condition == 'missing':
+    # Clear sync-owned condition flags when device is healthy and reachable again.
+    # Both 'missing' and 'needs_repair' (set when run_state was SUSPECT) are sync-managed;
+    # admin-set conditions (out_of_order, dedicated, temporarily_leased) are never touched.
+    if device.condition in ('missing', 'needs_repair') and candidate['run_state'] != _SUSPECT_STATE:
         device.condition = 'normal'
         update_fields.append('condition')
-    # Suspect state → flag for recovery (only from normal; don't override admin-set conditions
-    # like out_of_order, dedicated, temporarily_leased)
+    # Suspect state → flag for investigation (only from normal; don't override admin-set
+    # conditions like out_of_order, dedicated, temporarily_leased)
     if candidate['run_state'] == _SUSPECT_STATE and device.condition == 'normal':
         device.condition = 'needs_repair'
         update_fields.append('condition')
