@@ -27,6 +27,8 @@ INSTALLED_APPS = [
     'apps.vault',
     'apps.reservations',
     'apps.admin_tools',
+    'apps.enterprises',
+    'apps.notifications',
 ]
 
 MIDDLEWARE = [
