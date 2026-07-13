@@ -138,6 +138,7 @@ export default function UntrackedDevicesPage() {
   const [enterpriseFilter, setEnterpriseFilter] = useState('')
   const [clusterFilter, setClusterFilter] = useState('')
   const [serialFilter, setSerialFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
   const [selected, setSelected] = useState<UntrackedDevice | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set())
@@ -159,20 +160,28 @@ export default function UntrackedDevicesPage() {
     return [...new Set(base.map(d => d.enterprise_name))].sort()
   }, [allDevices, clusterFilter])
 
+  const statusOptions = useMemo(() => {
+    const unique = [...new Set(allDevices.map(d => d.run_state))]
+    return unique
+      .map(raw => ({ raw, label: formatRunState(raw) }))
+      .sort((a, b) => a.label.localeCompare(b.label))
+  }, [allDevices])
+
   const filtered = useMemo(() => {
     let d = allDevices
     if (enterpriseFilter) d = d.filter(x => x.enterprise_name === enterpriseFilter)
     if (clusterFilter) d = d.filter(x => x.cluster_name === clusterFilter)
+    if (statusFilter) d = d.filter(x => x.run_state === statusFilter)
     if (serialFilter) {
       const q = serialFilter.toLowerCase()
       d = d.filter(x => x.serial_number.toLowerCase().includes(q))
     }
     return d
-  }, [allDevices, enterpriseFilter, clusterFilter, serialFilter])
+  }, [allDevices, enterpriseFilter, clusterFilter, statusFilter, serialFilter])
 
-  const devices = useMemo(() => {
-    if (!sortKey) return filtered
-    return [...filtered].sort((a, b) => {
+  const { onlineDevices, otherDevices } = useMemo(() => {
+    const sortFn = (a: UntrackedDevice, b: UntrackedDevice) => {
+      if (!sortKey) return 0
       let av = '', bv = ''
       switch (sortKey) {
         case 'name':       av = a.name;                      bv = b.name; break
@@ -184,7 +193,10 @@ export default function UntrackedDevicesPage() {
       if (!av && bv) return 1
       if (av && !bv) return -1
       return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av)
-    })
+    }
+    const online = filtered.filter(d => d.run_state === 'RUN_STATE_ONLINE').sort(sortFn)
+    const other  = filtered.filter(d => d.run_state !== 'RUN_STATE_ONLINE').sort(sortFn)
+    return { onlineDevices: online, otherDevices: other }
   }, [filtered, sortKey, sortDir])
 
   const handleSort = (key: SortKey) => {
@@ -201,7 +213,7 @@ export default function UntrackedDevicesPage() {
     })
   }
 
-  const summary = !isLoading ? buildSummary(devices) : null
+  const summary = !isLoading ? buildSummary([...onlineDevices, ...otherDevices]) : null
 
   return (
     <div className="min-h-screen bg-background">
@@ -251,6 +263,21 @@ export default function UntrackedDevicesPage() {
               <SelectItem value={ALL}>All Enterprises</SelectItem>
               {enterpriseOptions.map(name => (
                 <SelectItem key={name} value={name}>{name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={statusFilter || ALL}
+            onValueChange={(v) => setStatusFilter(v === ALL ? '' : v)}
+          >
+            <SelectTrigger className="w-40 h-9 text-sm">
+              <SelectValue placeholder="All Statuses" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL}>All Statuses</SelectItem>
+              {statusOptions.map(({ raw, label }) => (
+                <SelectItem key={raw} value={raw}>{label}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -310,64 +337,80 @@ export default function UntrackedDevicesPage() {
                 </tr>
               </TableHeader>
               <TableBody>
-                {devices.map(d => {
-                  const isExpanded = expandedIds.has(d.id)
-                  return (
-                    <Fragment key={d.id}>
-                      <TableRow className="group">
-                        <ResizableTableCell columnId="expand" truncate={false} className="w-10 px-2">
-                          <button
-                            type="button"
-                            onClick={() => toggleExpand(d.id)}
-                            className="p-1 rounded hover:bg-accent transition-colors"
-                          >
-                            <ChevronRight className={cn('w-4 h-4 text-muted-foreground transition-transform', isExpanded && 'rotate-90')} />
-                          </button>
-                        </ResizableTableCell>
-                        <ResizableTableCell columnId="name" copyValue={d.name}>
-                          <span className="font-medium">{d.name || '—'}</span>
-                        </ResizableTableCell>
-                        <ResizableTableCell columnId="serial" copyValue={d.serial_number}>
-                          <span className="font-mono text-xs">{d.serial_number}</span>
-                        </ResizableTableCell>
-                        <ResizableTableCell columnId="model">
-                          <span className="text-xs">{d.model || '—'}</span>
-                        </ResizableTableCell>
-                        <ResizableTableCell columnId="enterprise">
-                          <span className="text-xs">{d.enterprise_name}</span>
-                        </ResizableTableCell>
-                        <ResizableTableCell columnId="cluster">
-                          <Badge variant="outline" className="text-xs font-normal">{d.cluster_name}</Badge>
-                        </ResizableTableCell>
-                        <ResizableTableCell columnId="status" truncate={false}>
-                          <StatusBadge runState={d.run_state} />
-                        </ResizableTableCell>
-                        <ResizableTableCell columnId="actions" truncate={false} className="sticky-action-col">
-                          {isAdmin && (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-7 w-7">
-                                  <MoreHorizontal className="w-4 h-4" />
-                                  <span className="sr-only">Actions</span>
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => { setSelected(d); setDialogOpen(true) }}>
-                                  Move to Inventory
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          )}
-                        </ResizableTableCell>
-                      </TableRow>
-                      {isExpanded && <ExpandPanel device={d} />}
-                    </Fragment>
-                  )
-                })}
+                {([
+                  { group: onlineDevices, label: 'Online', count: onlineDevices.length },
+                  { group: otherDevices,  label: 'Other',  count: otherDevices.length  },
+                ] as const).map(({ group, label, count }) => (
+                  <Fragment key={label}>
+                    {onlineDevices.length > 0 && otherDevices.length > 0 && (
+                      <tr className={label === 'Other' ? 'border-t-2 border-border/60' : ''}>
+                        <td colSpan={8} className="px-4 py-1.5 bg-muted/40">
+                          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                            {label} ({count})
+                          </span>
+                        </td>
+                      </tr>
+                    )}
+                    {group.map(d => {
+                      const isExpanded = expandedIds.has(d.id)
+                      return (
+                        <Fragment key={d.id}>
+                          <TableRow className="group">
+                            <ResizableTableCell columnId="expand" truncate={false} className="w-10 px-2">
+                              <button
+                                type="button"
+                                onClick={() => toggleExpand(d.id)}
+                                className="p-1 rounded hover:bg-accent transition-colors"
+                              >
+                                <ChevronRight className={cn('w-4 h-4 text-muted-foreground transition-transform', isExpanded && 'rotate-90')} />
+                              </button>
+                            </ResizableTableCell>
+                            <ResizableTableCell columnId="name" copyValue={d.name}>
+                              <span className="font-medium">{d.name || '—'}</span>
+                            </ResizableTableCell>
+                            <ResizableTableCell columnId="serial" copyValue={d.serial_number}>
+                              <span className="font-mono text-xs">{d.serial_number}</span>
+                            </ResizableTableCell>
+                            <ResizableTableCell columnId="model">
+                              <span className="text-xs">{d.model || '—'}</span>
+                            </ResizableTableCell>
+                            <ResizableTableCell columnId="enterprise">
+                              <span className="text-xs">{d.enterprise_name}</span>
+                            </ResizableTableCell>
+                            <ResizableTableCell columnId="cluster">
+                              <Badge variant="outline" className="text-xs font-normal">{d.cluster_name}</Badge>
+                            </ResizableTableCell>
+                            <ResizableTableCell columnId="status" truncate={false}>
+                              <StatusBadge runState={d.run_state} />
+                            </ResizableTableCell>
+                            <ResizableTableCell columnId="actions" truncate={false} className="sticky-action-col">
+                              {isAdmin && (
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="h-7 w-7">
+                                      <MoreHorizontal className="w-4 h-4" />
+                                      <span className="sr-only">Actions</span>
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onClick={() => { setSelected(d); setDialogOpen(true) }}>
+                                      Move to Inventory
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              )}
+                            </ResizableTableCell>
+                          </TableRow>
+                          {isExpanded && <ExpandPanel device={d} />}
+                        </Fragment>
+                      )
+                    })}
+                  </Fragment>
+                ))}
               </TableBody>
             </ResizableTable>
 
-            {devices.length === 0 && (
+            {onlineDevices.length === 0 && otherDevices.length === 0 && (
               <p className="text-sm text-muted-foreground text-center py-8">No untracked devices found.</p>
             )}
           </>
