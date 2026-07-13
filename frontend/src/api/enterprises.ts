@@ -6,6 +6,8 @@ export interface Enterprise {
   cluster: number
   cluster_name: string
   is_active: boolean
+  zcloud_id: string
+  name_verified: boolean
   last_sync_at: string | null
   last_sync_status: 'ok' | 'error' | 'token_expired' | null
   last_sync_error: string | null
@@ -16,6 +18,7 @@ export interface ClusterWithEnterprises {
   name: string
   host: string
   enterprises: Enterprise[]
+  device_count: number
 }
 
 export async function getClusters(): Promise<ClusterWithEnterprises[]> {
@@ -39,7 +42,7 @@ export async function deleteCluster(id: number): Promise<void> {
 
 export async function createEnterprise(
   clusterId: number,
-  data: { name: string; bearer_token: string; is_active?: boolean },
+  data: { bearer_token: string; is_active?: boolean },
 ): Promise<Enterprise> {
   const res = await client.post(`/clusters/${clusterId}/enterprises/`, data)
   return res.data

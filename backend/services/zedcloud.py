@@ -78,6 +78,34 @@ def fetch_device_status(
     return eve_version, connectivity if connectivity else None, dev_status
 
 
+ENTERPRISE_STATE_ACTIVE = 'ENTERPRISE_STATE_ACTIVE'
+
+_ENTERPRISE_STATE_LABELS: dict[str, str] = {
+    'ENTERPRISE_STATE_UNSPECIFIED': 'Unspecified',
+    'ENTERPRISE_STATE_CREATED': 'Created (not yet active)',
+    'ENTERPRISE_STATE_DELETED': 'Deleted',
+    'ENTERPRISE_STATE_ACTIVE': 'Active',
+    'ENTERPRISE_STATE_INACTIVE': 'Inactive / Suspended',
+    'ENTERPRISE_STATE_SIGNEDUP': 'Signed up (onboarding)',
+}
+
+
+def fetch_enterprise_self(host: str, bearer_token: str) -> dict:
+    """Call /v1/enterprises/self. Returns {name, zcloud_id, state, state_label}."""
+    url = f'https://{host}/v1/enterprises/self'
+    headers = {'Authorization': f'Bearer {bearer_token}'}
+    response = _client.get(url, headers=headers)
+    response.raise_for_status()
+    data = response.json()
+    state = data.get('state', '').strip()
+    return {
+        'name': data.get('name', '').strip(),
+        'zcloud_id': data.get('id', '').strip(),
+        'state': state,
+        'state_label': _ENTERPRISE_STATE_LABELS.get(state, state),
+    }
+
+
 def fetch_enterprise_devices(host: str, bearer_token: str) -> list[dict]:
     """Paginate GET /v1/devices/status and return all device records."""
     headers = {'Authorization': f'Bearer {bearer_token}'}

@@ -3,6 +3,8 @@ from django.db import models
 KIND_CHOICES = [
     ('token_expired', 'Token Expired'),
     ('sync_error', 'Sync Error'),
+    ('name_mismatch', 'Name Mismatch'),
+    ('enterprise_inactive', 'Enterprise Inactive'),
 ]
 
 

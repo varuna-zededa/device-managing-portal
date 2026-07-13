@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getPendingReservations, getMyReservations, approveReservation, rejectReservation } from '@/api/reservations'
 import { getConfig } from '@/api/config'
 import { getNotifications, markNotificationRead, markAllNotificationsRead, type PortalNotification } from '@/api/notifications'
+import { updateEnterprise } from '@/api/enterprises'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -73,12 +74,26 @@ export function NotificationBell() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['notifications'] }),
   })
 
+  const resolveNameMut = useMutation({
+    mutationFn: ({ enterpriseId, name }: { enterpriseId: number; name: string }) =>
+      updateEnterprise(enterpriseId, { name }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['notifications'] })
+      qc.invalidateQueries({ queryKey: ['clusters-enterprises'] })
+    },
+  })
+
   function handleNotificationClick(n: PortalNotification) {
+    if (n.kind === 'name_mismatch') return  // handled by inline buttons
     markReadMut.mutate(n.id)
-    if (n.kind === 'token_expired' || n.kind === 'sync_error') {
+    if (n.kind === 'token_expired' || n.kind === 'sync_error' || n.kind === 'enterprise_inactive') {
       navigate('/cluster-enterprises')
     }
     setOpen(false)
+  }
+
+  function parseMismatch(body: string): { local_name: string; zcloud_name: string } | null {
+    try { return JSON.parse(body) } catch { return null }
   }
 
   const unreadAdminCount = adminNotifications.filter((n) => !n.is_read).length
@@ -186,19 +201,62 @@ export function NotificationBell() {
                 </button>
               )}
             </div>
-            {adminNotifications.slice(0, 10).map((n) => (
-              <div
-                key={n.id}
-                className={cn(
-                  'px-3 py-2 hover:bg-muted/50 border-b border-border/50 cursor-pointer',
-                  !n.is_read && 'bg-muted/20',
-                )}
-                onClick={() => handleNotificationClick(n)}
-              >
-                <p className={cn('text-sm font-medium', !n.is_read && 'text-foreground')}>{n.title}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">{timeAgo(n.created_at)}</p>
-              </div>
-            ))}
+            {adminNotifications.slice(0, 10).map((n) => {
+              if (n.kind === 'name_mismatch') {
+                const mismatch = parseMismatch(n.body)
+                return (
+                  <div key={n.id} className={cn('px-3 py-2 border-b border-border/50', !n.is_read && 'bg-muted/20')}>
+                    <p className={cn('text-sm font-medium', !n.is_read && 'text-foreground')}>{n.title}</p>
+                    {mismatch && (
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Local: <span className="font-mono">{mismatch.local_name}</span>
+                        {' · '}ZedCloud: <span className="font-mono">{mismatch.zcloud_name}</span>
+                      </p>
+                    )}
+                    <p className="text-xs text-muted-foreground mt-0.5">{timeAgo(n.created_at)}</p>
+                    {!n.is_read && mismatch && n.enterprise != null && (
+                      <div className="flex gap-2 mt-2">
+                        <Button
+                          size="sm"
+                          className="h-7 text-xs"
+                          disabled={resolveNameMut.isPending}
+                          onClick={() => {
+                            resolveNameMut.mutate(
+                              { enterpriseId: n.enterprise!, name: mismatch.zcloud_name },
+                              { onSuccess: () => markReadMut.mutate(n.id) },
+                            )
+                          }}
+                        >
+                          Use "{mismatch.zcloud_name}"
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs"
+                          disabled={markReadMut.isPending}
+                          onClick={() => markReadMut.mutate(n.id)}
+                        >
+                          Keep "{mismatch.local_name}"
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )
+              }
+              return (
+                <div
+                  key={n.id}
+                  className={cn(
+                    'px-3 py-2 hover:bg-muted/50 border-b border-border/50 cursor-pointer',
+                    !n.is_read && 'bg-muted/20',
+                  )}
+                  onClick={() => handleNotificationClick(n)}
+                >
+                  <p className={cn('text-sm font-medium', !n.is_read && 'text-foreground')}>{n.title}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{timeAgo(n.created_at)}</p>
+                </div>
+              )
+            })}
           </div>
         )}
 

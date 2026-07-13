@@ -3,7 +3,7 @@ import logging
 import httpx
 from django.utils import timezone
 
-from services.zedcloud import STATUS_MAP, fetch_enterprise_devices
+from services.zedcloud import STATUS_MAP, ENTERPRISE_STATE_ACTIVE, fetch_enterprise_devices, fetch_enterprise_self
 from utils.crypto import decrypt
 from utils.email import send_token_expiry_alert
 
@@ -181,3 +181,76 @@ def sync_all_enterprises() -> None:
     ).exclude(serial_number__in=all_seen_serials).update(condition='missing')
 
     logger.info('sync_all_enterprises complete. Seen serials: %d', len(all_seen_serials))
+
+
+def verify_enterprise_names() -> None:
+    """Nightly job: for any enterprise not yet name-verified, call ZedCloud and notify on mismatch."""
+    import json
+    from apps.notifications.models import Notification
+    from .models import Enterprise
+
+    enterprises = (
+        Enterprise.objects
+        .filter(is_active=True, name_verified=False)
+        .select_related('cluster')
+    )
+
+    for enterprise in enterprises:
+        try:
+            bearer_token = decrypt(bytes(enterprise.bearer_token_enc))
+        except Exception:
+            logger.warning('verify_enterprise_names: cannot decrypt token for %s — skipping', enterprise.name)
+            continue  # leave name_verified=False; retry on next import
+
+        try:
+            info = fetch_enterprise_self(enterprise.cluster.host, bearer_token)
+        except Exception as exc:
+            logger.warning('verify_enterprise_names: ZedCloud call failed for %s: %s — skipping', enterprise.name, exc)
+            continue  # leave name_verified=False; retry on next import
+
+        update_fields = ['name_verified']
+
+        # Always persist the zcloud_id if we have one
+        if info['zcloud_id'] and info['zcloud_id'] != enterprise.zcloud_id:
+            enterprise.zcloud_id = info['zcloud_id']
+            update_fields.append('zcloud_id')
+
+        # State check — non-active enterprise is marked inactive and notified
+        if info['state'] != ENTERPRISE_STATE_ACTIVE:
+            Notification.objects.get_or_create(
+                kind='enterprise_inactive',
+                enterprise=enterprise,
+                defaults={
+                    'is_read': False,
+                    'title': f'Enterprise inactive in ZedCloud — {enterprise.name}',
+                    'body': (
+                        f'Enterprise "{enterprise.name}" on cluster "{enterprise.cluster.name}" '
+                        f'has state "{info["state_label"]}" in ZedCloud. '
+                        f'It has been deactivated in Holocron. Re-activate it once the ZedCloud state is resolved.'
+                    ),
+                },
+            )
+            enterprise.is_active = False
+            update_fields.append('is_active')
+            logger.info(
+                'verify_enterprise_names: enterprise %s is not active in ZedCloud (state=%s) — deactivated',
+                enterprise.name, info['state'],
+            )
+        elif info['name'] and info['name'] != enterprise.name:
+            # Only check name mismatch for active enterprises
+            Notification.objects.get_or_create(
+                kind='name_mismatch',
+                enterprise=enterprise,
+                defaults={
+                    'is_read': False,
+                    'title': f'Enterprise name mismatch — {enterprise.cluster.name}',
+                    'body': json.dumps({'local_name': enterprise.name, 'zcloud_name': info['name']}),
+                },
+            )
+            logger.info(
+                'verify_enterprise_names: name mismatch for %s (local=%r zcloud=%r)',
+                enterprise.name, enterprise.name, info['name'],
+            )
+
+        enterprise.name_verified = True
+        enterprise.save(update_fields=update_fields)

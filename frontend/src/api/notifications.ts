@@ -2,7 +2,8 @@ import client from './client'
 
 export interface PortalNotification {
   id: number
-  kind: 'token_expired' | 'sync_error'
+  kind: 'token_expired' | 'sync_error' | 'name_mismatch' | 'enterprise_inactive'
+  enterprise: number | null
   title: string
   body: string
   created_at: string

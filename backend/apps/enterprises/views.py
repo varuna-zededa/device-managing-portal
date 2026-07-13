@@ -1,5 +1,6 @@
 import json
 import logging
+import threading
 
 import httpx
 from django.http import HttpResponse
@@ -14,7 +15,7 @@ from utils.permissions import IsAdminPortalUser
 
 from .models import Enterprise
 from .serializers import EnterpriseReadSerializer, EnterpriseUpdateSerializer
-from .sync import sync_enterprise
+from .sync import sync_enterprise, verify_enterprise_names
 
 logger = logging.getLogger(__name__)
 
@@ -151,7 +152,8 @@ class ClusterImportView(APIView):
                 if existing:
                     if on_conflict == 'overwrite':
                         existing.bearer_token_enc = encrypt(bearer_token)
-                        existing.save(update_fields=['bearer_token_enc'])
+                        existing.name_verified = False  # re-verify against ZedCloud
+                        existing.save(update_fields=['bearer_token_enc', 'name_verified'])
                         updated_enterprises += 1
                     else:
                         skipped_enterprises += 1
@@ -160,6 +162,7 @@ class ClusterImportView(APIView):
                         name=ent_name,
                         cluster=cluster,
                         bearer_token_enc=encrypt(bearer_token),
+                        # name_verified defaults to False — picked up by post-import verification
                     )
                     created_enterprises += 1
 
@@ -169,6 +172,10 @@ class ClusterImportView(APIView):
             'updated_enterprises': updated_enterprises,
             'skipped_enterprises': skipped_enterprises,
         }
+
+        if created_enterprises > 0 or updated_enterprises > 0:
+            threading.Thread(target=verify_enterprise_names, daemon=True).start()
+
         if errors:
             result['errors'] = errors
             return Response(result, status=status.HTTP_207_MULTI_STATUS)

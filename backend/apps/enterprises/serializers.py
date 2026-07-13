@@ -9,34 +9,21 @@ class EnterpriseReadSerializer(serializers.ModelSerializer):
     class Meta:
         model = Enterprise
         fields = [
-            'id', 'name', 'cluster', 'cluster_name',
-            'is_active', 'last_sync_at', 'last_sync_status', 'last_sync_error',
+            'id', 'name', 'zcloud_id', 'cluster', 'cluster_name',
+            'is_active', 'name_verified',
+            'last_sync_at', 'last_sync_status', 'last_sync_error',
         ]
 
 
 class EnterpriseCreateSerializer(serializers.Serializer):
-    name = serializers.CharField(max_length=200)
+    """Accepts bearer_token only — name is fetched from ZedCloud by the view."""
     bearer_token = serializers.CharField(write_only=True)
     is_active = serializers.BooleanField(default=True)
-
-    def validate_name(self, value):
-        if not value.strip():
-            raise serializers.ValidationError('Name must not be blank.')
-        return value.strip()
 
     def validate_bearer_token(self, value):
         if not value.strip():
             raise serializers.ValidationError('Bearer token must not be blank.')
         return value.strip()
-
-    def create(self, validated_data):
-        cluster = self.context['cluster']
-        bearer_token = validated_data.pop('bearer_token')
-        return Enterprise.objects.create(
-            cluster=cluster,
-            bearer_token_enc=encrypt(bearer_token),
-            **validated_data,
-        )
 
 
 class EnterpriseUpdateSerializer(serializers.Serializer):
@@ -55,5 +42,6 @@ class EnterpriseUpdateSerializer(serializers.Serializer):
             setattr(instance, attr, val)
         if bearer_token and bearer_token.strip():
             instance.bearer_token_enc = encrypt(bearer_token.strip())
+            instance.name_verified = False  # re-verify against ZedCloud on next nightly run
         instance.save()
         return instance

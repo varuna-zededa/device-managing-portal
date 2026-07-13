@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   getClusters, createCluster, updateCluster, deleteCluster,
@@ -38,12 +38,12 @@ export default function ClusterEnterprisesPage() {
   const qc = useQueryClient()
   const { isAdmin } = useUser()
   const [expanded, setExpanded] = useState<Set<number>>(new Set())
+  const [expandedInitialized, setExpandedInitialized] = useState(false)
   const [showImport, setShowImport] = useState(false)
   const [addingCluster, setAddingCluster] = useState(false)
   const [newClusterName, setNewClusterName] = useState('')
   const [newClusterHost, setNewClusterHost] = useState('')
   const [addingEnterpriseFor, setAddingEnterpriseFor] = useState<number | null>(null)
-  const [newEntName, setNewEntName] = useState('')
   const [newEntToken, setNewEntToken] = useState('')
   const [editingEnterprise, setEditingEnterprise] = useState<Enterprise | null>(null)
   const [editEntName, setEditEntName] = useState('')
@@ -53,6 +53,13 @@ export default function ClusterEnterprisesPage() {
     queryKey: ['clusters-enterprises'],
     queryFn: getClusters,
   })
+
+  useEffect(() => {
+    if (clusters.length > 0 && !expandedInitialized) {
+      setExpanded(new Set(clusters.map((c) => c.id)))
+      setExpandedInitialized(true)
+    }
+  }, [clusters, expandedInitialized])
 
   const createClusterMut = useMutation({
     mutationFn: () => createCluster({ name: newClusterName, host: newClusterHost || undefined }),
@@ -67,9 +74,9 @@ export default function ClusterEnterprisesPage() {
   })
 
   const createEntMut = useMutation({
-    mutationFn: (clusterId: number) => createEnterprise(clusterId, { name: newEntName, bearer_token: newEntToken }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['clusters-enterprises'] }); setAddingEnterpriseFor(null); setNewEntName(''); setNewEntToken('') },
-    onError: (e: any) => toast.error(e?.response?.data?.name ?? e?.response?.data?.bearer_token ?? 'Failed'),
+    mutationFn: (clusterId: number) => createEnterprise(clusterId, { bearer_token: newEntToken }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['clusters-enterprises'] }); setAddingEnterpriseFor(null); setNewEntToken('') },
+    onError: (e: any) => toast.error(e?.response?.data?.bearer_token ?? e?.response?.data?.error ?? 'Failed'),
   })
 
   const updateEntMut = useMutation({
@@ -105,9 +112,9 @@ export default function ClusterEnterprisesPage() {
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      <main className="pt-14 px-4 py-6 max-w-5xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-xl font-semibold">Clusters &amp; Enterprises</h1>
+      <div className="pt-14">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+          <h1 className="text-base font-semibold text-foreground">Clusters &amp; Enterprises</h1>
           {isAdmin && (
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={handleExport}><Download className="w-4 h-4 mr-1" />Export</Button>
@@ -117,21 +124,21 @@ export default function ClusterEnterprisesPage() {
           )}
         </div>
 
-        {isAdmin && addingCluster && (
-          <div className="border rounded p-4 mb-4 space-y-3 bg-muted/30">
-            <h3 className="text-sm font-medium">New Cluster</h3>
-            <Input placeholder="Name" value={newClusterName} onChange={(e) => setNewClusterName(e.target.value)} />
-            <Input placeholder="Host (e.g. zcloud.hummingbird.zededa.net)" value={newClusterHost} onChange={(e) => setNewClusterHost(e.target.value)} />
-            <div className="flex gap-2">
-              <Button size="sm" onClick={() => createClusterMut.mutate()} disabled={!newClusterName || createClusterMut.isPending}>Save</Button>
-              <Button size="sm" variant="outline" onClick={() => setAddingCluster(false)}>Cancel</Button>
+        <div className="px-4 py-4 space-y-3">
+          {isAdmin && addingCluster && (
+            <div className="border rounded p-4 space-y-3 bg-muted/30">
+              <h3 className="text-sm font-medium">New Cluster</h3>
+              <Input placeholder="Name" value={newClusterName} onChange={(e) => setNewClusterName(e.target.value)} />
+              <Input placeholder="Host (e.g. zcloud.hummingbird.zededa.net)" value={newClusterHost} onChange={(e) => setNewClusterHost(e.target.value)} />
+              <div className="flex gap-2">
+                <Button size="sm" onClick={() => createClusterMut.mutate()} disabled={!newClusterName || createClusterMut.isPending}>Save</Button>
+                <Button size="sm" variant="outline" onClick={() => setAddingCluster(false)}>Cancel</Button>
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {isLoading && <p className="text-sm text-muted-foreground">Loading...</p>}
+          {isLoading && <p className="text-sm text-muted-foreground">Loading...</p>}
 
-        <div className="space-y-3">
           {clusters.map((cluster) => (
             <div key={cluster.id} className="border rounded-lg overflow-hidden">
               <div
@@ -143,6 +150,7 @@ export default function ClusterEnterprisesPage() {
                   <span className="font-medium text-sm">{cluster.name}</span>
                   <span className="text-xs text-muted-foreground">{cluster.host}</span>
                   <Badge variant="outline" className="text-xs">{cluster.enterprises.length} enterprise{cluster.enterprises.length !== 1 ? 's' : ''}</Badge>
+                  <Badge variant="secondary" className="text-xs">{cluster.device_count} device{cluster.device_count !== 1 ? 's' : ''}</Badge>
                 </div>
                 {isAdmin && (
                   <Button
@@ -194,14 +202,15 @@ export default function ClusterEnterprisesPage() {
                   {isAdmin && (
                     addingEnterpriseFor === cluster.id ? (
                       <div className="px-4 py-3 flex items-center gap-2 bg-muted/20">
-                        <Input className="h-7 text-xs w-36" value={newEntName} onChange={(e) => setNewEntName(e.target.value)} placeholder="Enterprise name" />
-                        <Input className="h-7 text-xs w-64" type="password" value={newEntToken} onChange={(e) => setNewEntToken(e.target.value)} placeholder="Bearer token" />
-                        <Button size="sm" className="h-7 text-xs" onClick={() => createEntMut.mutate(cluster.id)} disabled={!newEntName || !newEntToken || createEntMut.isPending}>Add</Button>
+                        <Input className="h-7 text-xs w-80" type="password" value={newEntToken} onChange={(e) => setNewEntToken(e.target.value)} placeholder="Bearer token — name fetched from ZedCloud" />
+                        <Button size="sm" className="h-7 text-xs" onClick={() => createEntMut.mutate(cluster.id)} disabled={!newEntToken || createEntMut.isPending}>
+                          {createEntMut.isPending ? 'Verifying…' : 'Add'}
+                        </Button>
                         <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setAddingEnterpriseFor(null)}>Cancel</Button>
                       </div>
                     ) : (
                       <div className="px-4 py-2">
-                        <Button size="sm" variant="ghost" className="h-7 text-xs text-muted-foreground" onClick={() => { setAddingEnterpriseFor(cluster.id); setNewEntName(''); setNewEntToken('') }}>
+                        <Button size="sm" variant="ghost" className="h-7 text-xs text-muted-foreground" onClick={() => { setAddingEnterpriseFor(cluster.id); setNewEntToken('') }}>
                           <Plus className="w-3.5 h-3.5 mr-1" /> Add Enterprise
                         </Button>
                       </div>
@@ -211,10 +220,9 @@ export default function ClusterEnterprisesPage() {
               )}
             </div>
           ))}
+          <ImportClusterDialog open={showImport} onOpenChange={setShowImport} />
         </div>
-
-        <ImportClusterDialog open={showImport} onOpenChange={setShowImport} />
-      </main>
+      </div>
     </div>
   )
 }

@@ -13,7 +13,9 @@ class Enterprise(models.Model):
         'clusters.Cluster', on_delete=models.CASCADE, related_name='enterprises',
     )
     bearer_token_enc = models.BinaryField()
+    zcloud_id = models.CharField(max_length=100, blank=True, default='')
     is_active = models.BooleanField(default=True)
+    name_verified = models.BooleanField(default=False)
     last_sync_at = models.DateTimeField(null=True, blank=True)
     last_sync_status = models.CharField(
         max_length=20, choices=SYNC_STATUS_CHOICES, null=True, blank=True,
