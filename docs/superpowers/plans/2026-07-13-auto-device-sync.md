@@ -4,7 +4,7 @@
 
 **Goal:** Replace per-user Vault bearer tokens with admin-managed enterprise credentials and run hourly background sync that updates inventory, surfaces untracked devices, and marks missing ones.
 
-**Architecture:** Two new Django apps (`apps/enterprises`, `apps/notifications`) plus an `UntrackedDevice` model in `apps/devices`. APScheduler runs inside the Django process: hourly bulk ZedCloud poll + midnight digest email. The `Vault` app is removed entirely. Frontend gains a Clusters & Enterprises admin tab, an Untracked Devices page, a revised Refresh modal (enterprise dropdown), and admin token-expiry notifications in the bell.
+**Architecture:** Two new Django apps (`apps/enterprises`, `apps/notifications`) plus an `UntrackedDevice` model in `apps/devices`. APScheduler runs inside the Django process: hourly bulk ZedCloud poll + midnight digest email. The `Vault` app is removed entirely. Frontend gains a Clusters & Enterprises tab (read-only for members, full edit for admins), an Untracked Devices page, a revised Refresh modal (enterprise dropdown), and admin token-expiry notifications in the bell.
 
 **Tech Stack:** Django 6.0, DRF 3.15, APScheduler 3.x, httpx 0.27, Fernet (cryptography 42), React 19, TanStack Query, TypeScript, shadcn/ui
 
@@ -1824,7 +1824,7 @@ git commit -m "feat: frontend API clients for enterprises, untracked devices, no
 
 ---
 
-## Task 11: Clusters & Enterprises admin page
+## Task 11: Clusters & Enterprises page (read-only for members, full edit for admins)
 
 **Files:**
 - Create: `frontend/src/pages/ClusterEnterprisesPage.tsx`
@@ -1964,6 +1964,7 @@ import {
   type ClusterWithEnterprises, type Enterprise,
 } from '@/api/enterprises'
 import { Header } from '@/components/Header'
+import { useUser } from '@/context/UserContext'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -1993,6 +1994,7 @@ function timeStr(dt: string | null) {
 
 export default function ClusterEnterprisesPage() {
   const qc = useQueryClient()
+  const { isAdmin } = useUser()
   const [expanded, setExpanded] = useState<Set<number>>(new Set())
   const [showImport, setShowImport] = useState(false)
   const [addingCluster, setAddingCluster] = useState(false)
@@ -2064,14 +2066,16 @@ export default function ClusterEnterprisesPage() {
       <main className="pt-14 px-4 py-6 max-w-5xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-xl font-semibold">Clusters &amp; Enterprises</h1>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={handleExport}><Download className="w-4 h-4 mr-1" />Export</Button>
-            <Button variant="outline" size="sm" onClick={() => setShowImport(true)}><Upload className="w-4 h-4 mr-1" />Import</Button>
-            <Button size="sm" onClick={() => setAddingCluster(true)}><Plus className="w-4 h-4 mr-1" />Add Cluster</Button>
-          </div>
+          {isAdmin && (
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={handleExport}><Download className="w-4 h-4 mr-1" />Export</Button>
+              <Button variant="outline" size="sm" onClick={() => setShowImport(true)}><Upload className="w-4 h-4 mr-1" />Import</Button>
+              <Button size="sm" onClick={() => setAddingCluster(true)}><Plus className="w-4 h-4 mr-1" />Add Cluster</Button>
+            </div>
+          )}
         </div>
 
-        {addingCluster && (
+        {isAdmin && addingCluster && (
           <div className="border rounded p-4 mb-4 space-y-3 bg-muted/30">
             <h3 className="text-sm font-medium">New Cluster</h3>
             <Input placeholder="Name" value={newClusterName} onChange={(e) => setNewClusterName(e.target.value)} />
@@ -2098,20 +2102,22 @@ export default function ClusterEnterprisesPage() {
                   <span className="text-xs text-muted-foreground">{cluster.host}</span>
                   <Badge variant="outline" className="text-xs">{cluster.enterprises.length} enterprise{cluster.enterprises.length !== 1 ? 's' : ''}</Badge>
                 </div>
-                <Button
-                  size="sm" variant="ghost"
-                  className="text-destructive hover:text-destructive h-7 text-xs"
-                  onClick={(e) => { e.stopPropagation(); if (confirm(`Delete cluster ${cluster.name}?`)) deleteClusterMut.mutate(cluster.id) }}
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </Button>
+                {isAdmin && (
+                  <Button
+                    size="sm" variant="ghost"
+                    className="text-destructive hover:text-destructive h-7 text-xs"
+                    onClick={(e) => { e.stopPropagation(); if (confirm(`Delete cluster ${cluster.name}?`)) deleteClusterMut.mutate(cluster.id) }}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
+                )}
               </div>
 
               {expanded.has(cluster.id) && (
                 <div className="border-t">
                   {cluster.enterprises.map((ent) => (
                     <div key={ent.id} className="px-4 py-3 border-b last:border-b-0 flex items-center justify-between gap-4 hover:bg-muted/10">
-                      {editingEnterprise?.id === ent.id ? (
+                      {isAdmin && editingEnterprise?.id === ent.id ? (
                         <div className="flex items-center gap-2 flex-1">
                           <Input className="h-7 text-xs w-36" value={editEntName} onChange={(e) => setEditEntName(e.target.value)} placeholder="Name" />
                           <Input className="h-7 text-xs w-64" type="password" value={editEntToken} onChange={(e) => setEditEntToken(e.target.value)} placeholder="New token (leave blank to keep)" />
@@ -2131,29 +2137,33 @@ export default function ClusterEnterprisesPage() {
                             )}
                             <span className="text-xs text-muted-foreground hidden sm:block">Last sync: {timeStr(ent.last_sync_at)}</span>
                           </div>
-                          <div className="flex items-center gap-1">
-                            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => syncEntMut.mutate(ent.id)} disabled={syncEntMut.isPending}><RefreshCw className="w-3.5 h-3.5" /></Button>
-                            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setEditingEnterprise(ent); setEditEntName(ent.name); setEditEntToken('') }}><Pencil className="w-3.5 h-3.5" /></Button>
-                            <Button size="sm" variant="ghost" className="h-7 text-xs text-destructive hover:text-destructive" onClick={() => { if (confirm(`Delete ${ent.name}?`)) deleteEntMut.mutate(ent.id) }}><Trash2 className="w-3.5 h-3.5" /></Button>
-                          </div>
+                          {isAdmin && (
+                            <div className="flex items-center gap-1">
+                              <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => syncEntMut.mutate(ent.id)} disabled={syncEntMut.isPending}><RefreshCw className="w-3.5 h-3.5" /></Button>
+                              <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setEditingEnterprise(ent); setEditEntName(ent.name); setEditEntToken('') }}><Pencil className="w-3.5 h-3.5" /></Button>
+                              <Button size="sm" variant="ghost" className="h-7 text-xs text-destructive hover:text-destructive" onClick={() => { if (confirm(`Delete ${ent.name}?`)) deleteEntMut.mutate(ent.id) }}><Trash2 className="w-3.5 h-3.5" /></Button>
+                            </div>
+                          )}
                         </>
                       )}
                     </div>
                   ))}
 
-                  {addingEnterpriseFor === cluster.id ? (
-                    <div className="px-4 py-3 flex items-center gap-2 bg-muted/20">
-                      <Input className="h-7 text-xs w-36" value={newEntName} onChange={(e) => setNewEntName(e.target.value)} placeholder="Enterprise name" />
-                      <Input className="h-7 text-xs w-64" type="password" value={newEntToken} onChange={(e) => setNewEntToken(e.target.value)} placeholder="Bearer token" />
-                      <Button size="sm" className="h-7 text-xs" onClick={() => createEntMut.mutate(cluster.id)} disabled={!newEntName || !newEntToken || createEntMut.isPending}>Add</Button>
-                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setAddingEnterpriseFor(null)}>Cancel</Button>
-                    </div>
-                  ) : (
-                    <div className="px-4 py-2">
-                      <Button size="sm" variant="ghost" className="h-7 text-xs text-muted-foreground" onClick={() => { setAddingEnterpriseFor(cluster.id); setNewEntName(''); setNewEntToken('') }}>
-                        <Plus className="w-3.5 h-3.5 mr-1" /> Add Enterprise
-                      </Button>
-                    </div>
+                  {isAdmin && (
+                    addingEnterpriseFor === cluster.id ? (
+                      <div className="px-4 py-3 flex items-center gap-2 bg-muted/20">
+                        <Input className="h-7 text-xs w-36" value={newEntName} onChange={(e) => setNewEntName(e.target.value)} placeholder="Enterprise name" />
+                        <Input className="h-7 text-xs w-64" type="password" value={newEntToken} onChange={(e) => setNewEntToken(e.target.value)} placeholder="Bearer token" />
+                        <Button size="sm" className="h-7 text-xs" onClick={() => createEntMut.mutate(cluster.id)} disabled={!newEntName || !newEntToken || createEntMut.isPending}>Add</Button>
+                        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setAddingEnterpriseFor(null)}>Cancel</Button>
+                      </div>
+                    ) : (
+                      <div className="px-4 py-2">
+                        <Button size="sm" variant="ghost" className="h-7 text-xs text-muted-foreground" onClick={() => { setAddingEnterpriseFor(cluster.id); setNewEntName(''); setNewEntToken('') }}>
+                          <Plus className="w-3.5 h-3.5 mr-1" /> Add Enterprise
+                        </Button>
+                      </div>
+                    )
                   )}
                 </div>
               )}
@@ -2180,13 +2190,13 @@ Add route inside `AuthenticatedRoutes`:
 <Route path="/cluster-enterprises" element={<ClusterEnterprisesPage />} />
 ```
 
-In `frontend/src/components/Header.tsx`, update the nav items array to conditionally include the admin tab:
+In `frontend/src/components/Header.tsx`, update the nav items array — Clusters & Enterprises is visible to **all** users (read-only for members):
 ```tsx
 const navItems = [
   { to: '/devices', label: 'Devices' },
   { to: '/users', label: 'Users' },
   { to: '/untracked-devices', label: 'Untracked' },
-  ...(isAdmin ? [{ to: '/cluster-enterprises', label: 'Clusters & Enterprises' }] : []),
+  { to: '/cluster-enterprises', label: 'Clusters & Enterprises' },
 ]
 ```
 

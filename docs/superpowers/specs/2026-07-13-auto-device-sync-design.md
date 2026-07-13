@@ -203,20 +203,20 @@ Body: enterprise name, cluster host, time of failure, instruction to update toke
 
 ## API Endpoints
 
-### Clusters & Enterprises (admin only — `IsAdminPortalUser`)
+### Clusters & Enterprises
 
-| Method | URL | Purpose |
-|---|---|---|
-| GET | `/api/v1/clusters/` | List clusters with nested enterprises; includes sync status |
-| POST | `/api/v1/clusters/` | Create cluster |
-| PATCH | `/api/v1/clusters/{id}/` | Update cluster name / host |
-| DELETE | `/api/v1/clusters/{id}/` | Delete cluster (blocked if enterprises exist) |
-| POST | `/api/v1/clusters/{id}/enterprises/` | Add enterprise to cluster |
-| PATCH | `/api/v1/enterprises/{id}/` | Update enterprise name / token |
-| DELETE | `/api/v1/enterprises/{id}/` | Remove enterprise |
-| POST | `/api/v1/enterprises/{id}/sync/` | Trigger immediate sync for one enterprise |
-| GET | `/api/v1/clusters/export/` | Download full cluster + enterprise config as JSON |
-| POST | `/api/v1/clusters/import/` | Import cluster + enterprise config from JSON |
+| Method | URL | Auth | Purpose |
+|---|---|---|---|
+| GET | `/api/v1/clusters/` | `IsPortalUser` | List clusters with nested enterprises; includes sync status |
+| POST | `/api/v1/clusters/` | `IsAdminPortalUser` | Create cluster |
+| PATCH | `/api/v1/clusters/{id}/` | `IsAdminPortalUser` | Update cluster name / host |
+| DELETE | `/api/v1/clusters/{id}/` | `IsAdminPortalUser` | Delete cluster (blocked if enterprises exist) |
+| POST | `/api/v1/clusters/{id}/enterprises/` | `IsAdminPortalUser` | Add enterprise to cluster |
+| PATCH | `/api/v1/enterprises/{id}/` | `IsAdminPortalUser` | Update enterprise name / token |
+| DELETE | `/api/v1/enterprises/{id}/` | `IsAdminPortalUser` | Remove enterprise |
+| POST | `/api/v1/enterprises/{id}/sync/` | `IsAdminPortalUser` | Trigger immediate sync for one enterprise |
+| GET | `/api/v1/clusters/export/` | `IsAdminPortalUser` | Download full cluster + enterprise config as JSON |
+| POST | `/api/v1/clusters/import/` | `IsAdminPortalUser` | Import cluster + enterprise config from JSON |
 
 Bearer token is never returned in any response.
 
@@ -296,13 +296,14 @@ Bearer token is never returned in any response.
 
 ### New: "Clusters & Enterprises" tab
 
-- Admin-only nav tab
+- Visible to **all portal users** (nav tab shown regardless of role)
+- **Read-only for members:** cluster name, host, enterprise names, sync status badges, last sync time visible to everyone
+- **Admin-only controls** (hidden for members): Add Cluster, Edit cluster, Delete cluster, Add Enterprise, Edit enterprise, Delete enterprise, Sync Now button, Export button, Import button
 - Lists clusters; each cluster expandable to show its enterprises
-- Per cluster: name, host URL, inline edit/delete (delete blocked if enterprises exist)
-- Per enterprise row: name, last sync time, sync status badge (`ok` / `error` / `token_expired`), error detail on hover, inline edit (name + token), delete, "Sync Now" button
-- "Add Cluster" and "Add Enterprise" via inline forms
-- **Export button** — downloads current config as `cluster-config.json` (tokens excluded); available at top of tab
-- **Import button** — opens import modal containing:
+- Per cluster: name, host URL, and (admin only) inline edit/delete buttons
+- Per enterprise row: name, last sync time, sync status badge (`ok` / `error` / `token_expired`), error detail on hover, and (admin only) inline edit, delete, and "Sync Now" button
+- **Export button** (admin only) — downloads current config as `cluster-config.json` (tokens excluded); available at top of tab
+- **Import button** (admin only) — opens import modal containing:
   - A readonly code block showing the expected JSON format (sample with one cluster + two enterprises) for user reference
   - File picker to select a JSON file
   - Conflict resolution toggle: "If enterprise already exists — Overwrite token / Skip"
