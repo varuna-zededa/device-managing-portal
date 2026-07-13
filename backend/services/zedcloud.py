@@ -91,8 +91,8 @@ _ENTERPRISE_STATE_LABELS: dict[str, str] = {
 
 
 def fetch_enterprise_self(host: str, bearer_token: str) -> dict:
-    """Call /v1/enterprises/self. Returns {name, zcloud_id, state, state_label}."""
-    url = f'https://{host}/v1/enterprises/self'
+    """Call /api/v1/enterprises/self. Returns {name, zcloud_id, state, state_label}."""
+    url = f'https://{host}/api/v1/enterprises/self'
     headers = {'Authorization': f'Bearer {bearer_token}'}
     response = _client.get(url, headers=headers)
     response.raise_for_status()
@@ -107,12 +107,12 @@ def fetch_enterprise_self(host: str, bearer_token: str) -> dict:
 
 
 def fetch_enterprise_devices(host: str, bearer_token: str) -> list[dict]:
-    """Paginate GET /v1/devices/status and return all device records."""
+    """Paginate GET /api/v1/devices/status and return all device records."""
     headers = {'Authorization': f'Bearer {bearer_token}'}
     all_devices: list[dict] = []
     page_num = 1
     while True:
-        url = f'https://{host}/v1/devices/status?next.pageSize=200&next.pageNum={page_num}'
+        url = f'https://{host}/api/v1/devices/status?next.pageSize=200&next.pageNum={page_num}'
         response = _client.get(url, headers=headers)
         response.raise_for_status()
         data = response.json()
