@@ -42,6 +42,6 @@ class EnterpriseUpdateSerializer(serializers.Serializer):
             setattr(instance, attr, val)
         if bearer_token and bearer_token.strip():
             instance.bearer_token_enc = encrypt(bearer_token.strip())
-            instance.name_verified = False  # re-verify against ZedCloud on next nightly run
+            instance.name_verified = False  # triggers re-verification on next import
         instance.save()
         return instance
