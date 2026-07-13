@@ -10,6 +10,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.clusters.models import Cluster
+from services.zedcloud import fetch_enterprise_self, ENTERPRISE_STATE_ACTIVE
 from utils.crypto import encrypt
 from utils.permissions import IsAdminPortalUser
 
@@ -33,11 +34,86 @@ class EnterpriseDetailView(APIView):
         enterprise = self._get(pk)
         if not enterprise:
             return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+
         serializer = EnterpriseUpdateSerializer(enterprise, data=request.data, partial=True)
-        if serializer.is_valid():
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        bearer_token = (serializer.validated_data.get('bearer_token') or '').strip()
+
+        if not bearer_token:
+            # No token change — simple field update (name, is_active, etc.)
             serializer.save()
             return Response(EnterpriseReadSerializer(enterprise).data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        # Verify the new token against ZedCloud before saving anything.
+        try:
+            info = fetch_enterprise_self(enterprise.cluster.host, bearer_token)
+        except httpx.HTTPStatusError as exc:
+            code = exc.response.status_code
+            if code in (401, 403):
+                return Response(
+                    {'bearer_token': 'Bearer token is invalid or expired.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            return Response(
+                {'error': f'ZedCloud returned HTTP {code}'},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+        except httpx.RequestError as exc:
+            return Response(
+                {'error': f'Cannot reach ZedCloud: {exc}'},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        # Enforce enterprise ID match — reject tokens that belong to a different enterprise.
+        # Skip the check only if we have never stored a zcloud_id (enterprise was imported
+        # before verification ever ran), in which case we store the discovered ID.
+        if enterprise.zcloud_id and info['zcloud_id'] and info['zcloud_id'] != enterprise.zcloud_id:
+            return Response(
+                {'bearer_token': 'This token belongs to a different enterprise in ZedCloud. Enterprise ID does not match.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Enforce active state — applies to both token rotation and re-activation.
+        if info['state'] != ENTERPRISE_STATE_ACTIVE:
+            label = info['state_label'] or info['state']
+            return Response(
+                {'error': f'Enterprise is not active in ZedCloud (state: {label}).'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Token verified — apply non-token fields from serializer, then write token fields
+        # manually so we can set name_verified=True and is_active=True without a second save.
+        validated = {k: v for k, v in serializer.validated_data.items() if k != 'bearer_token'}
+        for attr, val in validated.items():
+            setattr(enterprise, attr, val)
+        enterprise.bearer_token_enc = encrypt(bearer_token)
+        enterprise.name_verified = True
+        enterprise.is_active = True  # re-activates if the enterprise was previously inactive
+        if info['zcloud_id']:
+            enterprise.zcloud_id = info['zcloud_id']
+        enterprise.save()
+
+        # Run a full device sync in the background — this clears last_sync_status='token_expired'
+        # and re-includes the enterprise in future hourly sync cycles.
+        def _sync_after_token_rotation():
+            try:
+                sync_enterprise(enterprise)
+                enterprise.last_sync_status = 'ok'
+                enterprise.last_sync_error = None
+                logger.info('Post-token-rotation sync succeeded for enterprise %s', enterprise.name)
+            except Exception as exc:
+                enterprise.last_sync_status = 'error'
+                enterprise.last_sync_error = str(exc)
+                logger.warning('Post-token-rotation sync failed for enterprise %s: %s', enterprise.name, exc)
+            finally:
+                enterprise.last_sync_at = timezone.now()
+                enterprise.save(update_fields=['last_sync_at', 'last_sync_status', 'last_sync_error'])
+
+        threading.Thread(target=_sync_after_token_rotation, daemon=True).start()
+
+        return Response(EnterpriseReadSerializer(enterprise).data)
 
     def delete(self, request, pk):
         enterprise = self._get(pk)

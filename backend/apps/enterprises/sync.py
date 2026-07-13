@@ -122,6 +122,12 @@ def sync_all_enterprises() -> None:
     exclude_from_missing: list[int] = []
 
     for enterprise in Enterprise.objects.filter(is_active=True).select_related('cluster'):
+        # Skip enterprises with a known-bad token — no point attempting a sync that will 401.
+        # Their devices are excluded from the missing-mark to prevent false positives.
+        if enterprise.last_sync_status == 'token_expired':
+            exclude_from_missing.append(enterprise.pk)
+            continue
+
         try:
             seen = sync_enterprise(enterprise)
             all_seen_serials.update(seen)
