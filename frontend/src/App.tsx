@@ -8,6 +8,7 @@ const DevicesPage = lazy(() => import('@/pages/DevicesPage'))
 const UsersPage = lazy(() => import('@/pages/UsersPage'))
 const ConfirmReservationPage = lazy(() => import('@/pages/ConfirmReservationPage'))
 const ClusterEnterprisesPage = lazy(() => import('@/pages/ClusterEnterprisesPage'))
+const UntrackedDevicesPage = lazy(() => import('@/pages/UntrackedDevicesPage'))
 
 function AuthenticatedRoutes() {
   return (
@@ -17,6 +18,7 @@ function AuthenticatedRoutes() {
           <Route path="/devices" element={<DevicesPage />} />
           <Route path="/users" element={<UsersPage />} />
           <Route path="/cluster-enterprises" element={<ClusterEnterprisesPage />} />
+          <Route path="/untracked-devices" element={<UntrackedDevicesPage />} />
           <Route path="*" element={<Navigate to="/devices" replace />} />
         </Routes>
       </Suspense>
