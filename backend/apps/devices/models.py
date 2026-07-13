@@ -27,6 +27,10 @@ class Device(models.Model):
     cluster_device_name = models.CharField(max_length=200, blank=True, null=True)
     model = models.ForeignKey('device_models.DeviceModel', on_delete=models.PROTECT)
     cluster = models.ForeignKey('clusters.Cluster', on_delete=models.SET_NULL, null=True, blank=True)
+    enterprise = models.ForeignKey(
+        'enterprises.Enterprise', on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='inventory_devices',
+    )
     team = models.ForeignKey(
         'users.Team', null=True, blank=True,
         on_delete=models.SET_NULL, related_name='devices',
@@ -76,3 +80,25 @@ class Device(models.Model):
             not self.owner_email
             and self.condition not in ('out_of_order', 'temporarily_leased', 'dedicated', 'missing')
         )
+
+
+class UntrackedDevice(models.Model):
+    enterprise = models.ForeignKey(
+        'enterprises.Enterprise', on_delete=models.CASCADE, related_name='untracked_devices',
+    )
+    zcloud_id = models.CharField(max_length=200)
+    name = models.CharField(max_length=200)
+    serial_number = models.CharField(max_length=200)
+    model = models.CharField(max_length=400, blank=True)
+    run_state = models.CharField(max_length=100, blank=True)
+    eve_version = models.CharField(max_length=200, blank=True, null=True)
+    device_connectivity = models.JSONField(blank=True, null=True)
+    first_seen_at = models.DateTimeField()
+    last_seen_at = models.DateTimeField()
+
+    class Meta:
+        unique_together = ('serial_number', 'enterprise')
+        ordering = ['-last_seen_at']
+
+    def __str__(self):
+        return f'{self.name} ({self.serial_number})'
