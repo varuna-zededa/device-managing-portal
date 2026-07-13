@@ -254,7 +254,7 @@ cluster_id        int      FK → Cluster.id (CASCADE)
 bearer_token_enc  bytes    Fernet-encrypted ZedCloud API bearer token (write-only; never returned in API)
 zcloud_id         str      enterprise UUID from ZedCloud /v1/enterprises/self
 is_active         bool     False when ZedCloud reports the enterprise is not ENTERPRISE_STATE_ACTIVE
-name_verified     bool     True after verify_enterprise_names() confirms name matches ZedCloud; resets on token update or import overwrite
+name_verified     bool     True after verify_enterprise_names() confirms state is active AND name matches ZedCloud; resets on token update or import overwrite; NOT set on inactive or name-mismatch branches
 last_sync_at      datetime nullable — when the last sync completed
 last_sync_status  enum     ok | error | token_expired
 last_sync_error   str      nullable — error detail from last failed sync
@@ -357,7 +357,8 @@ GET    /api/v1/devices          ?q=<search>&available=<true|false|all>
                                 customer_partner_name (via device model)
                                 team / lab / condition are exact-match filter selects (combinable)
 POST   /api/v1/devices          add; body: DeviceCreate; duplicate serial_number → 400 "Serial number already exists"
-PUT    /api/v1/devices/{id}     update name, description, cluster_id, cluster_device_name, idrac fields, team
+PUT    /api/v1/devices/{id}     update name, description, lab, team, idrac fields, condition, location_detail
+                                cluster, cluster_device_name, eve_version, device_connectivity are read-only (sync-owned)
                                 serial_number is immutable after creation
 DELETE /api/v1/devices/{id}     admin only (X-User-Email header)
 POST   /api/v1/devices/{id}/reserve          no body — requester identified via X-User-Email header
@@ -413,7 +414,7 @@ PATCH  /api/v1/clusters/{id}/                  IsAdminPortalUser — update name
 DELETE /api/v1/clusters/{id}/                  IsAdminPortalUser — blocked if enterprises exist
 POST   /api/v1/clusters/{id}/enterprises/      IsAdminPortalUser — add enterprise (bearer token only; name fetched from ZedCloud)
 PATCH  /api/v1/enterprises/{id}/               IsAdminPortalUser — update name / bearer token
-DELETE /api/v1/enterprises/{id}/               IsAdminPortalUser — remove enterprise
+DELETE /api/v1/enterprises/{id}/               IsAdminPortalUser — remove enterprise (409 if inventory devices linked; unassign devices first)
 POST   /api/v1/enterprises/{id}/sync/          IsAdminPortalUser — trigger immediate sync
 GET    /api/v1/clusters/export/                IsAdminPortalUser — download full cluster + enterprise config as JSON (bearer tokens excluded)
 POST   /api/v1/clusters/import/                IsAdminPortalUser — import cluster + enterprise config from JSON; triggers background verify
@@ -422,7 +423,7 @@ POST   /api/v1/clusters/import/                IsAdminPortalUser — import clus
 ### Untracked Devices
 ```text
 GET  /api/v1/untracked-devices/                IsPortalUser  — list devices seen in ZedCloud but absent from inventory; filterable by enterprise
-POST /api/v1/untracked-devices/{id}/move-to-inventory/  IsPortalUser — move untracked device into inventory as a new Device row
+POST /api/v1/untracked-devices/{id}/move-to-inventory/  IsAdminPortalUser — move untracked device into inventory as a new Device row
 ```
 
 ### Notifications
@@ -553,14 +554,34 @@ Registered in APScheduler (`apps/enterprises/apps.py`); runs every **1 hour**.
 
 For each active enterprise:
 1. Fetches all devices from ZedCloud via `GET /v1/edgedevices/` using the decrypted bearer token
-2. Matches each device by `serial_number` against the inventory (`Device` table)
-   - **Match found:** updates `eve_version`, `device_connectivity`, `status`, `cluster`, `enterprise`, `cluster_device_name`; clears `condition = missing` back to `normal`
-   - **No match:** upserts into `UntrackedDevice` (sets `first_seen_at` only on first insert)
-3. Removes `UntrackedDevice` rows for serials that have since been added to inventory
-4. On `401/403`: sets `last_sync_status = token_expired`; creates a `token_expired` Notification (deduped by `unique_together`)
-5. On other errors: sets `last_sync_status = error`; logs the failure
-6. After all enterprises: marks inventory devices with `enterprise` set, `condition = normal`, and serial not seen this cycle as `condition = missing`
+2. Devices with `run_state` of `RUN_STATE_UNPROVISIONED` or `RUN_STATE_PROVISIONED` are **skipped at intake** — they are not added to `seen_serials`, not added to the candidate list, and not upserted into `UntrackedDevice`
+3. For remaining devices: matches each by `serial_number` against the inventory (`Device` table); collects candidates for later conflict resolution
+4. On `401/403`: sets `last_sync_status = token_expired`; creates a `token_expired` Notification via `_emit_token_expired()` (deduped by `unique_together`); enterprise is also added to `exclude_from_missing` so its devices are not falsely marked missing; the notification is **deleted on next successful sync**
+5. Enterprises with `last_sync_status = token_expired` are **skipped entirely** at the start of the loop
+6. On other errors: sets `last_sync_status = error`; logs the failure
+7. After ALL enterprises are processed: resolves cross-enterprise conflicts using tier-based priority, then applies the winning candidates to inventory and `UntrackedDevice`
+8. After all enterprises: marks inventory devices with `enterprise` set, `condition = normal`, and serial not seen this cycle as `condition = missing`
    - Enterprises that failed or returned zero devices are **excluded** from the missing-mark to prevent false positives from transient network errors
+
+### Cross-Enterprise Conflict Resolution
+
+When the same device serial number appears in more than one enterprise, `sync_all_enterprises()` selects a winner using a **run-state tier map** (lower tier = higher priority):
+
+| Tier | States |
+|------|--------|
+| 1 | `RUN_STATE_ONLINE`, `RUN_STATE_PREPARING_POWEROFF`, `RUN_STATE_PREPARED_POWEROFF` |
+| 2 | `RUN_STATE_REBOOTING`, `RUN_STATE_BOOTING`, `RUN_STATE_BASEOS_UPDATING`, `RUN_STATE_MAINTENANCE_MODE` |
+| 3 | `RUN_STATE_POWERING_OFF` |
+| 4 | `RUN_STATE_OFFLINE` |
+| 5 | `RUN_STATE_SUSPECT` |
+
+Tie-break rule: when two candidates have the same tier, the one whose enterprise has the earlier `first_seen_at` for that device wins.
+
+**Skipped at intake:** `RUN_STATE_UNPROVISIONED` and `RUN_STATE_PROVISIONED` devices are not added to candidates at all — they are invisible to the conflict resolver and do not count as "seen" for missing-mark purposes.
+
+**SUSPECT winner special case:** If the winning candidate's `run_state` is `RUN_STATE_SUSPECT`, device fields are **not** updated. Only devices with `condition = normal` are transitioned to `condition = needs_repair`. All other data (enterprise, cluster, version, connectivity) remains unchanged. This prevents a suspect reading in one enterprise from overwriting a cleaner record from another.
+
+**Apply phase:** After conflict resolution, the winning candidates are written to inventory and `UntrackedDevice` in a single apply phase (`_apply_inventory_candidate()`). Single-enterprise paths use `apply_candidates()` directly, bypassing the conflict resolver.
 
 ### send_nightly_digest — midnight UTC
 Registered in APScheduler; runs once per day at **midnight UTC**. Sends a summary email to all admins listing device condition changes from the past 24 hours. No-ops silently if SMTP is not configured.
@@ -574,7 +595,7 @@ For each `is_active=True, name_verified=False` enterprise:
 3. Updates `zcloud_id` if the returned value differs from the stored one
 4. **State check (priority):** if `state != ENTERPRISE_STATE_ACTIVE` → sets `is_active = False`; creates an `enterprise_inactive` Notification (deduped)
 5. **Name check (only for active enterprises — `elif`):** if ZedCloud name differs from stored name → creates a `name_mismatch` Notification (deduped); does **not** auto-update the name
-6. Sets `name_verified = True` in all cases (prevents re-processing on the next import)
+6. Sets `name_verified = True` **only** in the active-and-matched branch (the `else`); remains `False` on inactive (step 4) and name-mismatch (step 5) branches — the enterprise will be re-checked on the next import
 
 `name_verified` resets to `False` whenever the bearer token is updated (via PATCH) or the enterprise row is overwritten by import.
 
@@ -698,7 +719,7 @@ System alerts generated by the sync engine and the verification job. Visible onl
 
 | Kind | Trigger | Click action |
 |---|---|---|
-| `token_expired` | `sync_all_enterprises()` receives 401/403 from ZedCloud | Navigate to `/cluster-enterprises` |
+| `token_expired` | `sync_all_enterprises()` or `EnterpriseSyncView.post()` receives 401/403 from ZedCloud; cleared on next successful sync | Navigate to `/cluster-enterprises` |
 | `sync_error` | `sync_all_enterprises()` fails with a non-auth error | Navigate to `/cluster-enterprises` |
 | `enterprise_inactive` | `verify_enterprise_names()` finds state ≠ `ENTERPRISE_STATE_ACTIVE` | Navigate to `/cluster-enterprises` |
 | `name_mismatch` | `verify_enterprise_names()` finds ZedCloud name ≠ local name | Inline buttons only — does not navigate |
