@@ -31,6 +31,7 @@ urlpatterns = [
     path('api/v1/choices/', ChoicesView.as_view()),
     path('api/v1/clusters/', include('apps.clusters.urls')),
     path('api/v1/enterprises/', include('apps.enterprises.urls')),
+    path('api/v1/notifications/', include('apps.notifications.urls')),
     path('api/v1/models/', include('apps.device_models.urls')),
     path('api/v1/devices/', include('apps.devices.urls')),
     path('api/v1/untracked-devices/', include('apps.devices.untracked_urls')),
