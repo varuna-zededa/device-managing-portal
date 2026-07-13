@@ -27,6 +27,7 @@ export interface Device {
   last_purpose_text: string | null
   last_purpose_by: string | null
   last_purpose_at: string | null
+  enterprise: { id: number; name: string } | null
   created_at: string
   updated_at: string
 }
@@ -97,10 +98,10 @@ export async function forceAssignDevice(id: number, assignee_email: string): Pro
 }
 
 export async function fetchDeviceStatus(
-  id: number,
-  data: { bearer_token?: string; cluster_id?: number; cluster_device_name?: string },
+  deviceId: number,
+  data: { enterprise_id?: number },
 ): Promise<Device> {
-  const res = await client.post(`/devices/${id}/status/`, data)
+  const res = await client.post(`/devices/${deviceId}/status/`, data)
   return res.data
 }
 

@@ -17,7 +17,7 @@ initial working deployment. It contains:
 - Labs and teams
 - Device models and clusters
 - Devices with ownership, condition, and connectivity data
-- Vault tokens (encrypted — see note below)
+- Admin-managed enterprise bearer tokens (encrypted — see note below)
 
 ### Deploying on a new VM
 
@@ -34,7 +34,7 @@ cp .env.example .env
 
 **Step 2 — Set demo flag in `.env`**
 
-```
+```bash
 LOAD_DEMO_DATA=true
 ```
 
@@ -57,7 +57,7 @@ The portal will be available at `http://<vm-ip>/`.
 
 ### Encryption key requirement
 
-Vault bearer tokens and iDRAC passwords in the fixture are encrypted using the
+Admin-managed enterprise bearer tokens and iDRAC passwords in the fixture are encrypted using the
 `ENCRYPTION_KEY` from `.env`. **Use the same key that was used when the fixture was
 exported**, otherwise those fields will be unreadable.
 
@@ -94,6 +94,57 @@ git commit -m "Update demo fixture"
 
 ---
 
+## Demo Walkthrough
+
+This section guides a presenter through a live demo once the system is running with demo data loaded.
+
+### 1. Enterprise credential management
+
+1. Log in as an admin user (e.g. `admin@zededa.com`).
+2. Navigate to **Settings → Clusters** and open the **Enterprises** tab.
+3. Click **Add Enterprise**, select a cluster, and paste a ZedCloud bearer token.
+4. Submit — the portal fetches the enterprise name from ZedCloud automatically; no manual name entry is required.
+5. The new enterprise appears in the list with its name, cluster, and last-sync status.
+
+### 2. Hourly background sync
+
+1. With at least one active enterprise configured, show the device table on the **Devices** page.
+2. Point out the **EVE Version**, **Run State**, and **Connectivity** columns — these are populated by the hourly sync, not manually entered.
+3. To demonstrate a sync result, trigger a manual refresh: open the **Enterprises** tab, click the three-dot menu next to an enterprise, and select **Sync Now**.
+4. Return to the Devices page — updated EVE versions and run states appear within a few seconds.
+
+### 3. Untracked devices
+
+1. Navigate to **Untracked Devices** (`/untracked-devices`) from the sidebar.
+2. The page lists devices seen in ZedCloud during the last sync but not present in the portal inventory.
+3. Use the **Cluster** filter to narrow the list; the **Enterprise** filter cascades automatically to show only enterprises belonging to the selected cluster.
+4. Select a device and click **Add to Inventory** — the device is created in the portal with its cluster and enterprise pre-filled.
+
+### 4. MISSING condition (automatic flag)
+
+1. On the **Devices** page, filter by **Condition → Missing**.
+2. Explain that any inventory device that stops appearing in ZedCloud sync results is automatically flagged `Missing` — no manual action is required.
+3. The `Missing` condition blocks reservations and is visible in the condition column and summary bar.
+
+### 5. Admin notifications
+
+1. Click the **bell icon** in the top-right header — the notification panel opens.
+2. Show the four notification kinds:
+   - **Token expired** — the bearer token for an enterprise is rejected by ZedCloud.
+   - **Sync error** — the sync request itself failed (network, API error).
+   - **Name mismatch** — the enterprise name stored in the portal differs from what ZedCloud returns.
+   - **Enterprise inactive** — ZedCloud reports the enterprise as no longer active.
+3. For a **Name mismatch** notification, show the inline action buttons: **Use ZedCloud name** updates the portal record immediately; **Keep current name** dismisses the alert without changing the name.
+4. Clicking an **Enterprise inactive** notification navigates directly to the Clusters page.
+
+### 6. Enterprise verification
+
+1. After adding a new enterprise (step 1 above), the portal immediately kicks off a background verification job.
+2. Return to the notification bell after a few seconds — if the enterprise name or state does not match ZedCloud, a `name_mismatch` or `enterprise_inactive` notification appears automatically.
+3. This runs once after each import or enterprise addition; it is not a scheduled job.
+
+---
+
 ## Transitioning to Production
 
 When the system is approved for company-wide use:
@@ -103,7 +154,7 @@ When the system is approved for company-wide use:
 In the production `.env`, simply do not set `LOAD_DEMO_DATA` (or set it to `false`).
 The backend will run migrations and start with an empty database.
 
-```
+```bash
 # LOAD_DEMO_DATA is absent or false — no demo data loaded
 ```
 
@@ -111,7 +162,7 @@ The backend will run migrations and start with an empty database.
 
 Switch from SQLite to PostgreSQL by setting `DATABASE_URL` in `.env`:
 
-```
+```bash
 DATABASE_URL=postgres://user:password@host:5432/holocron
 ```
 

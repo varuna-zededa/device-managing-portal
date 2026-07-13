@@ -7,7 +7,7 @@ Repo: https://github.com/varuna-zededa/device-managing-portal
 
 ## Current Status
 
-> **Awaiting feedback from management and team before full implementation begins.**
+> **Status: Actively developed. v1 (MVP) and v2 (enterprise sync / auto device sync) shipped.**
 
 ---
 
@@ -80,6 +80,8 @@ Each version follows the same 5-step cycle before shipping:
 
 ## Version 2 — Operational Depth + Partial NLP Search
 
+> **Note:** The shipped v2 was the enterprise sync / auto device sync feature (enterprise credentials, hourly background sync, untracked devices page, admin notifications). The scope described below is the **next planned version**, not what shipped as v2.
+
 **Scope:**
 
 - **Backend test suite** — Django test client covering critical paths: device CRUD, reservation
@@ -103,6 +105,19 @@ Each version follows the same 5-step cycle before shipping:
   - Example: "available device in Berlin for ST" → `{ lab: Berlin Lab, team: ST, is_available: true }`
   - UI: search bar shows "interpreted as: …" chips below; each chip removable
   - Falls back to existing keyword search if no entities are matched
+- **Untracked device filter feedback** *(lower priority)* — admin-driven Layer 3 on top of the
+  existing serial/model filters (Layer 1: virtual manufacturer blocklist; Layer 2: serial
+  structural heuristics + placeholder blocklist). Admin clicks "Flag" on any untracked device row
+  to mark it as either **invalid serial** or **virtual device model**; flags persist in the DB and
+  are applied automatically on every subsequent sync, keeping the filters self-improving without
+  code changes.
+  - New `UntrackedDeviceFlag` model: `(serial_number | model_keyword)`, `flag_type` (`invalid_serial` |
+    `virtual_model`), `flagged_by`, `flagged_at`, `note` (optional free-text reason)
+  - Sync reads active flags at startup and merges them into the in-memory filter sets used by
+    `_is_junk_serial()` and `_is_virtual_device()`; no restart required
+  - UI: flag icon on each Untracked Devices row (admin only); flag dialog lets admin choose type
+    and optionally add a note; flagged rows are purged immediately on submit
+  - Admin management view to review, edit, and remove flags
 
 **Cycle:**
 - [ ] Wireframes

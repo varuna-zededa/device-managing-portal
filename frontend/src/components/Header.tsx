@@ -29,6 +29,13 @@ export function Header() {
 
   if (!currentUser) return null
 
+  const navItems = [
+    { to: '/devices', label: 'Devices' },
+    { to: '/untracked-devices', label: 'Untracked Devices' },
+    { to: '/cluster-enterprises', label: 'Clusters & Enterprises' },
+    { to: '/users', label: 'Users' },
+  ]
+
   return (
     <header className="fixed top-0 inset-x-0 z-50 h-14 border-b border-border bg-background/95 backdrop-blur flex items-center px-4 gap-4">
       <div className="flex items-center gap-6 flex-1">
@@ -45,7 +52,7 @@ export function Header() {
           <span className="font-semibold text-foreground">Holocron</span>
         </div>
         <nav className="flex items-center gap-1">
-          {[{ to: '/devices', label: 'Devices' }, { to: '/users', label: 'Users' }].map(({ to, label }) => (
+          {navItems.map(({ to, label }) => (
             <NavLink
               key={to}
               to={to}

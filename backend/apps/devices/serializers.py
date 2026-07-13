@@ -1,7 +1,7 @@
 import ipaddress
 import logging
 from rest_framework import serializers
-from .models import Device, Lab, CONDITION_CHOICES
+from .models import Device, Lab, CONDITION_CHOICES, UntrackedDevice
 from apps.reservations.models import ReservationRequest
 from apps.users.models import PortalUser, Team
 
@@ -51,7 +51,7 @@ class DeviceSerializer(_DeviceValidationMixin, serializers.ModelSerializer):
         model = Device
         fields = [
             'id', 'name', 'serial_number', 'description', 'cluster_device_name',
-            'model', 'cluster',
+            'model', 'cluster', 'enterprise',
             'team', 'owner_email', 'owner_name',
             'lab', 'location_detail', 'condition',
             'idrac_ip', 'idrac_username',
@@ -62,7 +62,8 @@ class DeviceSerializer(_DeviceValidationMixin, serializers.ModelSerializer):
         read_only_fields = [
             'serial_number', 'created_at', 'updated_at',
             'status', 'status_fetched_at', 'reserved_at',
-            'owner_email',
+            'owner_email', 'enterprise', 'cluster', 'cluster_device_name',
+            'eve_version', 'device_connectivity',
             'last_purpose_text', 'last_purpose_by', 'last_purpose_at',
         ]
 
@@ -78,6 +79,10 @@ class DeviceSerializer(_DeviceValidationMixin, serializers.ModelSerializer):
             'name': instance.cluster.name,
             'host': instance.cluster.host,
         } if instance.cluster_id else None
+        ret['enterprise'] = {
+            'id': instance.enterprise_id,
+            'name': instance.enterprise.name,
+        } if instance.enterprise_id else None
         return ret
 
     def get_is_available(self, obj):
@@ -132,4 +137,19 @@ class DeviceCreateSerializer(_DeviceValidationMixin, serializers.ModelSerializer
             'model', 'cluster', 'team', 'owner_email',
             'lab', 'location_detail', 'condition',
             'idrac_ip', 'idrac_username',
+        ]
+
+
+class UntrackedDeviceSerializer(serializers.ModelSerializer):
+    enterprise_name = serializers.CharField(source='enterprise.name', read_only=True)
+    cluster_name = serializers.CharField(source='enterprise.cluster.name', read_only=True)
+    cluster_host = serializers.CharField(source='enterprise.cluster.host', read_only=True)
+
+    class Meta:
+        model = UntrackedDevice
+        fields = [
+            'id', 'enterprise', 'enterprise_name', 'cluster_name', 'cluster_host',
+            'zcloud_id', 'name', 'serial_number', 'model',
+            'run_state', 'eve_version', 'device_connectivity',
+            'first_seen_at', 'last_seen_at',
         ]

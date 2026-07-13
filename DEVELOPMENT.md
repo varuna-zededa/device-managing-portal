@@ -42,7 +42,7 @@ Django admin (create superuser first): `python manage.py createsuperuser` → `/
 ## Backend
 
 ### Project layout
-```
+```text
 backend/
 ├── config/settings.py           all settings; reads .env via django-environ
 │                                DEVICE_LIST_REFRESH_MS / NOTIFICATION_REFRESH_MS — auto-refresh intervals
@@ -50,25 +50,35 @@ backend/
 ├── apps/clusters/               Cluster model + CRUD
 ├── apps/device_models/          DeviceModel (name + customer_partner_name)
 ├── apps/devices/
-│   ├── models.py                Device, Lab, CONDITION_CHOICES
-│   ├── views.py                 DeviceViewSet; UNAVAILABLE_CONDITIONS; _handle_condition_change; ChoicesView
+│   ├── models.py                Device, Lab, UntrackedDevice, CONDITION_CHOICES
+│   ├── views.py                 DeviceViewSet; UNAVAILABLE_CONDITIONS; _handle_condition_change; ChoicesView; UntrackedDeviceListView; MoveToInventoryView
 │   ├── serializers.py
 │   ├── admin.py                 Device, Lab registered
+│   ├── untracked_urls.py        /api/v1/untracked-devices/ routes
 │   └── migrations/
 ├── apps/users/
 │   ├── models.py                PortalUser, Team
 │   ├── views.py
 │   ├── admin.py                 PortalUser, Team registered
 │   └── migrations/
-├── apps/vault/                  Vault (encrypted tokens per user per cluster)
+├── apps/enterprises/            Enterprise model + CRUD + sync engine
+│   ├── models.py                Enterprise (name, cluster FK, bearer_token_enc, zcloud_id, is_active, name_verified, last_sync_*)
+│   ├── views.py                 EnterpriseDetailView, EnterpriseSyncView, ClusterExportView, ClusterImportView; ClusterEnterpriseListCreateView
+│   ├── sync.py                  sync_all_enterprises(), verify_enterprise_names()
+│   ├── apps.py                  APScheduler registration (1h sync + midnight nightly digest)
+│   ├── serializers.py
+│   └── urls.py                  /api/v1/enterprises/ routes
+├── apps/notifications/          Admin notification model
+│   ├── models.py                Notification (kind, enterprise FK, title, body, is_read)
+│   └── urls.py                  /api/v1/notifications/ routes
 ├── apps/reservations/
 │   ├── views.py                 reservation flow; _UNAVAILABLE_CONDITIONS (keep in sync with devices/views.py)
 │   └── models.py                ReservationRequest
 ├── apps/admin_tools/views.py    ExportView, ImportView, ImportTemplateView, LatencyView, _normalize_condition()
-├── services/zedcloud.py         fetch_device_status(); SerialMismatchError
+├── services/zedcloud.py         fetch_device_status(); fetch_enterprise_devices(); SerialMismatchError
 └── utils/
     ├── crypto.py                encrypt(str)->bytes; decrypt(bytes)->str
-    ├── email.py                 all outbound email functions
+    ├── email.py                 all outbound email functions (incl. token-expiry + nightly digest)
     └── permissions.py           get_user_email(), is_admin(); IsPortalUser, IsAdminPortalUser, IsOwnerOrAdmin
 ```
 
@@ -114,7 +124,7 @@ device.idrac_password_enc = encrypt(raw_password)
 raw = decrypt(device.idrac_password_enc)
 ```
 
-### Condition change side-effects (`apps/devices/views.py` → `_handle_condition_change`)
+#### Condition change side-effects (`apps/devices/views.py` → `_handle_condition_change`)
 | New condition | Clears owner | Expires requests | Emails admins |
 |---|---|---|---|
 | `out_of_order` | yes | yes | yes |
@@ -170,7 +180,7 @@ except Exception as e:
     logger.warning('Email failed: %s', e)
 ```
 
-### ZedCloud fetch (`services/zedcloud.py`)
+#### ZedCloud fetch (`services/zedcloud.py`)
 
 A module-level `_client = httpx.Client(timeout=30)` is shared across all calls (connection reuse, no per-call overhead).
 
@@ -204,15 +214,27 @@ def fetch_device_status(
     return eve_version, connectivity or None, STATUS_MAP.get(run_state, 'Unknown')
 ```
 
+**`fetch_enterprise_self(host, bearer_token)`** — canonical function to call `/v1/enterprises/self` on ZedCloud:
+- Lives in `services/zedcloud.py`
+- Returns `{'name': str, 'zcloud_id': str, 'state': str, 'state_label': str}`
+- Used by `ClusterEnterpriseListCreateView.post()` to validate and name enterprises created via the UI
+- Constants also in `services/zedcloud.py`: `ENTERPRISE_STATE_ACTIVE = 'ENTERPRISE_STATE_ACTIVE'`; `_ENTERPRISE_STATE_LABELS` maps state strings to human-readable labels
+
+**Device status endpoint — `POST /api/v1/devices/{id}/status/`**
+- Accepts `enterprise_id` (integer FK) — **not** a raw bearer token
+- Backend looks up the `Enterprise` row by id, decrypts `bearer_token_enc` server-side, then calls ZedCloud
+- Do not pass bearer tokens directly from the frontend
+
 ### Choices endpoint (`apps/devices/views.py` → `ChoicesView`)
 ```python
 return Response({
-    'labs':       list(Lab.objects.values_list('name', flat=True)),
-    'teams':      list(Team.objects.values_list('name', flat=True)),
-    'conditions': [c[0] for c in CONDITION_CHOICES],
+    'labs':        list(Lab.objects.values_list('name', flat=True)),
+    'teams':       list(Team.objects.values_list('name', flat=True)),
+    'conditions':  [c[0] for c in CONDITION_CHOICES],
+    'enterprises': list(Enterprise.objects.filter(is_active=True).values('id', 'name', cluster_name=F('cluster__name'))),
 })
 ```
-Do not hardcode lab or team lists here.
+Do not hardcode lab, team, or enterprise lists here. The `enterprises` list is used by the Fetch Status dialog dropdown.
 
 ### Migrations
 ```bash
@@ -225,27 +247,34 @@ Always commit migration files with the model change that produced them.
 
 ## Frontend
 
-### Project layout
-```
+### Frontend project layout
+```text
 frontend/src/
 ├── api/
 │   ├── client.ts          axios instance; auto-injects X-User-Email from localStorage
 │   ├── devices.ts         device CRUD + reserve/release/status/history
 │   ├── users.ts           user CRUD
-│   └── choices.ts         getChoices() → {labs, teams, conditions}
+│   ├── choices.ts         getChoices() → {labs, teams, conditions, enterprises}
+│   ├── enterprises.ts     getClusters/createCluster/updateCluster/deleteCluster; createEnterprise/updateEnterprise/deleteEnterprise/syncEnterprise; ClusterExport/Import
+│   ├── notifications.ts   getNotifications/markNotificationRead/markAllNotificationsRead
+│   └── untracked.ts       getUntrackedDevices/moveToInventory
 ├── context/UserContext.tsx useUser() → {user, isAdmin}; redirects to /login if no session
 ├── components/
 │   ├── DeviceTable.tsx    CONDITION_STYLES, CONDITION_BADGE_STYLES, sort logic, expand panel
 │   ├── SearchBar.tsx      CONDITION_LABELS; filter order: availability→condition→lab→team
 │   ├── Header.tsx
-│   ├── NotificationPanel.tsx
+│   ├── NotificationPanel.tsx  admin notifications (token_expired/sync_error/name_mismatch/enterprise_inactive); name_mismatch has inline action buttons
 │   ├── DeviceFormModal.tsx
 │   ├── ReserveDialog.tsx
 │   ├── OwnershipHistoryModal.tsx
+│   ├── MoveToInventoryDialog.tsx
+│   ├── ImportClusterDialog.tsx
 │   └── ui/                shadcn/ui base components
 └── pages/
-    ├── DevicesPage.tsx    summary bar; passes filter state to SearchBar + DeviceTable
-    ├── UsersPage.tsx      sortable table; admin only
+    ├── DevicesPage.tsx           summary bar; passes filter state to SearchBar + DeviceTable
+    ├── UsersPage.tsx             sortable table; admin only
+    ├── ClusterEnterprisesPage.tsx  admin-only; manage clusters + enterprises; import/export
+    ├── UntrackedDevicesPage.tsx  devices seen in ZedCloud but not in inventory; cluster+enterprise dropdown filter; move-to-inventory action
     ├── LoginPage.tsx
     └── ConfirmReservationPage.tsx  /confirm/:token; no auth needed
 ```
@@ -269,7 +298,7 @@ const mutation = useMutation({
 })
 ```
 
-Cache keys in use: `['devices']`, `['users']`, `['choices']`, `['reservations','pending']`, `['reservations','mine']`.  
+Cache keys in use: `['devices']`, `['users']`, `['choices']`, `['reservations','pending']`, `['reservations','mine']`, `['notifications']`, `['clusters-enterprises']`, `['untracked-devices']`.  
 `choices` uses `staleTime: Infinity` — cache cleared on full page reload.
 
 ### Condition constants (both in `DeviceTable.tsx`)
@@ -344,6 +373,85 @@ if (!isAdmin) return <Navigate to="/devices" replace />
 - `GET /api/v1/config/` (public) — returns `{device_list_refresh_ms, notification_refresh_ms}`
 - Frontend fetches at startup in `DevicesPage.tsx` and `NotificationPanel.tsx` with `staleTime: Infinity`
 - Override defaults (`300000` / `30000`) via `DEVICE_LIST_REFRESH_MS` / `NOTIFICATION_REFRESH_MS` in `.env`
+
+### Enterprise sync
+- Sync engine: `apps/enterprises/sync.py` — `sync_all_enterprises()` iterates active enterprises, calls ZedCloud bulk device fetch, resolves cross-enterprise conflicts, upserts `UntrackedDevice` rows, marks inventory devices missing/found
+- `verify_enterprise_names()`: called from a background thread after import (not scheduled); processes enterprises with `is_active=True, name_verified=False`; logic order matters:
+  1. State check first: if ZedCloud state != `ENTERPRISE_STATE_ACTIVE` → deactivate enterprise + create `enterprise_inactive` notification
+  2. `elif` name check: if names differ → create `name_mismatch` notification
+  3. Sets `name_verified=True` **only** in the active-and-matched `else` branch; NOT set on inactive (step 1) or name-mismatch (step 2) branches
+  4. Skips the enterprise silently on decrypt error or network error
+- APScheduler (in `apps/enterprises/apps.py`): only two registered jobs — `sync_all_enterprises` every 1 hour, `send_nightly_digest` at midnight UTC; `verify_enterprise_names` is **not** in the scheduler
+- APScheduler guard: only starts in the child process under `runserver` (`RUN_MAIN=true`) or in production; prevents double-start on Django's reloader
+
+**`sync_enterprise()` return type — `tuple[set[str], list[dict]]`:**
+- Returns `(seen_serials, candidates)` — device writes are deferred to allow cross-enterprise conflict resolution in the caller
+- `seen_serials`: set of serial numbers successfully processed (excluding skipped states)
+- `candidates`: list of dicts, one per device, containing all fields needed to write inventory/UntrackedDevice
+
+**Skipped states — `_SKIPPED_STATES`** (module-level set in `sync.py`):
+- `{'RUN_STATE_UNPROVISIONED', 'RUN_STATE_PROVISIONED'}` — skipped at intake; not added to `seen_serials`, not added to candidates, not upserted into `UntrackedDevice`
+
+**`_RUN_STATE_TIER` — cross-enterprise priority map** (module-level dict in `sync.py`):
+
+| Tier | States |
+|------|--------|
+| 1 | `RUN_STATE_ONLINE`, `RUN_STATE_PREPARING_POWEROFF`, `RUN_STATE_PREPARED_POWEROFF` |
+| 2 | `RUN_STATE_REBOOTING`, `RUN_STATE_BOOTING`, `RUN_STATE_BASEOS_UPDATING`, `RUN_STATE_MAINTENANCE_MODE` |
+| 3 | `RUN_STATE_POWERING_OFF` |
+| 4 | `RUN_STATE_OFFLINE` |
+| 5 | `RUN_STATE_SUSPECT` |
+
+States not in the map default to tier 99 (lowest priority). Tie-break: earlier `first_seen_at` on `UntrackedDevice` wins.
+
+**New helper functions in `sync.py`:**
+- `_apply_inventory_candidate(candidate, now)` — writes a single resolved candidate dict to a `Device` or `UntrackedDevice` row; handles SUSPECT special case (marks `needs_repair` on `condition='normal'` devices, skips all other field updates)
+- `apply_candidates(candidates, now)` — applies a list of candidates directly without cross-enterprise conflict resolution; used by `EnterpriseSyncView.post()` and `EnterpriseDetailView.patch()` (single-enterprise paths)
+
+**Token rotation improvements (`EnterpriseDetailView.patch()` in `views.py`):**
+- Verifies `zcloud_id` match (not name) against ZedCloud after token update — rejects tokens belonging to a different enterprise
+- Re-activates `is_active=True` if ZedCloud returns ACTIVE state during rotation
+- Runs a background `sync_enterprise()` + `apply_candidates()` after rotation to clear `last_sync_status='token_expired'`; also deletes the `token_expired` Notification on success
+- Enterprises with `last_sync_status='token_expired'` are skipped in `sync_all_enterprises()` loop; their IDs are added to `exclude_from_missing` to prevent false missing-marks
+
+**Enterprise creation — two paths:**
+- **UI path** (`apps/clusters/views.py` → `ClusterEnterpriseListCreateView.post()`): user provides bearer token only; backend calls `fetch_enterprise_self()` to get name + `zcloud_id`; blocks creation if state != `ENTERPRISE_STATE_ACTIVE`; creates enterprise with `name_verified=True`
+- **Import path** (`apps/enterprises/views.py`): name comes from JSON payload; `name_verified=False` on create or overwrite; a background daemon thread calls `verify_enterprise_names()` after the import completes
+
+**`name_verified` field reset conditions:**
+- Reset to `False`: on bearer token PATCH (token update) and on import overwrite of an existing enterprise
+- Set to `True`: on UI creation (name already verified via `fetch_enterprise_self()`) and after `verify_enterprise_names()` confirms state is active AND name matches ZedCloud; NOT set on inactive or name-mismatch branches
+
+**Notification dedup pattern** — use `_emit_token_expired(enterprise)` from `sync.py` for `token_expired`; it handles `get_or_create` + conditional email in one call. For other kinds (`sync_error`, `name_mismatch`, `enterprise_inactive`) use `get_or_create` directly:
+```python
+# Always use get_or_create — unique_together = [('kind', 'enterprise')] prevents duplicates
+Notification.objects.get_or_create(
+    kind='name_mismatch',
+    enterprise=enterprise,
+    defaults={'title': '...', 'body': '...'},
+)
+```
+Token-expired notifications are **deleted on successful sync** — `Notification.objects.filter(kind='token_expired', enterprise=enterprise).delete()` in every success path.
+
+**`UntrackedDevice` upsert pattern** (`apps/devices/models.py`):
+```python
+# Use update_or_create with create_defaults (Django 4.1+) so first_seen_at is only set on creation
+UntrackedDevice.objects.update_or_create(
+    serial_number=serial,
+    enterprise=enterprise,
+    defaults={
+        'last_seen_at': now,
+        'zcloud_id': ...,
+        'name': ...,
+        # ...other always-updated fields...
+    },
+    create_defaults={
+        'first_seen_at': now,   # set only on INSERT, not on UPDATE
+    },
+)
+```
+- `unique_together = ('serial_number', 'enterprise')` is the lookup key
+- Notification kinds: `token_expired` | `sync_error` | `name_mismatch` | `enterprise_inactive`; `unique_together = [('kind', 'enterprise')]` so repeated failures do not create duplicate rows
 
 ### New Lab or Team
 No code changes. Django admin → Labs (or Teams) → Add.

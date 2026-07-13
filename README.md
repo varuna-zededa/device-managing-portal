@@ -15,7 +15,8 @@ Holocron is an internal web portal for Zededa test teams to manage shared physic
 - **Admin controls** — force-assign, bulk CSV import/export, user management
 - **Ownership history** — append-only audit log per device
 - **Email notifications** — reservation requests, approvals, out-of-order alerts
-- **Encrypted credentials** — iDRAC passwords and ZedCloud bearer tokens stored with Fernet encryption
+- **Encrypted credentials** — iDRAC passwords and admin-managed enterprise bearer tokens stored with Fernet encryption
+- **Auto device sync** — hourly background poll per enterprise; untracked devices surfaced in their own page; admins notified of token expiry, name mismatches, and inactive enterprises
 
 ---
 
@@ -28,6 +29,7 @@ Holocron is an internal web portal for Zededa test teams to manage shared physic
 | Database | SQLite (dev / demo) · PostgreSQL (production) |
 | Container | Docker · Docker Compose · nginx |
 | HTTP client | httpx (backend → ZedCloud) · TanStack Query (frontend) |
+| Scheduler | APScheduler (in-process) — hourly ZedCloud sync, nightly digest |
 
 ---
 
@@ -37,7 +39,7 @@ Holocron is an internal web portal for Zededa test teams to manage shared physic
 
 - Python 3.12+
 - Node.js 20+
-- Git
+- Git 2.x+
 
 ### Backend setup
 
@@ -105,7 +107,7 @@ python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().
 
 ## Docker Deployment
 
-### Prerequisites
+### Docker prerequisites
 
 - Docker Engine 24.0+
 - Docker Compose v2.20+
@@ -189,7 +191,7 @@ See [DEMO_GUIDELINE.md](DEMO_GUIDELINE.md) for demo-to-production transition ins
 
 ## Project Structure
 
-```
+```text
 device-managing-portal/
 ├── backend/
 │   ├── apps/
@@ -198,7 +200,8 @@ device-managing-portal/
 │   │   ├── reservations/     # ReservationRequest, ownership history
 │   │   ├── clusters/         # ZedCloud cluster registry
 │   │   ├── device_models/    # Hardware model catalog
-│   │   ├── vault/            # Encrypted bearer token storage
+│   │   ├── enterprises/      # Enterprise credentials + hourly sync engine
+│   │   ├── notifications/    # Admin in-app alerts from sync engine
 │   │   └── admin_tools/      # CSV import/export, latency tracking
 │   ├── utils/
 │   │   ├── permissions.py    # IsPortalUser, IsAdminPortalUser, get_user_email
@@ -215,7 +218,7 @@ device-managing-portal/
 │   └── src/
 │       ├── api/              # Typed API client modules
 │       ├── components/       # UI components (DeviceTable, Header, modals…)
-│       ├── pages/            # DevicesPage, UsersPage, ConfirmReservationPage
+│       ├── pages/            # DevicesPage, UsersPage, UntrackedDevicesPage, ConfirmReservationPage
 │       └── context/          # UserContext (auth state)
 ├── DESIGN.md                 # Full product and API design spec
 ├── DEVELOPMENT.md            # Implementation patterns and checklists

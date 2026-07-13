@@ -10,18 +10,17 @@ from rest_framework import status
 
 from django.db.models import Q
 
-from .models import Device, Lab, CONDITION_CHOICES
-from .serializers import DeviceSerializer, DeviceCreateSerializer
+from .models import Device, Lab, CONDITION_CHOICES, UntrackedDevice
+from .serializers import DeviceSerializer, DeviceCreateSerializer, UntrackedDeviceSerializer
 from apps.clusters.models import Cluster
 from apps.device_models.models import DeviceModel
 from apps.reservations.models import ReservationRequest, DevicePurpose, OwnershipHistory
 from apps.reservations.serializers import DevicePurposeSerializer, OwnershipHistorySerializer
 from apps.users.models import Team, PortalUser
-from apps.vault.models import Vault
 from utils.crypto import encrypt, decrypt
 from utils import email as email_utils
 from utils.permissions import get_user_email, is_admin, IsPortalUser, IsAdminPortalUser
-from services.zedcloud import fetch_device_status, SerialMismatchError
+from services.zedcloud import fetch_device_status, fetch_enterprise_devices, SerialMismatchError, STATUS_MAP
 import httpx
 
 logger = logging.getLogger(__name__)
@@ -64,7 +63,7 @@ class DeviceListCreateView(APIView):
     permission_classes = [IsPortalUser]
 
     def get(self, request):
-        qs = Device.objects.select_related('model', 'cluster', 'lab', 'team').all()
+        qs = Device.objects.select_related('model', 'cluster', 'lab', 'team', 'enterprise').all()
 
         q = request.query_params.get('q', '').strip()
         available = request.query_params.get('available', 'all').strip().lower()
@@ -126,6 +125,7 @@ class DeviceListCreateView(APIView):
                     changed_by=user_email or 'system',
                     reason='device_added',
                 )
+            UntrackedDevice.objects.filter(serial_number=serial).delete()
             return Response(DeviceSerializer(device).data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -135,7 +135,7 @@ class DeviceDetailView(APIView):
 
     def _get_device(self, pk):
         try:
-            return Device.objects.select_related('model', 'cluster', 'lab', 'team').get(pk=pk)
+            return Device.objects.select_related('model', 'cluster', 'lab', 'team', 'enterprise').get(pk=pk)
         except Device.DoesNotExist:
             return None
 
@@ -354,62 +354,79 @@ class DeviceStatusView(APIView):
 
     def post(self, request, pk):
         try:
-            device = Device.objects.select_related('cluster').get(pk=pk)
+            device = Device.objects.select_related('cluster', 'enterprise__cluster').get(pk=pk)
         except Device.DoesNotExist:
             return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        bearer_token = request.data.get('bearer_token', '').strip()
-        cluster_id = request.data.get('cluster_id')
-        cluster_device_name = request.data.get('cluster_device_name', '').strip()
-        user_email = get_user_email(request)
+        enterprise_id = request.data.get('enterprise_id')
 
-        if cluster_id:
+        if enterprise_id:
             try:
-                cluster = Cluster.objects.get(pk=cluster_id)
-                device.cluster = cluster
-            except Cluster.DoesNotExist:
-                return Response({'error': 'Cluster not found'}, status=status.HTTP_400_BAD_REQUEST)
-            except Exception as e:
-                logger.warning(str(e))
+                from apps.enterprises.models import Enterprise
+                enterprise = Enterprise.objects.select_related('cluster').get(pk=enterprise_id)
+            except Enterprise.DoesNotExist:
+                return Response({'error': 'Enterprise not found'}, status=status.HTTP_400_BAD_REQUEST)
+        elif device.enterprise_id:
+            enterprise = device.enterprise
+        else:
+            return Response(
+                {'error': 'No enterprise assigned to this device and no enterprise_id provided'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        if cluster_device_name:
-            device.cluster_device_name = cluster_device_name
-
-        if not device.cluster:
-            return Response({'error': 'Device has no cluster assigned'}, status=status.HTTP_400_BAD_REQUEST)
-
-        if not device.cluster_device_name:
-            return Response({'error': 'cluster_device_name is required'}, status=status.HTTP_400_BAD_REQUEST)
-
-        resolved_token = bearer_token
-        if not resolved_token:
-            try:
-                vault = Vault.objects.get(user_email=user_email, cluster=device.cluster)
-                resolved_token = decrypt(bytes(vault.bearer_token_enc))
-            except Vault.DoesNotExist:
-                return Response({'error': 'No bearer token provided and none stored in vault'}, status=status.HTTP_400_BAD_REQUEST)
-            except Exception as e:
-                logger.warning(str(e))
-                return Response({'error': 'Failed to retrieve stored token'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        same_enterprise = (not enterprise_id or enterprise.pk == device.enterprise_id)
+        use_single = same_enterprise and bool(device.cluster_device_name)
 
         try:
-            eve_version, device_connectivity, dev_status = fetch_device_status(
-                cluster=device.cluster,
-                cluster_device_name=device.cluster_device_name,
-                bearer_token=resolved_token,
-                device=device,
+            bearer_token = decrypt(bytes(enterprise.bearer_token_enc))
+        except Exception:
+            return Response(
+                {'error': 'Stored bearer token is corrupt — re-enter it in the Clusters & Enterprises tab'},
+                status=status.HTTP_400_BAD_REQUEST,
             )
-            if bearer_token:
-                Vault.objects.update_or_create(
-                    user_email=user_email,
-                    cluster=device.cluster,
-                    defaults={'bearer_token_enc': encrypt(bearer_token)},
+
+        try:
+            if use_single:
+                eve_version, device_connectivity, dev_status = fetch_device_status(
+                    cluster=enterprise.cluster,
+                    cluster_device_name=device.cluster_device_name,
+                    bearer_token=bearer_token,
+                    device=device,
                 )
+            else:
+                from apps.enterprises.sync import _extract_eve_version, _extract_connectivity  # noqa: PLC0415
+                raw_devices = fetch_enterprise_devices(enterprise.cluster.host, bearer_token)
+                matched = next(
+                    (
+                        d for d in raw_devices
+                        if (
+                            d.get('minfo', {}).get('serialNumber', '')
+                            or d.get('hardwareInfo', {}).get('serialNum', '')
+                        ) == device.serial_number
+                    ),
+                    None,
+                )
+                if not matched:
+                    return Response(
+                        {'error': f'Serial {device.serial_number!r} not found in enterprise {enterprise.name!r}'},
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
+                run_state = matched.get('runState', 'RUN_STATE_UNKNOWN')
+                dev_status = STATUS_MAP.get(run_state, 'Unknown')
+                eve_version = _extract_eve_version(matched.get('swInfo', []))
+                device_connectivity = _extract_connectivity(matched.get('netStatusList', []))
+                device_name = matched.get('name')
+                if device_name:
+                    device.cluster_device_name = device_name
+
             device.eve_version = eve_version
             device.device_connectivity = device_connectivity
             device.status = dev_status
             device.status_fetched_at = timezone.now()
-            device.save(update_fields=['cluster', 'cluster_device_name', 'eve_version', 'device_connectivity', 'status', 'status_fetched_at', 'updated_at'])
+            device.save(update_fields=[
+                'cluster_device_name',
+                'eve_version', 'device_connectivity', 'status', 'status_fetched_at', 'updated_at',
+            ])
             return Response(DeviceSerializer(device).data)
 
         except SerialMismatchError as e:
@@ -429,10 +446,7 @@ class DeviceStatusView(APIView):
             if code in (401, 403):
                 return Response({'error': 'Bearer token invalid or expired'}, status=status.HTTP_403_FORBIDDEN)
             logger.exception('ZedCloud HTTP error %s for device %s', code, device.name)
-            return Response(
-                {'error': f'ZedCloud returned HTTP {code}'},
-                status=status.HTTP_502_BAD_GATEWAY,
-            )
+            return Response({'error': f'ZedCloud returned HTTP {code}'}, status=status.HTTP_502_BAD_GATEWAY)
         except Exception as e:
             logger.exception('Failed to fetch status for device %s', device.name)
             return Response({'error': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
@@ -492,8 +506,97 @@ class ChoicesView(APIView):
     permission_classes = [IsPortalUser]
 
     def get(self, request):
+        from apps.enterprises.models import Enterprise
+        enterprises = list(
+            Enterprise.objects.select_related('cluster').values('id', 'name', 'cluster__name')
+        )
         return Response({
             'labs': list(Lab.objects.values_list('name', flat=True)),
             'teams': list(Team.objects.values_list('name', flat=True)),
             'conditions': [c[0] for c in CONDITION_CHOICES],
+            'enterprises': [
+                {'id': e['id'], 'name': e['name'], 'cluster_name': e['cluster__name']}
+                for e in enterprises
+            ],
         })
+
+
+class UntrackedDeviceListView(APIView):
+    permission_classes = [IsPortalUser]
+
+    def get(self, request):
+        qs = UntrackedDevice.objects.select_related('enterprise__cluster').all()
+        enterprise = request.query_params.get('enterprise', '').strip()
+        cluster = request.query_params.get('cluster', '').strip()
+        serial = request.query_params.get('serial_number', '').strip()
+        if enterprise:
+            qs = qs.filter(enterprise__name__icontains=enterprise)
+        if cluster:
+            qs = qs.filter(enterprise__cluster__name__icontains=cluster)
+        if serial:
+            qs = qs.filter(serial_number__icontains=serial)
+        serializer = UntrackedDeviceSerializer(qs[:200], many=True)
+        return Response(serializer.data)
+
+
+class MoveToInventoryView(APIView):
+    permission_classes = [IsAdminPortalUser]
+
+    def post(self, request, pk):
+        try:
+            untracked = UntrackedDevice.objects.select_related('enterprise__cluster').get(pk=pk)
+        except UntrackedDevice.DoesNotExist:
+            return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        if Device.objects.filter(serial_number=untracked.serial_number).exists():
+            return Response(
+                {'error': f'Device with serial {untracked.serial_number!r} already exists in inventory'},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        lab_name = request.data.get('lab', '')
+        if not lab_name:
+            return Response({'error': 'lab is required'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            lab = Lab.objects.get(name=lab_name)
+        except Lab.DoesNotExist:
+            return Response({'error': f'Lab {lab_name!r} not found'}, status=status.HTTP_400_BAD_REQUEST)
+
+        model_obj = None
+        model_id = request.data.get('model')
+        if model_id:
+            try:
+                model_obj = DeviceModel.objects.get(pk=model_id)
+            except Exception as exc:
+                logger.warning('DeviceModel lookup failed: %s', exc)
+
+        if not model_obj:
+            return Response({'error': 'model (device model id) is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        run_state = untracked.run_state or 'RUN_STATE_UNKNOWN'
+        status_str = STATUS_MAP.get(run_state, 'Unknown')
+
+        with transaction.atomic():
+            device = Device.objects.create(
+                name=untracked.name,
+                serial_number=untracked.serial_number,
+                model=model_obj,
+                lab=lab,
+                enterprise=untracked.enterprise,
+                cluster=untracked.enterprise.cluster,
+                cluster_device_name=untracked.name,
+                eve_version=untracked.eve_version,
+                device_connectivity=untracked.device_connectivity,
+                status=status_str,
+                status_fetched_at=untracked.last_seen_at,
+            )
+            user_email = get_user_email(request)
+            OwnershipHistory.objects.create(
+                device=device,
+                owner_email=None,
+                changed_by=user_email or 'system',
+                reason='device_added',
+            )
+            untracked.delete()
+
+        return Response(DeviceSerializer(device).data, status=status.HTTP_201_CREATED)
