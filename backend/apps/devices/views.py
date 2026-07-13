@@ -125,6 +125,7 @@ class DeviceListCreateView(APIView):
                     changed_by=user_email or 'system',
                     reason='device_added',
                 )
+            UntrackedDevice.objects.filter(serial_number=serial).delete()
             return Response(DeviceSerializer(device).data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -378,6 +379,13 @@ class DeviceStatusView(APIView):
 
         try:
             bearer_token = decrypt(bytes(enterprise.bearer_token_enc))
+        except Exception:
+            return Response(
+                {'error': 'Stored bearer token is corrupt — re-enter it in the Clusters & Enterprises tab'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
             if use_single:
                 eve_version, device_connectivity, dev_status = fetch_device_status(
                     cluster=enterprise.cluster,

@@ -11,7 +11,7 @@ from django.http import HttpResponse
 from django.utils import timezone
 from django.core.validators import validate_email
 from django.core.exceptions import ValidationError as DjangoValidationError
-from apps.devices.models import Device, Lab, CONDITION_CHOICES
+from apps.devices.models import Device, Lab, CONDITION_CHOICES, UntrackedDevice
 from apps.devices.serializers import DeviceSerializer
 from apps.clusters.models import Cluster
 from apps.device_models.models import DeviceModel
@@ -102,6 +102,7 @@ class ImportView(APIView):
         team_cache = {team.name: team for team in Team.objects.all()}
         valid_labs = set(lab_cache)
         valid_teams = set(team_cache)
+        processed_serials: set[str] = set()
 
         for i, row in enumerate(rows):
             try:
@@ -155,11 +156,13 @@ class ImportView(APIView):
                 if existing:
                     if mode == 'create_only':
                         skipped += 1
+                        processed_serials.add(serial)
                         continue
                     for k, v in defaults.items():
                         setattr(existing, k, v)
                     existing.save()
                     updated += 1
+                    processed_serials.add(serial)
                 else:
                     if not model_obj:
                         errors.append({'row': i + 1, 'error': 'model is required for new devices'})
@@ -171,11 +174,15 @@ class ImportView(APIView):
                         continue
                     Device.objects.create(serial_number=serial, **defaults)
                     created += 1
+                    processed_serials.add(serial)
 
             except Exception as e:
                 logger.warning(str(e))
                 errors.append({'row': i + 1, 'error': str(e)})
                 skipped += 1
+
+        if processed_serials:
+            UntrackedDevice.objects.filter(serial_number__in=processed_serials).delete()
 
         return Response({'created': created, 'updated': updated, 'skipped': skipped, 'errors': errors})
 

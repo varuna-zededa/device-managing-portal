@@ -10,6 +10,10 @@ from utils.email import send_token_expiry_alert
 logger = logging.getLogger(__name__)
 
 
+class TokenDecryptError(Exception):
+    pass
+
+
 def _extract_connectivity(net_status_list: list) -> list | None:
     connectivity = []
     for iface in net_status_list:
@@ -33,9 +37,13 @@ def sync_enterprise(enterprise) -> set[str]:
     """Sync one enterprise. Returns set of seen serial numbers. Raises on failure."""
     from apps.devices.models import Device, UntrackedDevice  # noqa: PLC0415
 
-    bearer_token = decrypt(bytes(enterprise.bearer_token_enc))
+    try:
+        bearer_token = decrypt(bytes(enterprise.bearer_token_enc))
+    except Exception as exc:
+        raise TokenDecryptError(f'Cannot decrypt bearer token for {enterprise.name}') from exc
     raw_devices = fetch_enterprise_devices(enterprise.cluster.host, bearer_token)
     seen_serials: set[str] = set()
+    serials_in_inventory: set[str] = set()
     now = timezone.now()
 
     for d in raw_devices:
@@ -53,18 +61,21 @@ def sync_enterprise(enterprise) -> set[str]:
         connectivity = _extract_connectivity(d.get('netStatusList', []))
         minfo = d.get('minfo', {})
         model_str = f"{minfo.get('manufacturer', '')}-{minfo.get('productName', '')}".strip('-')
-        device_name = d.get('name', '')
+        device_name = d.get('name')
         zcloud_id = d.get('id', '')
 
         inventory_device = Device.objects.filter(serial_number=serial).first()
         if inventory_device:
+            serials_in_inventory.add(serial)
             update_fields = [
-                'enterprise', 'cluster', 'cluster_device_name',
+                'enterprise', 'cluster',
                 'eve_version', 'device_connectivity', 'status', 'status_fetched_at',
             ]
             inventory_device.enterprise = enterprise
             inventory_device.cluster = enterprise.cluster
-            inventory_device.cluster_device_name = device_name
+            if device_name:
+                inventory_device.cluster_device_name = device_name
+                update_fields.append('cluster_device_name')
             inventory_device.eve_version = eve_version
             inventory_device.device_connectivity = connectivity
             inventory_device.status = status_str
@@ -83,7 +94,7 @@ def sync_enterprise(enterprise) -> set[str]:
                 },
                 defaults={
                     'zcloud_id': zcloud_id,
-                    'name': device_name,
+                    'name': device_name or '',
                     'model': model_str,
                     'run_state': run_state,
                     'eve_version': eve_version,
@@ -91,6 +102,9 @@ def sync_enterprise(enterprise) -> set[str]:
                     'last_seen_at': now,
                 },
             )
+
+    if serials_in_inventory:
+        UntrackedDevice.objects.filter(serial_number__in=serials_in_inventory).delete()
 
     return seen_serials
 
@@ -115,18 +129,25 @@ def sync_all_enterprises() -> None:
                 exclude_from_missing.append(enterprise.pk)
             enterprise.last_sync_status = 'ok'
             enterprise.last_sync_error = None
+        except TokenDecryptError as exc:
+            # Local config error — token is corrupt or unreadable. Don't exclude from
+            # missing-mark: we have no ZedCloud data for these devices this cycle.
+            enterprise.last_sync_status = 'error'
+            enterprise.last_sync_error = 'Bearer token cannot be decrypted — re-enter it'
+            logger.warning('Cannot decrypt token for enterprise %s: %s', enterprise.name, exc)
         except httpx.HTTPStatusError as exc:
             code = exc.response.status_code
             if code in (401, 403):
                 enterprise.last_sync_status = 'token_expired'
                 enterprise.last_sync_error = f'HTTP {code}'
-                # Dedup: only notify if there is no unread token_expired notification for this
-                # enterprise already — prevents email/notification spam on every sync cycle.
+                # Dedup: only create one notification per (kind, enterprise) pair.
+                # Keying on the stable enterprise FK means re-reads don't trigger new alerts.
                 _, created = Notification.objects.get_or_create(
                     kind='token_expired',
-                    is_read=False,
-                    title=f'Token expired — {enterprise.name} on {enterprise.cluster.name}',
+                    enterprise=enterprise,
                     defaults={
+                        'is_read': False,
+                        'title': f'Token expired — {enterprise.name} on {enterprise.cluster.name}',
                         'body': (
                             f'Bearer token for enterprise "{enterprise.name}" on cluster '
                             f'"{enterprise.cluster.name}" ({enterprise.cluster.host}) is invalid or expired. '
