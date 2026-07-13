@@ -11,7 +11,7 @@ class NotificationListView(APIView):
     permission_classes = [IsAdminPortalUser]
 
     def get(self, request):
-        qs = Notification.objects.all()[:50]
+        qs = Notification.objects.order_by('is_read', '-created_at')[:50]
         return Response(NotificationSerializer(qs, many=True).data)
 
 

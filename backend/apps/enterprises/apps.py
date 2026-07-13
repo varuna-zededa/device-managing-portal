@@ -17,7 +17,7 @@ class EnterprisesConfig(AppConfig):
             # Only start in the child to avoid double-scheduling.
             if os.environ.get('RUN_MAIN') != 'true':
                 return
-        elif not os.environ.get('START_SCHEDULER'):
+        elif os.environ.get('START_SCHEDULER', '').lower() != 'true':
             # Production (gunicorn, uwsgi) and management commands (migrate, shell, etc.):
             # require explicit opt-in via START_SCHEDULER=true so manage.py commands
             # don't inadvertently start background threads before tables exist, and so

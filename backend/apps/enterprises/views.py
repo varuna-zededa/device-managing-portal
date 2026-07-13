@@ -3,6 +3,7 @@ import logging
 
 import httpx
 from django.http import HttpResponse
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -64,7 +65,6 @@ class EnterpriseSyncView(APIView):
         except Exception as exc:
             enterprise.last_sync_status = 'error'
             enterprise.last_sync_error = str(exc)
-        from django.utils import timezone
         enterprise.last_sync_at = timezone.now()
         enterprise.save(update_fields=['last_sync_at', 'last_sync_status', 'last_sync_error'])
         return Response(EnterpriseReadSerializer(enterprise).data)

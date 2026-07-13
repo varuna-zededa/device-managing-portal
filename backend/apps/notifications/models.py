@@ -8,6 +8,13 @@ KIND_CHOICES = [
 
 class Notification(models.Model):
     kind = models.CharField(max_length=30, choices=KIND_CHOICES)
+    enterprise = models.ForeignKey(
+        'enterprises.Enterprise',
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name='notifications',
+    )
     title = models.CharField(max_length=300)
     body = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
@@ -16,6 +23,7 @@ class Notification(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        unique_together = [('kind', 'enterprise')]
 
     def __str__(self):
         return self.title
