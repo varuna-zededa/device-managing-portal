@@ -40,10 +40,14 @@ Replace per-user credential entry with admin-managed enterprise credentials. The
 | `name` | CharField | e.g. "Foundation", "200x85", "Zededa SRE" |
 | `cluster` | FK → Cluster | |
 | `bearer_token_enc` | BinaryField | Fernet-encrypted via `utils/crypto.py` |
+| `zcloud_id` | CharField | Enterprise UUID from ZedCloud (`/v1/enterprises/self`); updated on every successful verify call |
 | `is_active` | BooleanField | Admin can pause sync per enterprise |
+| `name_verified` | BooleanField | `True` when local name matches ZedCloud; set `True` on UI add; reset to `False` when token is updated via PATCH or import overwrite |
 | `last_sync_at` | DateTimeField (null) | Timestamp of last completed sync attempt |
 | `last_sync_status` | CharField | `ok` / `error` / `token_expired` |
 | `last_sync_error` | TextField (null) | Error detail shown in admin tab |
+
+`unique_together = ('name', 'cluster')`
 
 ### UntrackedDevice (`apps/devices/models.py`)
 
@@ -71,14 +75,24 @@ Replace per-user credential entry with admin-managed enterprise credentials. The
 | Field | Type | Notes |
 |---|---|---|
 | `id` | PK | |
-| `kind` | CharField | `token_expired` / `sync_error` |
+| `kind` | CharField | `token_expired` / `sync_error` / `name_mismatch` / `enterprise_inactive` |
+| `enterprise` | FK → Enterprise (nullable, CASCADE) | The enterprise this notification relates to |
 | `title` | CharField | e.g. "Token expired — Foundation on hummingbird" |
-| `body` | TextField | Detail message |
+| `body` | TextField | Detail message; for `name_mismatch` this is a JSON string `{"local_name": "...", "zcloud_name": "..."}` |
 | `created_at` | DateTimeField | |
 | `is_read` | BooleanField | |
 | `read_at` | DateTimeField (null) | |
 
-Notifications are global (not per-user). Visible to admins only. Clicking a `token_expired` notification navigates to the "Clusters & Enterprises" tab — routing driven by `kind` on the frontend; no URL stored in the model.
+`unique_together = [('kind', 'enterprise')]` — prevents duplicate alerts for the same enterprise.
+
+Notifications are global (not per-user). Visible to admins only.
+
+**Click / action behavior by kind:**
+- `token_expired`, `sync_error`, `enterprise_inactive`: clicking navigates to the "Clusters & Enterprises" tab
+- `name_mismatch`: **no** click navigation; instead renders two inline action buttons:
+  - **"Use ZedCloud name"** — calls `PATCH /api/v1/enterprises/{id}/` to update the local name, then marks read
+  - **"Keep current name"** — marks read only
+  Routing is driven by `kind` on the frontend; no URL stored in the model.
 
 ### Removed
 
@@ -188,6 +202,42 @@ Sent to all admins. Contains three sections (each hidden if empty):
 2. **Devices — Out of Order**: list of `Device` where `condition='out_of_order'`
 3. **Enterprises with errors**: list of `Enterprise` where `last_sync_status IN ('error', 'token_expired')` — current snapshot, not history
 
+### Post-import name verification (`verify_enterprise_names`)
+
+**Not a scheduled job.** Triggered as a background daemon thread immediately after any import (`POST /api/v1/clusters/import/`) that creates or updates enterprises.
+
+```
+verify_enterprise_names():
+  for each Enterprise where is_active=True and name_verified=False:
+    try:
+      bearer_token = decrypt(enterprise.bearer_token_enc)
+    except:
+      continue  # leave name_verified=False; retry on next import
+
+    try:
+      info = fetch_enterprise_self(cluster.host, bearer_token)
+    except (decrypt error, network error):
+      continue  # leave name_verified=False; retry on next import
+
+    # Always update zcloud_id if we learned it
+    if info['zcloud_id'] != enterprise.zcloud_id:
+      enterprise.zcloud_id = info['zcloud_id']
+
+    if info['state'] != ENTERPRISE_STATE_ACTIVE:
+      enterprise.is_active = False
+      Notification.update_or_create(kind='enterprise_inactive', enterprise=enterprise, ...)
+      # name mismatch check skipped — enterprise deactivated
+
+    elif info['name'] != enterprise.name:
+      Notification.update_or_create(kind='name_mismatch', enterprise=enterprise,
+                                     body=json.dumps({local_name, zcloud_name}), ...)
+
+    enterprise.name_verified = True
+    enterprise.save()
+```
+
+This function runs in the same process as the Django app (background thread). It does **not** appear in the APScheduler job list.
+
 ### Token expiry — immediate email
 
 Subject: `[Portal] Token expired — {enterprise.name} on {cluster.name}`  
@@ -217,6 +267,13 @@ Body: enterprise name, cluster host, time of failure, instruction to update toke
 | POST | `/api/v1/enterprises/{id}/sync/` | `IsAdminPortalUser` | Trigger immediate sync for one enterprise |
 | GET | `/api/v1/clusters/export/` | `IsAdminPortalUser` | Download full cluster + enterprise config as JSON |
 | POST | `/api/v1/clusters/import/` | `IsAdminPortalUser` | Import cluster + enterprise config from JSON |
+
+**Enterprise add flow** (`POST /api/v1/clusters/{id}/enterprises/`):
+- Request body: `{ "bearer_token": "eyJ..." }` — **no `name` field**
+- Backend immediately calls `GET /v1/enterprises/self` on the target cluster using the provided token to fetch the enterprise name and `zcloud_id`
+- Creation is **blocked** if `enterprise.state != ENTERPRISE_STATE_ACTIVE` — returns 400 with a descriptive error
+- On success: enterprise created with `name` and `zcloud_id` from ZedCloud, `name_verified = True`
+- `name_verified` resets to `False` when bearer token is updated via PATCH or overwritten by import — triggering re-verification on the next import
 
 Bearer token is never returned in any response.
 
@@ -261,9 +318,14 @@ Bearer token is never returned in any response.
 | GET | `/api/v1/untracked-devices/` | List untracked devices (paginated) |
 | POST | `/api/v1/untracked-devices/{id}/move-to-inventory/` | Move to inventory |
 
-**Filters supported on GET:** `enterprise`, `cluster`, `serial_number` (partial match).
+**Filters supported on GET:** none — the API returns all untracked devices; filtering is client-side in the frontend.
 
 **Move to inventory:** Creates a `Device` record pre-filled with `name`, `serial_number`, `model` (as text, not FK), `eve_version`, `device_connectivity`, `cluster`, `enterprise`, `run_state`. The Device `model` FK is left blank — user fills it afterwards. The `UntrackedDevice` record is deleted on success.
+
+**UntrackedDevice cleanup — three paths:**
+1. **Sync cycle** (`sync_all_enterprises`): serials found in the inventory (matched to a `Device`) are deleted from `UntrackedDevice` after the full cycle completes
+2. **Manual add** (`DeviceListCreateView.post`): after successfully creating a `Device` via the add form, any `UntrackedDevice` with the same serial number is deleted
+3. **CSV/JSON import** (`ImportView`): after processing all rows, any `UntrackedDevice` whose serial matches a created or updated device is deleted
 
 ### Device status refresh (revised)
 
@@ -312,7 +374,7 @@ Bearer token is never returned in any response.
 ### New: "Untracked Devices" page
 
 - Separate route, linked from sidebar (visible to all portal users)
-- Filter bar: enterprise dropdown, cluster dropdown, serial number text input
+- Filter bar: **cluster dropdown first**, then enterprise dropdown (enterprise options narrow based on selected cluster); serial number text input; all filtering is **client-side** on a single API fetch (no filter params sent to backend)
 - Table columns: Name | Serial No | Model | Enterprise | Cluster | Run State | EVE Version | First Seen | Last Seen | Action
 - "Move to Inventory" button per row → confirmation modal (see below)
 
@@ -347,7 +409,10 @@ User must click "Confirm Move to Inventory" to proceed. On success the row is re
 
 - Bell icon in nav bar showing unread notification count
 - Dropdown lists recent notifications with title and timestamp
-- Clicking a `token_expired` notification navigates to "Clusters & Enterprises" tab
+- **`token_expired`**, **`sync_error`**, **`enterprise_inactive`**: clicking navigates to "Clusters & Enterprises" tab and marks notification read
+- **`name_mismatch`**: no click navigation; shows two inline action buttons:
+  - **"Use ZedCloud name"** — PATCHes the enterprise name to match ZedCloud, then marks read
+  - **"Keep current name"** — marks read only
 - "Mark all read" action in dropdown
 
 ---

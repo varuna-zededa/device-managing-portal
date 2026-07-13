@@ -37,8 +37,8 @@
 - Modify: `backend/requirements.txt` (add apscheduler)
 
 **Interfaces:**
-- Produces: `Enterprise` model with fields `id, name, cluster(FK), bearer_token_enc, is_active, last_sync_at, last_sync_status, last_sync_error`
-- Produces: `Notification` model with fields `id, kind, title, body, created_at, is_read, read_at`
+- Produces: `Enterprise` model with fields `id, name, cluster(FK), bearer_token_enc, zcloud_id, is_active, name_verified, last_sync_at, last_sync_status, last_sync_error`; `unique_together = ('name', 'cluster')`
+- Produces: `Notification` model with fields `id, kind, enterprise(FK nullable), title, body, created_at, is_read, read_at`; kinds: `token_expired`, `sync_error`, `name_mismatch`, `enterprise_inactive`; `unique_together = [('kind', 'enterprise')]`
 
 - [ ] **Step 1: Create enterprise app skeleton**
 
@@ -77,7 +77,9 @@ class Enterprise(models.Model):
         'clusters.Cluster', on_delete=models.CASCADE, related_name='enterprises',
     )
     bearer_token_enc = models.BinaryField()
+    zcloud_id = models.CharField(max_length=100, blank=True, default='')
     is_active = models.BooleanField(default=True)
+    name_verified = models.BooleanField(default=False)
     last_sync_at = models.DateTimeField(null=True, blank=True)
     last_sync_status = models.CharField(
         max_length=20, choices=SYNC_STATUS_CHOICES, null=True, blank=True,
@@ -129,11 +131,19 @@ from django.db import models
 KIND_CHOICES = [
     ('token_expired', 'Token Expired'),
     ('sync_error', 'Sync Error'),
+    ('name_mismatch', 'Name Mismatch'),
+    ('enterprise_inactive', 'Enterprise Inactive'),
 ]
 
 
 class Notification(models.Model):
     kind = models.CharField(max_length=30, choices=KIND_CHOICES)
+    enterprise = models.ForeignKey(
+        'enterprises.Enterprise',
+        null=True, blank=True,
+        on_delete=models.CASCADE,
+        related_name='notifications',
+    )
     title = models.CharField(max_length=300)
     body = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
@@ -142,6 +152,7 @@ class Notification(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        unique_together = [('kind', 'enterprise')]
 
     def __str__(self):
         return self.title
@@ -665,28 +676,14 @@ class EnterpriseReadSerializer(serializers.ModelSerializer):
 
 
 class EnterpriseCreateSerializer(serializers.Serializer):
-    name = serializers.CharField(max_length=200)
+    """Accepts bearer_token only — name and zcloud_id are fetched from ZedCloud by the view."""
     bearer_token = serializers.CharField(write_only=True)
     is_active = serializers.BooleanField(default=True)
-
-    def validate_name(self, value):
-        if not value.strip():
-            raise serializers.ValidationError('Name must not be blank.')
-        return value.strip()
 
     def validate_bearer_token(self, value):
         if not value.strip():
             raise serializers.ValidationError('Bearer token must not be blank.')
         return value.strip()
-
-    def create(self, validated_data):
-        cluster = self.context['cluster']
-        bearer_token = validated_data.pop('bearer_token')
-        return Enterprise.objects.create(
-            cluster=cluster,
-            bearer_token_enc=encrypt(bearer_token),
-            **validated_data,
-        )
 
 
 class EnterpriseUpdateSerializer(serializers.Serializer):
