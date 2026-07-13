@@ -33,6 +33,7 @@ urlpatterns = [
     path('api/v1/enterprises/', include('apps.enterprises.urls')),
     path('api/v1/models/', include('apps.device_models.urls')),
     path('api/v1/devices/', include('apps.devices.urls')),
+    path('api/v1/untracked-devices/', include('apps.devices.untracked_urls')),
     path('api/v1/users/', include('apps.users.urls')),
     path('api/v1/vault/', include('apps.vault.urls')),
     path('api/v1/reservations/', include('apps.reservations.urls')),
