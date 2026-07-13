@@ -7,7 +7,7 @@ Repo: https://github.com/varuna-zededa/device-managing-portal
 
 ## Current Status
 
-> **Awaiting feedback from management and team before full implementation begins.**
+> **Status: Actively developed. v1 (MVP) and v2 (enterprise sync / auto device sync) shipped.**
 
 ---
 
@@ -79,6 +79,8 @@ Each version follows the same 5-step cycle before shipping:
 ---
 
 ## Version 2 — Operational Depth + Partial NLP Search
+
+> **Note:** The shipped v2 was the enterprise sync / auto device sync feature (enterprise credentials, hourly background sync, untracked devices page, admin notifications). The scope described below is the **next planned version**, not what shipped as v2.
 
 **Scope:**
 

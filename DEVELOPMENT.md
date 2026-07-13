@@ -42,7 +42,7 @@ Django admin (create superuser first): `python manage.py createsuperuser` → `/
 ## Backend
 
 ### Project layout
-```
+```text
 backend/
 ├── config/settings.py           all settings; reads .env via django-environ
 │                                DEVICE_LIST_REFRESH_MS / NOTIFICATION_REFRESH_MS — auto-refresh intervals
@@ -124,7 +124,7 @@ device.idrac_password_enc = encrypt(raw_password)
 raw = decrypt(device.idrac_password_enc)
 ```
 
-### Condition change side-effects (`apps/devices/views.py` → `_handle_condition_change`)
+#### Condition change side-effects (`apps/devices/views.py` → `_handle_condition_change`)
 | New condition | Clears owner | Expires requests | Emails admins |
 |---|---|---|---|
 | `out_of_order` | yes | yes | yes |
@@ -180,7 +180,7 @@ except Exception as e:
     logger.warning('Email failed: %s', e)
 ```
 
-### ZedCloud fetch (`services/zedcloud.py`)
+#### ZedCloud fetch (`services/zedcloud.py`)
 
 A module-level `_client = httpx.Client(timeout=30)` is shared across all calls (connection reuse, no per-call overhead).
 
@@ -214,6 +214,17 @@ def fetch_device_status(
     return eve_version, connectivity or None, STATUS_MAP.get(run_state, 'Unknown')
 ```
 
+**`fetch_enterprise_self(host, bearer_token)`** — canonical function to call `/v1/enterprises/self` on ZedCloud:
+- Lives in `services/zedcloud.py`
+- Returns `{'name': str, 'zcloud_id': str, 'state': str, 'state_label': str}`
+- Used by `ClusterEnterpriseListCreateView.post()` to validate and name enterprises created via the UI
+- Constants also in `services/zedcloud.py`: `ENTERPRISE_STATE_ACTIVE = 'ENTERPRISE_STATE_ACTIVE'`; `_ENTERPRISE_STATE_LABELS` maps state strings to human-readable labels
+
+**Device status endpoint — `POST /api/v1/devices/{id}/status/`**
+- Accepts `enterprise_id` (integer FK) — **not** a raw bearer token
+- Backend looks up the `Enterprise` row by id, decrypts `bearer_token_enc` server-side, then calls ZedCloud
+- Do not pass bearer tokens directly from the frontend
+
 ### Choices endpoint (`apps/devices/views.py` → `ChoicesView`)
 ```python
 return Response({
@@ -236,8 +247,8 @@ Always commit migration files with the model change that produced them.
 
 ## Frontend
 
-### Project layout
-```
+### Frontend project layout
+```text
 frontend/src/
 ├── api/
 │   ├── client.ts          axios instance; auto-injects X-User-Email from localStorage
@@ -365,8 +376,50 @@ if (!isAdmin) return <Navigate to="/devices" replace />
 
 ### Enterprise sync
 - Sync engine: `apps/enterprises/sync.py` — `sync_all_enterprises()` iterates active enterprises, calls ZedCloud bulk device fetch, upserts `UntrackedDevice` rows, marks inventory devices missing/found
-- `verify_enterprise_names()`: called from a background thread after import (not scheduled); checks each enterprise's name against ZedCloud; on mismatch → `name_mismatch` notification; on inactive state → deactivate + `enterprise_inactive` notification; skips on decrypt/network error
-- APScheduler guard in `apps/enterprises/apps.py`: only starts in the child process under `runserver` (`RUN_MAIN=true`) or in production; prevents double-start on Django's reloader
+- `verify_enterprise_names()`: called from a background thread after import (not scheduled); processes enterprises with `is_active=True, name_verified=False`; logic order matters:
+  1. State check first: if ZedCloud state != `ENTERPRISE_STATE_ACTIVE` → deactivate enterprise + create `enterprise_inactive` notification
+  2. `elif` name check: if names differ → create `name_mismatch` notification
+  3. Sets `name_verified=True` regardless of whether names match (both branches)
+  4. Skips the enterprise silently on decrypt error or network error
+- APScheduler (in `apps/enterprises/apps.py`): only two registered jobs — `sync_all_enterprises` every 1 hour, `send_nightly_digest` at midnight UTC; `verify_enterprise_names` is **not** in the scheduler
+- APScheduler guard: only starts in the child process under `runserver` (`RUN_MAIN=true`) or in production; prevents double-start on Django's reloader
+
+**Enterprise creation — two paths:**
+- **UI path** (`apps/clusters/views.py` → `ClusterEnterpriseListCreateView.post()`): user provides bearer token only; backend calls `fetch_enterprise_self()` to get name + `zcloud_id`; blocks creation if state != `ENTERPRISE_STATE_ACTIVE`; creates enterprise with `name_verified=True`
+- **Import path** (`apps/enterprises/views.py`): name comes from JSON payload; `name_verified=False` on create or overwrite; a background daemon thread calls `verify_enterprise_names()` after the import completes
+
+**`name_verified` field reset conditions:**
+- Reset to `False`: on bearer token PATCH (token update) and on import overwrite of an existing enterprise
+- Set to `True`: on UI creation (name already verified via `fetch_enterprise_self()`) and after `verify_enterprise_names()` confirms the name matches ZedCloud
+
+**Notification dedup pattern** (`apps/notifications/models.py`):
+```python
+# Always use get_or_create — unique_together = [('kind', 'enterprise')] prevents duplicates
+Notification.objects.get_or_create(
+    kind='token_expired',
+    enterprise=enterprise,
+    defaults={'title': '...', 'body': '...'},
+)
+```
+
+**`UntrackedDevice` upsert pattern** (`apps/devices/models.py`):
+```python
+# Use update_or_create with create_defaults (Django 4.1+) so first_seen_at is only set on creation
+UntrackedDevice.objects.update_or_create(
+    serial_number=serial,
+    enterprise=enterprise,
+    defaults={
+        'last_seen_at': now,
+        'zcloud_id': ...,
+        'name': ...,
+        # ...other always-updated fields...
+    },
+    create_defaults={
+        'first_seen_at': now,   # set only on INSERT, not on UPDATE
+    },
+)
+```
+- `unique_together = ('serial_number', 'enterprise')` is the lookup key
 - Notification kinds: `token_expired` | `sync_error` | `name_mismatch` | `enterprise_inactive`; `unique_together = [('kind', 'enterprise')]` so repeated failures do not create duplicate rows
 
 ### New Lab or Team

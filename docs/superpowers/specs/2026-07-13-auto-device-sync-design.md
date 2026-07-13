@@ -7,7 +7,7 @@
 
 ## Problem
 
-Users currently must provide their own cluster credentials (bearer token, cluster name, device name) via the "Refresh Status" modal to update any device's cluster info. This is friction-heavy and frequently skipped, leaving devices in the inventory with stale or missing cluster data.
+Users previously had to provide their own cluster credentials (bearer token, cluster name, device name) via the "Refresh Status" modal to update any device's cluster info. This was friction-heavy and frequently skipped, leaving devices in the inventory with stale or missing cluster data.
 
 ---
 
@@ -62,7 +62,7 @@ Replace per-user credential entry with admin-managed enterprise credentials. The
 | `run_state` | CharField | `runState` |
 | `eve_version` | CharField | `swInfo[activated=true].shortVersion` |
 | `device_connectivity` | JSONField | `netStatusList` |
-| `first_seen_at` | DateTimeField | Set on first discovery |
+| `first_seen_at` | DateTimeField | Set only on creation (via `if created:` branch in `update_or_create`); never overwritten on subsequent syncs |
 | `last_seen_at` | DateTimeField | Updated every sync cycle |
 
 ### Device model changes (`apps/devices/models.py`)
@@ -104,7 +104,7 @@ Notifications are global (not per-user). Visible to admins only.
 
 ### Bulk device status endpoint
 
-```
+```text
 GET https://{cluster.host}/v1/devices/status?next.pageSize=200&next.pageNum={n}
 Authorization: Bearer {enterprise.bearer_token}
 ```
@@ -127,7 +127,7 @@ Authorization: Bearer {enterprise.bearer_token}
 
 ### Single device endpoint (manual refresh, same enterprise)
 
-```
+```text
 GET https://{cluster.host}/api/v1/devices/name/{cluster_device_name}/status/info
 Authorization: Bearer {enterprise.bearer_token}
 ```
@@ -140,7 +140,7 @@ Used only when user triggers manual refresh without changing enterprise.
 
 ### Hourly sync algorithm
 
-```
+```python
 sync_all_enterprises():
   seen_serials = set()
 
@@ -166,7 +166,7 @@ sync_all_enterprises():
                         device_connectivity, last_seen_at},
               serial_number=minfo.serialNumber, enterprise=enterprise
             )
-            set first_seen_at only on create
+            set first_seen_at only on create  # via `if created:` branch; not in defaults dict
 
       enterprise.last_sync_status = 'ok'
       enterprise.last_sync_error = None
@@ -174,7 +174,7 @@ sync_all_enterprises():
     except HTTP 401 / 403:
       enterprise.last_sync_status = 'token_expired'
       send_immediate_token_expiry_email(enterprise)
-      Notification.create(kind='token_expired', ...)
+      Notification.objects.get_or_create(kind='token_expired', enterprise=enterprise, ...)
 
     except other error:
       enterprise.last_sync_status = 'error'
@@ -185,7 +185,10 @@ sync_all_enterprises():
       enterprise.last_sync_at = now()
       enterprise.save()
 
-  # Mark MISSING — only devices that were previously tracked and not seen this cycle
+  # Mark MISSING — only devices that were previously tracked and not seen this cycle.
+  # Guard: enterprises that errored or returned zero devices do NOT contribute to seen_serials,
+  # so their devices are excluded from this update to prevent false positives.
+  # Only enterprises that completed successfully (status='ok') add to seen_serials.
   Device.filter(
     enterprise__isnull=False,
     condition='normal'
@@ -206,7 +209,7 @@ Sent to all admins. Contains three sections (each hidden if empty):
 
 **Not a scheduled job.** Triggered as a background daemon thread immediately after any import (`POST /api/v1/clusters/import/`) that creates or updates enterprises.
 
-```
+```python
 verify_enterprise_names():
   for each Enterprise where is_active=True and name_verified=False:
     try:
@@ -225,12 +228,12 @@ verify_enterprise_names():
 
     if info['state'] != ENTERPRISE_STATE_ACTIVE:
       enterprise.is_active = False
-      Notification.update_or_create(kind='enterprise_inactive', enterprise=enterprise, ...)
+      Notification.objects.get_or_create(kind='enterprise_inactive', enterprise=enterprise, ...)
       # name mismatch check skipped — enterprise deactivated
 
     elif info['name'] != enterprise.name:
-      Notification.update_or_create(kind='name_mismatch', enterprise=enterprise,
-                                     body=json.dumps({local_name, zcloud_name}), ...)
+      Notification.objects.get_or_create(kind='name_mismatch', enterprise=enterprise,
+                                         body=json.dumps({local_name, zcloud_name}), ...)
 
     enterprise.name_verified = True
     enterprise.save()
@@ -246,8 +249,10 @@ Body: enterprise name, cluster host, time of failure, instruction to update toke
 ### APScheduler registration (`apps/enterprises/apps.py → ready()`)
 
 - Guarded with `os.environ.get('RUN_MAIN')` to prevent double-start in Django dev server
-- Hourly sync: `IntervalTrigger(hours=1)`
-- Midnight digest: `CronTrigger(hour=0, minute=0)`
+- **Exactly two scheduled jobs:**
+  1. Hourly sync: `sync_all_enterprises` via `IntervalTrigger(hours=1)`
+  2. Midnight digest: `send_nightly_digest` via `CronTrigger(hour=0, minute=0)`
+- `verify_enterprise_names` is **not** a scheduled job — it runs as a post-import background daemon thread only
 
 ---
 
@@ -329,7 +334,7 @@ Bearer token is never returned in any response.
 
 ### Device status refresh (revised)
 
-| Method | URL | Change |
+| Method | URL | Notes |
 |---|---|---|
 | POST | `/api/v1/devices/{id}/status/` | Accepts `enterprise_id` instead of `bearer_token` + `cluster_id`. Token fetched server-side from Enterprise record. |
 
@@ -348,7 +353,7 @@ Bearer token is never returned in any response.
 
 `GET /api/v1/choices/` now returns `enterprises` list (id, name, cluster name) for the refresh modal dropdown.
 
-### Removed
+### Endpoints removed
 
 - All `Vault` endpoints removed
 

@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace per-user Vault bearer tokens with admin-managed enterprise credentials and run hourly background sync that updates inventory, surfaces untracked devices, and marks missing ones.
+**Goal:** Replaced per-user Vault bearer tokens with admin-managed enterprise credentials and run hourly background sync that updates inventory, surfaces untracked devices, and marks missing ones.
 
-**Architecture:** Two new Django apps (`apps/enterprises`, `apps/notifications`) plus an `UntrackedDevice` model in `apps/devices`. APScheduler runs inside the Django process: hourly bulk ZedCloud poll + midnight digest email. The `Vault` app is removed entirely. Frontend gains a Clusters & Enterprises tab (read-only for members, full edit for admins), an Untracked Devices page, a revised Refresh modal (enterprise dropdown), and admin token-expiry notifications in the bell.
+**Architecture:** Two new Django apps (`apps/enterprises`, `apps/notifications`) plus an `UntrackedDevice` model in `apps/devices`. APScheduler runs inside the Django process: hourly bulk ZedCloud poll + midnight digest email. The `Vault` app was removed entirely. Frontend gained a Clusters & Enterprises tab (read-only for members, full edit for admins), an Untracked Devices page, a revised Refresh modal (enterprise dropdown), and admin token-expiry notifications in the bell.
 
-**Tech Stack:** Django 6.0, DRF 3.15, APScheduler 3.x, httpx 0.27, Fernet (cryptography 42), React 19, TanStack Query, TypeScript, shadcn/ui
+**Tech Stack:** Django 5, DRF 3.15, APScheduler 3.x, httpx 0.27, Fernet (cryptography 42), React 19, TanStack Query, TypeScript, shadcn/ui
 
 ## Global Constraints
 
@@ -38,6 +38,7 @@
 
 **Interfaces:**
 - Produces: `Enterprise` model with fields `id, name, cluster(FK), bearer_token_enc, zcloud_id, is_active, name_verified, last_sync_at, last_sync_status, last_sync_error`; `unique_together = ('name', 'cluster')`
+  - `name_verified` starts `False` by default; set `True` on UI creation (after `fetch_enterprise_self()` confirms the name); reset to `False` on bearer token PATCH **and** on import overwrite (`on_conflict='overwrite'`)
 - Produces: `Notification` model with fields `id, kind, enterprise(FK nullable), title, body, created_at, is_read, read_at`; kinds: `token_expired`, `sync_error`, `name_mismatch`, `enterprise_inactive`; `unique_together = [('kind', 'enterprise')]`
 
 - [ ] **Step 1: Create enterprise app skeleton**
@@ -171,14 +172,14 @@ class NotificationAdmin(admin.ModelAdmin):
 
 - [ ] **Step 4: Add apps to INSTALLED_APPS and APScheduler to requirements**
 
-In `backend/config/settings.py`, add to `INSTALLED_APPS` after `'apps.vault'`:
+In `backend/config/settings.py`, add to `INSTALLED_APPS` after `'apps.enterprises'` (or the last existing app entry):
 ```python
     'apps.enterprises',
     'apps.notifications',
 ```
 
 In `backend/requirements.txt`, add:
-```
+```text
 apscheduler==3.*
 ```
 
@@ -413,6 +414,8 @@ def sync_enterprise(enterprise) -> set[str]:
                 },
             )
             if created:
+                # first_seen_at is set only on creation, never overwritten on subsequent syncs.
+                # It is NOT in the defaults dict so update_or_create never clobbers it.
                 obj.first_seen_at = now
                 obj.save(update_fields=['first_seen_at'])
 
@@ -460,7 +463,10 @@ def sync_all_enterprises() -> None:
             enterprise.last_sync_at = timezone.now()
             enterprise.save(update_fields=['last_sync_at', 'last_sync_status', 'last_sync_error'])
 
-    # Mark MISSING: inventory devices with enterprise assigned, condition=normal, not seen this cycle
+    # Mark MISSING: inventory devices with enterprise assigned, condition=normal, not seen this cycle.
+    # Guard: enterprises that errored are skipped (exception path) and never add to all_seen_serials,
+    # so their devices are NOT falsely marked missing — only enterprises that completed successfully
+    # contribute serials. This prevents false positives from a single failing enterprise.
     Device.objects.filter(
         enterprise__isnull=False,
         condition='normal',
@@ -498,7 +504,10 @@ git commit -m "feat: add bulk ZedCloud fetch and enterprise sync engine"
 **Interfaces:**
 - Produces: `send_token_expiry_alert(enterprise)` — immediate email to admins
 - Produces: `send_nightly_digest()` — midnight email to admins
-- Produces: APScheduler started in `EnterprisesConfig.ready()`
+- Produces: APScheduler started in `EnterprisesConfig.ready()` with exactly **two** jobs:
+  1. `sync_all_enterprises` — hourly (`IntervalTrigger(hours=1)`)
+  2. `send_nightly_digest` — midnight UTC (`CronTrigger(hour=0, minute=0)`)
+  - `verify_enterprise_names` is **not** a scheduled job — it runs as a background daemon thread triggered post-import only
 
 - [ ] **Step 1: Add email functions to utils/email.py**
 
@@ -1066,6 +1075,17 @@ class ClusterImportView(APIView):
         }
         if errors:
             result['errors'] = errors
+
+        # Post-import: kick off name verification as a background daemon thread.
+        # This is NOT a scheduled job — it runs once per import, immediately after the response.
+        # It processes all is_active=True, name_verified=False enterprises (newly created or overwritten).
+        if created_enterprises or updated_enterprises:
+            import threading
+            from apps.enterprises.sync import verify_enterprise_names
+            t = threading.Thread(target=verify_enterprise_names, daemon=True)
+            t.start()
+
+        if errors:
             return Response(result, status=status.HTTP_207_MULTI_STATUS)
         return Response(result, status=status.HTTP_200_OK)
 ```
@@ -1410,6 +1430,8 @@ git commit -m "feat: notification list and mark-read API"
 
 ## Task 9: Revised device status API + choices extension + Vault removal
 
+> **Note: This task has been completed. Vault was removed as part of the auto-device-sync implementation. Steps below are historical.**
+
 **Files:**
 - Modify: `backend/apps/devices/views.py` (DeviceStatusView, ChoicesView)
 - Modify: `backend/config/urls.py` (remove vault, verify notification/enterprise routes present)
@@ -1420,7 +1442,7 @@ git commit -m "feat: notification list and mark-read API"
 - `GET /api/v1/choices/` now returns `enterprises: [{id, name, cluster_name}]`
 - Vault endpoints removed
 
-- [ ] **Step 1: Replace DeviceStatusView**
+- [x] **Step 1: Replace DeviceStatusView**
 
 In `backend/apps/devices/views.py`:
 
@@ -1530,7 +1552,7 @@ class DeviceStatusView(APIView):
             return Response({'error': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
 ```
 
-- [ ] **Step 2: Expose enterprise in DeviceSerializer**
+- [x] **Step 2: Expose enterprise in DeviceSerializer**
 
 The Refresh modal reads `device.enterprise?.id` to pre-select the dropdown. In `backend/apps/devices/serializers.py`:
 
@@ -1553,7 +1575,7 @@ In `backend/apps/devices/views.py`, add `'enterprise'` to both `select_related` 
 - `DeviceListCreateView.get` line ~67: `select_related('model', 'cluster', 'lab', 'team', 'enterprise')`
 - `DeviceDetailView._get_device` line ~138: `select_related('model', 'cluster', 'lab', 'team', 'enterprise')`
 
-- [ ] **Step 3: Update ChoicesView to include enterprises**
+- [x] **Step 3: Update ChoicesView to include enterprises**
 
 Replace the `ChoicesView.get` return statement (starting at line 495):
 ```python
@@ -1573,7 +1595,7 @@ Replace the `ChoicesView.get` return statement (starting at line 495):
         })
 ```
 
-- [ ] **Step 4: Remove Vault from settings and URLs**
+- [x] **Step 4: Remove Vault from settings and URLs**
 
 In `backend/config/settings.py`, remove `'apps.vault'` from `INSTALLED_APPS`.
 
@@ -1582,7 +1604,7 @@ In `backend/config/urls.py`, remove:
     path('api/v1/vault/', include('apps.vault.urls')),
 ```
 
-- [ ] **Step 5: Run system check**
+- [x] **Step 5: Run system check**
 
 ```bash
 cd backend && python manage.py check
@@ -1590,7 +1612,7 @@ cd backend && python manage.py check
 
 Expected: no errors. (The vault tables remain in the DB but the app is no longer loaded — that's acceptable; run `python manage.py dbshell` and `DROP TABLE vault_vault;` if you want to clean up manually.)
 
-- [ ] **Step 6: Commit** — pause and ask user for approval.
+- [x] **Step 6: Commit** — pause and ask user for approval.
 
 ```bash
 git add backend/apps/devices/views.py backend/config/settings.py backend/config/urls.py
@@ -2481,6 +2503,14 @@ git commit -m "feat: Untracked Devices page with move-to-inventory dialog"
 - Modify: `frontend/src/components/FetchStatusDialog.tsx`
 - Modify: `frontend/src/components/NotificationPanel.tsx`
 
+**Interfaces:**
+- Notification click behavior (driven by `kind` on the frontend — no URL stored in the model):
+  - `token_expired`, `sync_error`, `enterprise_inactive`: clicking marks read AND navigates to `/cluster-enterprises`
+  - `name_mismatch`: no click navigation; renders two inline action buttons instead:
+    - **"Use ZedCloud name"** — PATCHes `PATCH /api/v1/enterprises/{id}/` to update local name, then marks read
+    - **"Keep current name"** — marks read only
+- Refresh Status modal: enterprise dropdown replacing the old cluster/token/vault fields; `enterprise_id` sent to backend (token decrypted server-side)
+
 - [ ] **Step 1: Rewrite FetchStatusDialog**
 
 Replace entire contents of `frontend/src/components/FetchStatusDialog.tsx`:
@@ -2646,7 +2676,9 @@ Inside `NotificationBell`, add after the existing queries:
 
   function handleNotificationClick(n: PortalNotification) {
     markReadMut.mutate(n.id)
-    if (n.kind === 'token_expired' || n.kind === 'sync_error') {
+    // token_expired, sync_error, AND enterprise_inactive all navigate to /cluster-enterprises on click.
+    // name_mismatch has no click navigation — it uses inline action buttons instead.
+    if (n.kind === 'token_expired' || n.kind === 'sync_error' || n.kind === 'enterprise_inactive') {
       navigate('/cluster-enterprises')
     }
     setOpen(false)

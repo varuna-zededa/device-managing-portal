@@ -110,13 +110,16 @@ It contains exact file paths, code patterns, and checklists for every common imp
 - Do **not** allow any portal user to clear device purpose — check `is_admin(email) or device.owner_email == email` first
 - Do **not** reference `apps/vault` or `Vault.bearer_token_enc` — the Vault app was removed; enterprise bearer tokens are stored in `Enterprise.bearer_token_enc` in `apps/enterprises`
 - Do **not** add a `/api/v1/vault/` route — it no longer exists; status fetch now uses an enterprise credential selected in the dialog
+- Do **not** add `verify_enterprise_names` to APScheduler — it is called as a background daemon thread from the import view, not as a scheduled job; only `sync_all_enterprises` and `send_nightly_digest` are registered
+- Do **not** ask the user for an enterprise name when creating via the UI — name is fetched from ZedCloud `/v1/enterprises/self`; the UI only accepts a bearer token
+- Do **not** pass raw bearer tokens from the frontend for device status fetch — the endpoint `POST /api/v1/devices/{id}/status/` accepts `enterprise_id`; backend decrypts the token server-side
 
 ### Enterprise sync
 - `Enterprise` model: `apps/enterprises/models.py` — fields: `name`, `cluster` (FK), `bearer_token_enc`, `zcloud_id`, `is_active`, `name_verified`, `last_sync_at`, `last_sync_status`, `last_sync_error`; `unique_together = ('name', 'cluster')`
-- Adding an enterprise: bearer token only — name is fetched from ZedCloud `/v1/enterprises/self`; creation blocked if ZedCloud returns state != `ENTERPRISE_STATE_ACTIVE`
-- `name_verified` resets to `False` on token update or import overwrite; set to `True` after `verify_enterprise_names()` confirms name matches ZedCloud
+- Adding an enterprise: bearer token only — name is fetched from ZedCloud `/v1/enterprises/self` via `fetch_enterprise_self()` in `services/zedcloud.py`; creation blocked if ZedCloud returns state != `ENTERPRISE_STATE_ACTIVE` (constant in `services/zedcloud.py`)
+- `name_verified` resets to `False` on token update or import overwrite; set to `True` on UI creation (name already verified) and after `verify_enterprise_names()` confirms name matches ZedCloud
 - Post-import verification: a background thread calls `verify_enterprise_names()` after any import that creates/updates enterprises — this is **not** a scheduled job
-- APScheduler (in `apps/enterprises/apps.py`): runs `sync_all_enterprises` every 1 hour, `send_nightly_digest` at midnight UTC; there is **no** verify job in the scheduler
+- APScheduler (in `apps/enterprises/apps.py`): runs `sync_all_enterprises` every 1 hour, `send_nightly_digest` at midnight UTC; there is **no** verify job in the scheduler — only these two jobs are registered
 
 ### Notifications (admin)
 - `Notification` model: `apps/notifications/models.py` — kinds: `token_expired`, `sync_error`, `name_mismatch`, `enterprise_inactive`; has `enterprise` FK; `unique_together = [('kind', 'enterprise')]`

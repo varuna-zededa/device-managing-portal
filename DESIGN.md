@@ -44,7 +44,7 @@ via a link (no login needed). Admins can force-assign and set device condition f
 (EVE version, SSH IPs, run state) is fetched on demand from the ZedCloud API using the engineer's
 personal bearer token, which is stored encrypted so they don't have to re-enter it each session.
 
-```
+```text
 ┌─────────────┐
 │   /login    │  pick identity → stored in localStorage
 └──────┬──────┘
@@ -70,7 +70,7 @@ personal bearer token, which is stored encrypted so they don't have to re-enter 
 
 **Reservation flow:**
 
-```
+```text
 Reserve clicked
       │
       ├─ device free ───────────────────▶  transfer immediately; done
@@ -150,7 +150,7 @@ Features not in scope for v1 but worth considering later, roughly ordered by use
 ## Data Models
 
 ### Cluster
-```
+```text
 id      int   PK auto
 name    str   unique short name, e.g. "hummingbird", "prod"
 host    str   ZedCloud hostname, format: zcloud.<name>.zededa.[net|dev], e.g. "zcloud.hummingbird.zededa.net"
@@ -165,10 +165,10 @@ host    str   ZedCloud hostname, format: zcloud.<name>.zededa.[net|dev], e.g. "z
 | thor | zcloud.thor.zededa.net |
 | prod | zcloud.prod.zededa.net |
 
-Any user can add a new cluster. The dropdown in all forms is populated from this table.
+Only admin users can add or delete clusters. The dropdown in all forms is populated from this table.
 
 ### DeviceModel
-```
+```text
 id                    int   PK auto
 name                  str   unique model name, e.g. "OptiPlex 7040", "PowerEdge R740"
 customer_partner_name str   nullable; Zededa customer/partner using the model,
@@ -180,7 +180,7 @@ Any user can add a new model. The Model dropdown in the device form is populated
 pre-seeded entries — team populates as they go.
 
 ### Device
-```
+```text
 id                   int    PK auto
 name                 str    display name in portal
 serial_number        str    unique NOT NULL; hardware serial (primary identifier for physical device); duplicate → 400
@@ -218,7 +218,7 @@ updated_at           datetime
 location_detail, idrac_ip, idrac_username, idrac_password
 
 ### Lab
-```
+```text
 id    int   PK auto
 name  str   unique (max 100 chars); e.g. "Bangalore Lab", "CoreSite Lab", "Home Lab"
 ```
@@ -227,7 +227,7 @@ New labs can be added via Django admin (`/admin/`) without any code change — a
 refresh on the next full page load because `GET /api/v1/choices/` queries this table at runtime.
 
 ### Team
-```
+```text
 id    int   PK auto
 name  str   unique (max 50 chars); e.g. "ST", "EVE", "PLATFORM"
 ```
@@ -235,7 +235,7 @@ Pre-seeded entries: EVE · PLATFORM · ST.
 New teams can be added via Django admin — all Team dropdowns refresh on next page load (same pattern as Lab).
 
 ### User
-```
+```text
 id          int   PK auto
 name        str
 email       str   unique — identity anchor
@@ -247,7 +247,7 @@ user_type   enum  admin | member | guest
   all action controls hidden in the UI; `/users` page inaccessible (redirects to `/devices`)
 
 ### Enterprise  *(admin-managed ZedCloud enterprise credentials)*
-```
+```text
 id                int      PK auto
 name              str      enterprise name (from ZedCloud)
 cluster_id        int      FK → Cluster.id (CASCADE)
@@ -262,7 +262,7 @@ last_sync_error   str      nullable — error detail from last failed sync
 **Constraint:** `unique_together = ('name', 'cluster')`.
 
 ### UntrackedDevice  *(devices seen in ZedCloud but not in inventory)*
-```
+```text
 id                  int      PK auto
 enterprise_id       int      FK → Enterprise.id (CASCADE)
 zcloud_id           str      device UUID in ZedCloud
@@ -278,7 +278,7 @@ last_seen_at        datetime
 **Constraint:** `unique_together = ('serial_number', 'enterprise')`.
 
 ### Notification  *(admin-facing in-app alerts from sync engine)*
-```
+```text
 id          int      PK auto
 kind        enum     token_expired | sync_error | name_mismatch | enterprise_inactive
 enterprise  FK       → Enterprise.id (CASCADE, nullable)
@@ -291,7 +291,7 @@ read_at     datetime nullable
 **Constraint:** `unique_together = [('kind', 'enterprise')]` — repeated failures update the existing notification rather than creating duplicates.
 
 ### ReservationRequest
-```
+```text
 id               int      PK auto
 device_id        int      FK → Device.id
 requester_email  str      FK → User.email
@@ -303,7 +303,7 @@ token            str      unique random 32-byte hex token (for email approve/rej
 **Constraint:** at most one `status=pending` request per device at a time.
 
 ### DevicePurpose
-```
+```text
 id            int      PK auto
 device_id     int      FK → Device.id
 author_email  str      FK → User.email — who set the purpose
@@ -317,7 +317,7 @@ created_at    datetime
   list (which shows the newest purpose per row) needs no per-row join
 
 ### OwnershipHistory
-```
+```text
 id             int      PK auto
 device_id      int      FK → Device.id
 owner_email    str      nullable — null means device became available
@@ -333,14 +333,14 @@ reason         enum     device_added | reserved | released | force_assigned | re
 ## API Surface
 
 ### Clusters
-```
+```text
 GET  /api/v1/clusters          list all (for dropdown)
-POST /api/v1/clusters          any user; body: {name, host}
+POST /api/v1/clusters          admin only; body: {name, host}
                                host auto-suggested as zcloud.{name}.zededa.net if omitted; host validated against pattern zcloud.<name>.zededa.[net|dev]
 ```
 
 ### Models
-```
+```text
 GET  /api/v1/models            list all (for dropdown)
 POST /api/v1/models            any user; body: {name, customer_partner_name?}
                                duplicate name rejected with clear error
@@ -349,7 +349,7 @@ POST /api/v1/models            any user; body: {name, customer_partner_name?}
 ```
 
 ### Devices
-```
+```text
 GET    /api/v1/devices          ?q=<search>&available=<true|false|all>
                                 &team=<ST|EVE|PLATFORM>&lab=<lab name>
                                 &condition=<normal|out_of_order|needs_repair|temporarily_leased|dedicated>
@@ -368,27 +368,27 @@ POST   /api/v1/devices/{id}/status           body: {enterprise_id}
                                              decrypts Enterprise.bearer_token_enc server-side, calls ZedCloud, updates device
 ```
 
-### Device Purpose
-```
+### Device Purpose API
+```text
 GET  /api/v1/devices/{id}/purpose/           list last 10 purpose entries, newest first; any logged-in user
 POST /api/v1/devices/{id}/purpose/           body: {text}; author from X-User-Email
                                              empty text = clear (owner or admin only); auto-prunes to 10 entries after insert
 ```
 
 ### Device Ownership History
-```
+```text
 GET  /api/v1/devices/{id}/ownership-history   admin only; returns {results: [...], has_more: bool}; newest 50 records, newest first
 ```
 
 ### Frontend Config
-```
+```text
 GET  /api/v1/config/   public; returns {device_list_refresh_ms: int, notification_refresh_ms: int}
                         values read from DEVICE_LIST_REFRESH_MS / NOTIFICATION_REFRESH_MS env vars
                         defaults: 300000 (5 min) and 30000 (30 sec); frontend caches with staleTime: Infinity
 ```
 
 ### Choices
-```
+```text
 GET  /api/v1/choices/      any registered user; returns {labs: [...], teams: [...], conditions: [...]}
                            single source of truth for all dropdown lists; labs and teams queried from
                            DB at runtime — adding a new Lab or Team via Django admin is reflected on
@@ -396,7 +396,7 @@ GET  /api/v1/choices/      any registered user; returns {labs: [...], teams: [..
 ```
 
 ### Users
-```
+```text
 GET   /api/v1/users        list all (for dropdowns, search)
 POST  /api/v1/users        admin only; body: {name, email_prefix, team, user_type}
                            email stored as {email_prefix}@zededa.com — frontend sends prefix only
@@ -406,7 +406,7 @@ PATCH /api/v1/users/{id}   admin only; body: any subset of {name, team, user_typ
 ```
 
 ### Clusters & Enterprises
-```
+```text
 GET    /api/v1/clusters/                       IsPortalUser  — list clusters with nested enterprises + sync status
 POST   /api/v1/clusters/                       IsAdminPortalUser — create cluster
 PATCH  /api/v1/clusters/{id}/                  IsAdminPortalUser — update name / host
@@ -420,20 +420,20 @@ POST   /api/v1/clusters/import/                IsAdminPortalUser — import clus
 ```
 
 ### Untracked Devices
-```
+```text
 GET  /api/v1/untracked-devices/                IsPortalUser  — list devices seen in ZedCloud but absent from inventory; filterable by enterprise
 POST /api/v1/untracked-devices/{id}/move-to-inventory/  IsPortalUser — move untracked device into inventory as a new Device row
 ```
 
 ### Notifications
-```
+```text
 GET  /api/v1/notifications/                    IsAdminPortalUser — list unread admin notifications
 POST /api/v1/notifications/{id}/read/          IsAdminPortalUser — mark single notification read
 POST /api/v1/notifications/read-all/           IsAdminPortalUser — mark all notifications read
 ```
 
 ### Reservation Requests
-```
+```text
 GET  /api/v1/reservations/pending              Header X-User-Email → requests where owner = current user
 GET  /api/v1/reservations/mine                 Header X-User-Email → requests made by current user
 GET  /api/v1/reservations/{token}              no auth — returns {device_name, requester_name, expires_at, status}
@@ -546,6 +546,40 @@ STATUS_MAP = {
 
 ---
 
+## Enterprise Sync Engine
+
+### sync_all_enterprises() — hourly
+Registered in APScheduler (`apps/enterprises/apps.py`); runs every **1 hour**.
+
+For each active enterprise:
+1. Fetches all devices from ZedCloud via `GET /v1/edgedevices/` using the decrypted bearer token
+2. Matches each device by `serial_number` against the inventory (`Device` table)
+   - **Match found:** updates `eve_version`, `device_connectivity`, `status`, `cluster`, `enterprise`, `cluster_device_name`; clears `condition = missing` back to `normal`
+   - **No match:** upserts into `UntrackedDevice` (sets `first_seen_at` only on first insert)
+3. Removes `UntrackedDevice` rows for serials that have since been added to inventory
+4. On `401/403`: sets `last_sync_status = token_expired`; creates a `token_expired` Notification (deduped by `unique_together`)
+5. On other errors: sets `last_sync_status = error`; logs the failure
+6. After all enterprises: marks inventory devices with `enterprise` set, `condition = normal`, and serial not seen this cycle as `condition = missing`
+   - Enterprises that failed or returned zero devices are **excluded** from the missing-mark to prevent false positives from transient network errors
+
+### send_nightly_digest — midnight UTC
+Registered in APScheduler; runs once per day at **midnight UTC**. Sends a summary email to all admins listing device condition changes from the past 24 hours. No-ops silently if SMTP is not configured.
+
+### verify_enterprise_names() — post-import trigger only
+**Not a scheduled job.** Called as a background daemon thread immediately after any import that creates or updates enterprises.
+
+For each `is_active=True, name_verified=False` enterprise:
+1. Decrypts the bearer token; skips on decrypt error (retried on next import)
+2. Calls `GET /v1/enterprises/self` on the cluster host; skips on network error
+3. Updates `zcloud_id` if the returned value differs from the stored one
+4. **State check (priority):** if `state != ENTERPRISE_STATE_ACTIVE` → sets `is_active = False`; creates an `enterprise_inactive` Notification (deduped)
+5. **Name check (only for active enterprises — `elif`):** if ZedCloud name differs from stored name → creates a `name_mismatch` Notification (deduped); does **not** auto-update the name
+6. Sets `name_verified = True` in all cases (prevents re-processing on the next import)
+
+`name_verified` resets to `False` whenever the bearer token is updated (via PATCH) or the enterprise row is overwritten by import.
+
+---
+
 ## Identity & Auth
 
 ### Login Flow
@@ -591,7 +625,7 @@ STATUS_MAP = {
 
 ## Reservation Approval Flow
 
-```
+```text
 User B clicks "Reserve" on a device owned by User A
   → Requester is the logged-in user (X-User-Email header) — no user picker in the dialog
   → Dialog shows a read-only "Reserving as: {current user}" chip before confirming
@@ -633,7 +667,7 @@ All ownership changes (reserve, release, force-assign, auto-approve, expiry with
   → Clear all DevicePurpose rows for that device on any transfer of ownership
 ```
 
-### Notifications
+### Reservation Notifications
 
 **Email (when SMTP_HOST is set in .env):**
 - Approval request to owner: includes Approve/Reject URLs with token (token IS the auth, no login
@@ -647,7 +681,7 @@ All ownership changes (reserve, release, force-assign, auto-approve, expiry with
 - Dropdown lists: requests awaiting the user's approval + status of the user's own requests
 
 **SMTP config (graceful degradation):**
-```
+```bash
 SMTP_HOST=         # if blank, email disabled silently; in-app only
 SMTP_PORT=587
 SMTP_USER=
@@ -655,6 +689,26 @@ SMTP_PASS=
 SMTP_FROM=device-portal@zededa.com
 ```
 Admin UI shows a yellow warning banner if SMTP is not configured.
+
+### Admin Notifications
+
+System alerts generated by the sync engine and the verification job. Visible only to admins. The bell icon count badge combines pending reservation requests and unread admin notifications.
+
+**Notification kinds and click behavior:**
+
+| Kind | Trigger | Click action |
+|---|---|---|
+| `token_expired` | `sync_all_enterprises()` receives 401/403 from ZedCloud | Navigate to `/cluster-enterprises` |
+| `sync_error` | `sync_all_enterprises()` fails with a non-auth error | Navigate to `/cluster-enterprises` |
+| `enterprise_inactive` | `verify_enterprise_names()` finds state ≠ `ENTERPRISE_STATE_ACTIVE` | Navigate to `/cluster-enterprises` |
+| `name_mismatch` | `verify_enterprise_names()` finds ZedCloud name ≠ local name | Inline buttons only — does not navigate |
+
+**`name_mismatch` inline resolution buttons** (rendered inside the notification item, unread only):
+- **"Use '{zcloud_name}'"** — calls `PATCH /api/v1/enterprises/{id}/` with `{name: zcloud_name}`; on success marks the notification read
+- **"Keep '{local_name}'"** — marks the notification read without changing the name
+- Either action resolves the notification; the enterprise is not re-verified unless its token changes or it is re-imported
+
+Notifications are deduplicated via `unique_together = [('kind', 'enterprise')]` — repeated failures update the existing notification rather than creating duplicates.
 
 ---
 
@@ -669,7 +723,7 @@ Admin UI shows a yellow warning banner if SMTP is not configured.
 A stats line appears directly below the "Devices" heading, giving an at-a-glance view of the
 current filtered set:
 
-```
+```text
 37 total  ·  12 available  ·  5 reserved  ·  19 online  ·  3 needs repair  ·  1 out of order  ·  2 leased  ·  1 missing
 ```
 
@@ -881,7 +935,7 @@ Admin users can export all device data and import it back for migration, backup,
 An **Export / Import** button is visible in the device table header for admin users only.
 
 ### Export
-```
+```text
 GET /api/v1/admin/export?fmt=<csv|json>
 ```
 - Auth: admin only (X-User-Email header)
@@ -898,7 +952,7 @@ last_purpose_text, created_at, updated_at
 **Not exported:** idrac_password_enc, enterprise bearer tokens, ownership history, device purpose history
 
 ### Import template
-```
+```text
 GET /api/v1/admin/import-template/
 ```
 - No auth required — returns a static CSV file with correct column headers and one example row
@@ -909,7 +963,7 @@ GET /api/v1/admin/import-template/
 location_detail, condition, description, idrac_ip, idrac_username, owner_email
 
 ### Import
-```
+```text
 POST /api/v1/admin/import
 Content-Type: multipart/form-data
 Body: file=<csv or json>, mode=<create_only|update_or_create>
@@ -946,7 +1000,7 @@ variant is accepted and converted to the DB snake_case format on import
 **Frontend:** drag-and-drop file picker + mode selector; result modal showing created / updated / skipped / error counts.
 
 ### Latency dashboard
-```
+```text
 GET /api/v1/admin/latency/
 ```
 - Auth: admin only
@@ -956,10 +1010,36 @@ GET /api/v1/admin/latency/
 ---
 
 ## Add Cluster Flow
-- Any user can open "Add Cluster" (button in the cluster dropdown or a Clusters page)
+- Only admin users can add or delete clusters; regular members can view the cluster list but cannot create or delete clusters
 - Fields: **Name** + **Hostname** (auto-suggested as `zcloud.{name}.zededa.net` when name is typed; host is validated against the pattern `zcloud.<name>.zededa.[net|dev]`)
 - On submit → `POST /api/v1/clusters` → dropdown in all forms immediately includes new cluster
 - Duplicate name rejected with a clear error
+
+---
+
+## Untracked Devices Page
+
+Route: `/untracked-devices`. Accessible to all portal users. Lists devices the sync engine has observed in ZedCloud that are not present in the portal inventory.
+
+**Filters — cascade dropdowns, client-side:**
+- All untracked devices are fetched in a single `GET /api/v1/untracked-devices/` call; all filtering is client-side
+- **Cluster** dropdown (first): lists every cluster that has at least one untracked device; selecting a cluster restricts the Enterprise dropdown to enterprises under that cluster
+- **Enterprise** dropdown (second): lists enterprises within the selected cluster; defaults to "All Enterprises" when no cluster filter is active; resets to "All" whenever the cluster selection changes
+
+**Table columns:**
+
+| Column | Source field |
+|---|---|
+| Serial | `serial_number` |
+| Name in ZedCloud | `name` |
+| Model | `model` |
+| Run State | `run_state` (mapped via `STATUS_MAP`) |
+| EVE Version | `eve_version` |
+| Enterprise | enterprise name |
+| First Seen | `first_seen_at` |
+| Last Seen | `last_seen_at` |
+
+**Move to Inventory:** each row has a "Move to Inventory" action that opens a dialog pre-filled with the device's serial, name, model, cluster, and enterprise. The admin fills in any missing required fields (lab, team, etc.) and submits — calls `POST /api/v1/untracked-devices/{id}/move-to-inventory/`, which creates a new `Device` row and deletes the `UntrackedDevice` row.
 
 ---
 
@@ -991,7 +1071,7 @@ cp .env.example .env   # fill in SECRET_KEY, ENCRYPTION_KEY, SMTP settings
 docker compose up -d
 ```
 
-```
+```text
 docker-compose.yml
   backend   → Django + gunicorn (port 8000, internal only)
   frontend  → multi-stage: Node builds React → nginx serves dist/ + proxies /api/
@@ -1082,7 +1162,7 @@ npm run build   # → dist/
 
 ## Project File Structure
 
-```
+```text
 device-managing-portal/
 ├── DESIGN.md
 ├── backend/
@@ -1209,7 +1289,7 @@ device-managing-portal/
 | 16 | Sortable columns | All columns except Purpose; empty values always sort last |
 | 17 | Required fields | Name, Serial Number, Model, Lab — Cluster and Name-in-Cluster are optional (only needed for ZedCloud status fetch) |
 | 18 | Cluster field | Dropdown (short name); backed by Cluster table in DB |
-| 19 | Cluster list management | Any user can add new cluster via UI; stored in DB |
+| 19 | Cluster list management | Only admin users can add or delete clusters via UI; stored in DB |
 | 20 | Cluster hostname pattern | `zcloud.<name>.zededa.[net|dev]`; enforced by both backend regex validator and frontend Zod schema; auto-generated on name entry |
 | 21 | Release permissions | Owner only — admins cannot release a device they do not own; backend returns 403 if requester ≠ owner |
 | 22 | SMTP | Configurable in .env; graceful degradation to in-app only if not set |
