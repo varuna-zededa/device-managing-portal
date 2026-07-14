@@ -208,6 +208,7 @@ _FIELD_ALIASES = {
     'cluster_device': 'cluster_device_name',
     'location': 'location_detail',
     'lab_location': 'lab',
+    'condition': 'admin_condition',
 }
 
 def _normalize_key(key):
@@ -273,6 +274,8 @@ def _validate_import_row(row, row_num, valid_labs, valid_teams):
                 f'admin_condition "{admin_condition}" is not valid — '
                 f'must be one of: {", ".join(sorted(_VALID_ADMIN_CONDITIONS))}'
             )
+        elif normalized == 'dedicated' and not (row.get('team') or '').strip():
+            errs.append('admin_condition "dedicated" requires a team value')
 
     lab = (row.get('lab') or '').strip()
     if lab and lab not in valid_labs:
