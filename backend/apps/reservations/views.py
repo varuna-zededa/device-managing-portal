@@ -11,7 +11,6 @@ from apps.users.models import PortalUser
 from utils import email as email_utils
 from utils.permissions import get_user_email, is_admin, IsPortalUser
 
-_UNAVAILABLE_CONDITIONS = ('out_of_order', 'temporarily_leased', 'dedicated', 'missing')
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +90,7 @@ class ReservationApproveView(APIView):
             if user_email and user_email != device.owner_email and not is_admin(user_email):
                 return Response({'error': 'Only the device owner can approve this request'}, status=status.HTTP_403_FORBIDDEN)
 
-            if device.condition in _UNAVAILABLE_CONDITIONS:
+            if device.admin_condition != 'normal' or device.sync_condition is not None:
                 reservation.status = 'expired'
                 reservation.save(update_fields=['status'])
                 return Response({'error': 'Device is no longer available for reservation'}, status=status.HTTP_409_CONFLICT)

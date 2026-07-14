@@ -3,6 +3,7 @@ import re
 import uuid
 
 import httpx
+from django.db.models import Q
 from django.utils import timezone
 
 from services.zedcloud import STATUS_MAP, ENTERPRISE_STATE_ACTIVE, fetch_enterprise_devices, fetch_enterprise_self, fetch_user_self
@@ -160,9 +161,16 @@ def _apply_inventory_candidate(candidate: dict, now) -> None:
     # data from a SUSPECT device.  This prevents a single-enterprise manual sync from
     # clobbering a device's cluster assignment when it is healthy in another enterprise.
     if candidate['run_state'] == _SUSPECT_STATE:
-        if device.condition in ('normal', 'missing'):
-            device.condition = 'needs_repair'
-            device.save(update_fields=['condition', 'updated_at'])
+        if device.admin_condition != 'out_of_order':
+            device.sync_condition = 'needs_recovery'
+            device.enterprise = None
+            device.cluster = None
+            device.cluster_device_name = None
+            device.status = 'Suspect'
+            device.save(update_fields=[
+                'sync_condition', 'enterprise', 'cluster',
+                'cluster_device_name', 'status', 'updated_at',
+            ])
         return
 
     update_fields = ['enterprise', 'cluster', 'eve_version', 'device_connectivity', 'status', 'status_fetched_at', 'updated_at']
@@ -178,9 +186,9 @@ def _apply_inventory_candidate(candidate: dict, now) -> None:
     # Clear sync-owned condition flags when device is healthy and reachable again.
     # Both 'missing' and 'needs_repair' are sync-managed; admin-set conditions
     # (out_of_order, dedicated, temporarily_leased) are never touched.
-    if device.condition in ('missing', 'needs_repair'):
-        device.condition = 'normal'
-        update_fields.append('condition')
+    if device.sync_condition is not None:
+        device.sync_condition = None
+        update_fields.append('sync_condition')
     device.save(update_fields=update_fields)
 
 
@@ -424,21 +432,43 @@ def sync_all_enterprises() -> None:
             # Skip updating device fields; mark needs_repair so the admin knows to investigate.
             # Also clears 'missing': the device is visible in ZedCloud again, just unreliable.
             Device.objects.filter(
-                serial_number=serial, condition__in=('normal', 'missing'),
-            ).update(condition='needs_repair', updated_at=now)
-            logger.info('Marked %s as needs_repair — best available run state is SUSPECT', serial)
+                serial_number=serial,
+            ).exclude(
+                admin_condition='out_of_order',
+            ).update(
+                sync_condition='needs_recovery',
+                enterprise=None,
+                cluster=None,
+                cluster_device_name=None,
+                status='Suspect',
+                updated_at=now,
+            )
+            logger.info('Marked %s as needs_recovery — best available run state is SUSPECT', serial)
         else:
             _apply_inventory_candidate(candidate, now)
 
-    # Mark MISSING: inventory devices with an enterprise assigned, condition=normal, not
-    # seen in this sync cycle. Enterprises that failed or returned zero devices are excluded
-    # to prevent false-missing marks.
+    # Mark MISSING: devices not seen this cycle.
+    # Includes both:
+    #   1. Devices with enterprise set (already tracked by sync)
+    #   2. Devices with enterprise=None but assigned to a cluster that belongs to a
+    #      successfully-synced enterprise (manually imported, never yet discovered)
+    # Enterprises that failed or returned zero devices are excluded to prevent false positives.
+    from apps.enterprises.models import Enterprise as _Enterprise  # noqa: PLC0415
+    synced_cluster_ids = set(
+        _Enterprise.objects.filter(is_active=True)
+        .exclude(pk__in=exclude_from_missing)
+        .values_list('cluster_id', flat=True)
+    )
     Device.objects.filter(
-        enterprise__isnull=False,
-        condition='normal',
+        Q(enterprise__isnull=False) | Q(cluster_id__in=synced_cluster_ids),
     ).exclude(
+        admin_condition='out_of_order',
+    ).exclude(
+        enterprise__isnull=False,
         enterprise_id__in=exclude_from_missing,
-    ).exclude(serial_number__in=all_seen_serials).update(condition='missing', updated_at=now)
+    ).exclude(
+        serial_number__in=all_seen_serials,
+    ).update(sync_condition='missing', updated_at=now)
 
     logger.info('sync_all_enterprises complete. Seen serials: %d', len(all_seen_serials))
 

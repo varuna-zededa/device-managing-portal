@@ -10,7 +10,7 @@ from rest_framework import status
 
 from django.db.models import Q
 
-from .models import Device, Lab, CONDITION_CHOICES, UntrackedDevice
+from .models import Device, Lab, ADMIN_CONDITION_CHOICES, SYNC_CONDITION_CHOICES, UntrackedDevice
 from .serializers import DeviceSerializer, DeviceCreateSerializer, UntrackedDeviceSerializer
 from apps.clusters.models import Cluster
 from apps.device_models.models import DeviceModel
@@ -25,33 +25,31 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-UNAVAILABLE_CONDITIONS = ('out_of_order', 'temporarily_leased', 'dedicated', 'missing')
-
-
-def _handle_condition_change(device, new_condition, old_condition, changed_by):
-    if new_condition == old_condition:
+def _handle_condition_change(device, new_admin_condition, old_admin_condition, changed_by):
+    if new_admin_condition == old_admin_condition:
         return
-    logger.info('Device %s condition changed: %s -> %s by %s', device.name, old_condition, new_condition, changed_by)
+    logger.info(
+        'Device %s admin_condition changed: %s -> %s by %s',
+        device.name, old_admin_condition, new_admin_condition, changed_by,
+    )
 
-    if new_condition in ('out_of_order', 'temporarily_leased', 'missing'):
+    if new_admin_condition in ('out_of_order', 'temporarily_leased'):
         old_owner = device.owner_email
         device.owner_email = None
-        pending = ReservationRequest.objects.filter(device=device, status='pending')
-        pending.update(status='expired')
+        ReservationRequest.objects.filter(device=device, status='pending').update(status='expired')
         OwnershipHistory.objects.create(
             device=device,
             owner_email=old_owner,
             changed_by=changed_by,
             reason='condition_change',
         )
-        if new_condition == 'out_of_order':
+        if new_admin_condition == 'out_of_order':
             email_utils.send_out_of_order_alert(device)
 
-    elif new_condition == 'dedicated':
+    elif new_admin_condition == 'dedicated':
         old_owner = device.owner_email
         device.owner_email = None
-        pending = ReservationRequest.objects.filter(device=device, status='pending')
-        pending.update(status='expired')
+        ReservationRequest.objects.filter(device=device, status='pending').update(status='expired')
         OwnershipHistory.objects.create(
             device=device,
             owner_email=old_owner,
@@ -70,7 +68,8 @@ class DeviceListCreateView(APIView):
         available = request.query_params.get('available', 'all').strip().lower()
         team = request.query_params.get('team', '').strip()
         lab = request.query_params.get('lab', '').strip()
-        condition = request.query_params.get('condition', '').strip()
+        admin_condition = request.query_params.get('admin_condition', '').strip()
+        sync_condition_param = request.query_params.get('sync_condition', '').strip()
 
         if team == 'unassigned':
             qs = qs.filter(team__isnull=True)
@@ -78,14 +77,24 @@ class DeviceListCreateView(APIView):
             qs = qs.filter(team__name=team)
         if lab:
             qs = qs.filter(lab__name=lab)
-        if condition:
-            qs = qs.filter(condition=condition)
+        if admin_condition:
+            qs = qs.filter(admin_condition=admin_condition)
+        if sync_condition_param == 'none':
+            qs = qs.filter(sync_condition__isnull=True)
+        elif sync_condition_param:
+            qs = qs.filter(sync_condition=sync_condition_param)
 
         if available == 'true':
-            qs = qs.filter(owner_email__isnull=True).exclude(condition__in=UNAVAILABLE_CONDITIONS)
+            qs = qs.filter(
+                owner_email__isnull=True,
+                admin_condition='normal',
+                sync_condition__isnull=True,
+            )
         elif available == 'false':
             qs = qs.filter(
-                Q(owner_email__isnull=False) | Q(condition__in=UNAVAILABLE_CONDITIONS)
+                Q(owner_email__isnull=False)
+                | ~Q(admin_condition='normal')
+                | Q(sync_condition__isnull=False)
             )
 
         if q:
@@ -150,16 +159,16 @@ class DeviceDetailView(APIView):
         data = request.data.copy()
         data.pop('serial_number', None)
 
-        old_condition = device.condition
-        new_condition = data.get('condition', old_condition)
+        old_admin_condition = device.admin_condition
+        new_admin_condition = data.get('admin_condition', old_admin_condition)
 
-        if new_condition == 'dedicated' and not data.get('team', device.team):
+        if new_admin_condition == 'dedicated' and not data.get('team', device.team):
             return Response({'error': 'team is required when condition is dedicated'}, status=status.HTTP_400_BAD_REQUEST)
 
         serializer = DeviceSerializer(device, data=data, partial=True)
         if serializer.is_valid():
             with transaction.atomic():
-                _handle_condition_change(device, new_condition, old_condition, user_email)
+                _handle_condition_change(device, new_admin_condition, old_admin_condition, user_email)
                 serializer.save()
                 idrac_password = request.data.get('idrac_password', '').strip()
                 if idrac_password:
@@ -525,7 +534,8 @@ class ChoicesView(APIView):
         return Response({
             'labs': list(Lab.objects.values_list('name', flat=True)),
             'teams': list(Team.objects.values_list('name', flat=True)),
-            'conditions': [c[0] for c in CONDITION_CHOICES],
+            'admin_conditions': [c[0] for c in ADMIN_CONDITION_CHOICES],
+            'sync_conditions': [c[0] for c in SYNC_CONDITION_CHOICES],
             'enterprises': [
                 {'id': e['id'], 'name': e['name'], 'cluster_name': e['cluster__name']}
                 for e in enterprises
