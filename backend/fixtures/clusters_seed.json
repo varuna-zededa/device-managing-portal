@@ -46,5 +46,35 @@
       "name": "prod",
       "host": "zedcontrol.zededa.net"
     }
+  },
+  {
+    "model": "users.team",
+    "pk": 1,
+    "fields": {"name": "ST"}
+  },
+  {
+    "model": "users.team",
+    "pk": 2,
+    "fields": {"name": "EVE"}
+  },
+  {
+    "model": "users.team",
+    "pk": 3,
+    "fields": {"name": "PLE"}
+  },
+  {
+    "model": "users.team",
+    "pk": 4,
+    "fields": {"name": "SRE"}
+  },
+  {
+    "model": "users.team",
+    "pk": 5,
+    "fields": {"name": "Cloud"}
+  },
+  {
+    "model": "users.team",
+    "pk": 6,
+    "fields": {"name": "IT"}
   }
 ]

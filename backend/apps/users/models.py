@@ -16,7 +16,7 @@ class Team(models.Model):
 class PortalUser(models.Model):
     name = models.CharField(max_length=200)
     email = models.EmailField(unique=True)
-    team = models.ForeignKey(Team, on_delete=models.PROTECT, related_name='members')
+    team = models.ForeignKey(Team, on_delete=models.PROTECT, related_name='members', null=True, blank=True)
     user_type = models.CharField(max_length=20, choices=USER_TYPE_CHOICES, default='member')
 
     def __str__(self):
