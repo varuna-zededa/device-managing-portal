@@ -132,6 +132,10 @@ nano backend/.env
 docker compose build
 docker compose up -d
 
+# Create the first admin user
+docker compose exec backend python manage.py create_admin \
+  --email=you@zededa.com --name="Your Name"
+
 # Verify
 docker compose ps
 ```
