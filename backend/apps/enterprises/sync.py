@@ -4,7 +4,7 @@ import re
 import httpx
 from django.utils import timezone
 
-from services.zedcloud import STATUS_MAP, ENTERPRISE_STATE_ACTIVE, fetch_enterprise_devices, fetch_enterprise_self
+from services.zedcloud import STATUS_MAP, ENTERPRISE_STATE_ACTIVE, fetch_enterprise_devices, fetch_enterprise_self, fetch_user_self
 from utils.crypto import decrypt
 from utils.email import send_token_expiry_alert
 
@@ -391,6 +391,17 @@ def sync_all_enterprises() -> None:
 
         if not sync_ok:
             continue
+
+        # Backfill zcloud_username if not yet stored (enterprise existed before this feature).
+        if not enterprise.zcloud_username:
+            try:
+                bearer_token = decrypt(bytes(enterprise.bearer_token_enc))
+                username = fetch_user_self(enterprise.cluster.host, bearer_token).get('username', '')
+                if username:
+                    enterprise.zcloud_username = username
+                    enterprise.save(update_fields=['zcloud_username'])
+            except Exception as exc:
+                logger.warning('fetch_user_self backfill failed for enterprise %s: %s', enterprise.name, exc)
 
         # Tier-based conflict resolution: lower tier number = higher priority.
         # First-seen wins within the same tier.
