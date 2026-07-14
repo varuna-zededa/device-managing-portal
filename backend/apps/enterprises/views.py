@@ -13,7 +13,7 @@ from apps.clusters.models import Cluster
 from apps.notifications.models import Notification
 from services.zedcloud import fetch_enterprise_self, fetch_user_self, ENTERPRISE_STATE_ACTIVE
 from utils.crypto import encrypt
-from utils.permissions import IsAdminPortalUser
+from utils.permissions import IsAdminPortalUser, get_user_email
 
 from .models import Enterprise
 from .serializers import EnterpriseReadSerializer, EnterpriseUpdateSerializer
@@ -64,6 +64,7 @@ class EnterpriseDetailView(APIView):
         if not bearer_token:
             # No token change — simple field update (name, is_active, etc.)
             serializer.save()
+            logger.info('Enterprise %s updated by %s', enterprise.name, get_user_email(request))
             return Response(EnterpriseReadSerializer(enterprise).data)
 
         # Verify the new token against ZedCloud before saving anything.
@@ -127,6 +128,8 @@ class EnterpriseDetailView(APIView):
             update_fields.append('zcloud_id')
         enterprise.save(update_fields=update_fields)
 
+        logger.info('Enterprise %s bearer token rotated by %s', enterprise.name, get_user_email(request))
+
         # Run a full device sync in the background — this clears last_sync_status='token_expired'
         # and re-includes the enterprise in future hourly sync cycles.
         def _sync_after_token_rotation():
@@ -164,6 +167,7 @@ class EnterpriseDetailView(APIView):
                 {'error': 'Cannot delete enterprise with linked inventory devices. Unassign devices first.'},
                 status=status.HTTP_409_CONFLICT,
             )
+        logger.info('Enterprise %s deleted by %s', enterprise.name, get_user_email(request))
         enterprise.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -176,6 +180,7 @@ class EnterpriseSyncView(APIView):
             enterprise = Enterprise.objects.select_related('cluster').get(pk=pk)
         except Enterprise.DoesNotExist:
             return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+        logger.info('Manual sync triggered for enterprise %s by %s', enterprise.name, get_user_email(request))
         try:
             seen, candidates = sync_enterprise(enterprise)
             apply_candidates(candidates, timezone.now())
@@ -192,6 +197,7 @@ class EnterpriseSyncView(APIView):
             enterprise.last_sync_error = str(exc)
         enterprise.last_sync_at = timezone.now()
         enterprise.save(update_fields=['last_sync_at', 'last_sync_status', 'last_sync_error'])
+        logger.info('Manual sync for enterprise %s complete: status=%s', enterprise.name, enterprise.last_sync_status)
         return Response(EnterpriseReadSerializer(enterprise).data)
 
 
@@ -328,6 +334,8 @@ class ClusterImportView(APIView):
             'updated_enterprises': updated_enterprises,
             'skipped_enterprises': skipped_enterprises,
         }
+
+        logger.info('Cluster import by %s: %d clusters, %d enterprises created, %d updated, %d skipped, %d errors', get_user_email(request), created_clusters, created_enterprises, updated_enterprises, skipped_enterprises, len(errors))
 
         if created_enterprises > 0 or updated_enterprises > 0:
             threading.Thread(target=verify_enterprise_names, daemon=True).start()

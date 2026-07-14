@@ -1,4 +1,5 @@
 import environ
+import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -31,6 +32,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'middleware.RequestIDMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'middleware.LatencyMiddleware',
     'django.middleware.security.SecurityMiddleware',
@@ -104,4 +106,83 @@ CORS_ALLOW_HEADERS = list(__import__('corsheaders.defaults', fromlist=['default_
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [],
     'DEFAULT_PERMISSION_CLASSES': [],
+}
+
+# ── Email alerts for 500 errors ───────────────────────────────────────────────
+_admin_emails = env.list('ADMIN_EMAILS', default=[])
+ADMINS = [('Portal Admin', e) for e in _admin_emails]
+SERVER_EMAIL = env('SERVER_EMAIL', default=DEFAULT_FROM_EMAIL)
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+LOG_LEVEL = env('LOG_LEVEL', default='INFO')
+# Default resolves to backend/logs/ locally and /app/logs/ inside Docker
+# (BASE_DIR is /app inside the container when settings.py is at /app/config/settings.py)
+LOG_DIR = env('LOG_DIR', default=str(BASE_DIR / 'logs'))
+os.makedirs(LOG_DIR, exist_ok=True)
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'filters': {
+        'request_id': {
+            '()': 'utils.log_filters.RequestIDFilter',
+        },
+    },
+    'formatters': {
+        'standard': {
+            'format': '{asctime} {levelname:<8} [{request_id}] {name}: {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'standard',
+            'filters': ['request_id'],
+        },
+        'file': {
+            'class': 'logging.handlers.TimedRotatingFileHandler',
+            'filename': f'{LOG_DIR}/portal.log',
+            'when': 'midnight',
+            'interval': 1,
+            'backupCount': 30,
+            'encoding': 'utf-8',
+            'formatter': 'standard',
+            'filters': ['request_id'],
+        },
+    },
+    # Third-party libraries: WARNING and above only
+    'root': {
+        'handlers': ['console', 'file'],
+        'level': 'WARNING',
+    },
+    'loggers': {
+        # Django's own request logger — captures 500 tracebacks
+        'django.request': {
+            'handlers': ['console', 'file'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+        # Portal source namespaces — controlled by LOG_LEVEL env var
+        'apps': {
+            'handlers': ['console', 'file'],
+            'level': LOG_LEVEL,
+            'propagate': False,
+        },
+        'services': {
+            'handlers': ['console', 'file'],
+            'level': LOG_LEVEL,
+            'propagate': False,
+        },
+        'middleware': {
+            'handlers': ['console', 'file'],
+            'level': LOG_LEVEL,
+            'propagate': False,
+        },
+        'utils': {
+            'handlers': ['console', 'file'],
+            'level': LOG_LEVEL,
+            'propagate': False,
+        },
+    },
 }

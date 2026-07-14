@@ -68,6 +68,15 @@ It contains exact file paths, code patterns, and checklists for every common imp
 - Always use `fail_silently=False` + catch and `logger.warning()` — never swallow silently
 - `out_of_order` condition → email all admins; `missing`, `temporarily_leased`, `dedicated` do not
 
+### Logging
+- Every module must declare `logger = logging.getLogger(__name__)` at the top — no bare `print()`, no inline `logging.warning()`
+- Request ID is injected automatically by `RequestIDMiddleware` + `RequestIDFilter` — never pass it manually to log calls
+- Every background/scheduled function must call `set_request_id(f'<prefix>-{uuid.uuid4().hex[:8]}')` as its first line — see `sync_all_enterprises()` for the pattern
+- `utils/request_context.py` — `get_request_id()` / `set_request_id()`; `utils/log_filters.py` — `RequestIDFilter`
+- Log level controlled by `LOG_LEVEL` env var (default `INFO`); set `DEBUG` for full tracing
+- Log file: `backend/logs/portal.log` locally; `./logs/portal.log` in Docker (bind-mounted, daily rotation, 30-day retention)
+- Never log bearer tokens, decrypted passwords, or any secret value
+
 ---
 
 ## Sort behavior
@@ -121,6 +130,11 @@ It contains exact file paths, code patterns, and checklists for every common imp
 - Do **not** delete an enterprise that has linked inventory `Device` rows — check `Device.objects.filter(enterprise=enterprise).exists()` first and return 409
 - Do **not** allow non-admin portal users to move untracked devices to inventory — `MoveToInventoryView` uses `IsAdminPortalUser`
 - Do **not** overwrite an enterprise bearer token in `ClusterImportView` without calling `fetch_enterprise_self()` and comparing `zcloud_id` — tokens from a different enterprise must be rejected with an error entry
+- Do **not** use bare `logger.warning(str(e))` — always include context (which entity, which operation, which user)
+- Do **not** add a new module without declaring `logger = logging.getLogger(__name__)` if it will ever log anything
+- Do **not** add a new background/scheduled function without calling `set_request_id(f'<prefix>-{uuid.uuid4().hex[:8]}')` as the first line
+- Do **not** log bearer tokens, decrypted passwords (`idrac_password_enc`, `bearer_token_enc`), or any secret — even at DEBUG level
+- Do **not** call `set_request_id()` inside a view — the request ID is set by `RequestIDMiddleware` before the view runs
 
 ### Enterprise sync
 - `Enterprise` model: `apps/enterprises/models.py` — fields: `name`, `cluster` (FK), `bearer_token_enc`, `zcloud_id`, `is_active`, `name_verified`, `last_sync_at`, `last_sync_status`, `last_sync_error`; `unique_together = ('name', 'cluster')`

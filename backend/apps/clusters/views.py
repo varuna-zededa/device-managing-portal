@@ -9,7 +9,7 @@ from apps.enterprises.models import Enterprise
 from apps.enterprises.serializers import EnterpriseCreateSerializer, EnterpriseReadSerializer
 from services.zedcloud import fetch_enterprise_self, fetch_user_self, ENTERPRISE_STATE_ACTIVE
 from utils.crypto import encrypt
-from utils.permissions import IsPortalUser, IsAdminPortalUser
+from utils.permissions import IsPortalUser, IsAdminPortalUser, get_user_email
 
 import logging
 logger = logging.getLogger(__name__)
@@ -39,6 +39,7 @@ class ClusterListCreateView(APIView):
         serializer = ClusterSerializer(data=data)
         if serializer.is_valid():
             serializer.save()
+            logger.info('Cluster %s created by %s', serializer.instance.name, get_user_email(request))
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -59,6 +60,7 @@ class ClusterDetailView(APIView):
         serializer = ClusterSerializer(cluster, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
+            logger.info('Cluster %s updated by %s', cluster.name, get_user_email(request))
             return Response(ClusterSerializer(cluster).data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -71,6 +73,7 @@ class ClusterDetailView(APIView):
                 {'error': 'Cannot delete cluster with enterprises. Remove enterprises first.'},
                 status=status.HTTP_409_CONFLICT,
             )
+        logger.info('Cluster %s deleted by %s', cluster.name, get_user_email(request))
         cluster.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -152,4 +155,5 @@ class ClusterEnterpriseListCreateView(APIView):
             is_active=serializer.validated_data.get('is_active', True),
             name_verified=True,
         )
+        logger.info('Enterprise %s created on cluster %s by %s', enterprise.name, cluster.name, get_user_email(request))
         return Response(EnterpriseReadSerializer(enterprise).data, status=status.HTTP_201_CREATED)

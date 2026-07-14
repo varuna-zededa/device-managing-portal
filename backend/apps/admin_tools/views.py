@@ -31,6 +31,7 @@ class ExportView(APIView):
 
         fmt = request.query_params.get('fmt', 'json').lower()
         devices = Device.objects.select_related('model', 'cluster', 'lab', 'team').all().order_by('name')
+        logger.info('Device export (%s) by %s', fmt, get_user_email(request))
 
         ts = timezone.now().strftime('%Y%m%d_%H%M%S')
         filename_base = f'holocron_device_inventory_{ts}'
@@ -95,7 +96,7 @@ class ImportView(APIView):
             else:
                 return Response({'error': 'Unsupported file type. Use CSV or JSON.'}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            logger.warning(str(e))
+            logger.warning('Failed to parse import file %r: %s', uploaded_file.name, e)
             return Response({'error': f'Failed to parse file: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
 
         if len(rows) > 200:
@@ -183,13 +184,14 @@ class ImportView(APIView):
                     processed_serials.add(serial)
 
             except Exception as e:
-                logger.warning(str(e))
+                logger.warning('Import row %d failed for serial %r: %s', i + 1, (row.get('serial_number') or '').strip(), e)
                 errors.append({'row': i + 1, 'error': str(e)})
                 skipped += 1
 
         if processed_serials:
             UntrackedDevice.objects.filter(serial_number__in=processed_serials).delete()
 
+        logger.info('Device import: %d created, %d updated, %d skipped, %d errors by %s', created, updated, skipped, len(errors), get_user_email(request))
         return Response({'created': created, 'updated': updated, 'skipped': skipped, 'errors': errors})
 
 

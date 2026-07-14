@@ -56,7 +56,7 @@ class ReservationDetailView(APIView):
         except PortalUser.DoesNotExist:
             pass
         except Exception as e:
-            logger.warning(str(e))
+            logger.warning('PortalUser lookup for requester %s: %s', reservation.requester_email, e)
 
         return Response({
             'device_name': reservation.device.name,
@@ -111,6 +111,7 @@ class ReservationApproveView(APIView):
                 reason='request_approved',
             )
 
+        logger.info('Reservation approved: device=%s, new_owner=%s, approved_by=%s', device.name, reservation.requester_email, user_email or 'email_link')
         email_utils.send_reservation_approved(device, reservation.requester_email)
         return Response({'message': 'Reservation approved', 'device': device.name, 'new_owner': reservation.requester_email})
 
@@ -135,5 +136,6 @@ class ReservationRejectView(APIView):
         reservation.status = 'rejected'
         reservation.save(update_fields=['status'])
 
+        logger.info('Reservation rejected: device=%s, requester=%s, rejected_by=%s', reservation.device.name, reservation.requester_email, user_email or 'email_link')
         email_utils.send_reservation_rejected(reservation.device, reservation.requester_email)
         return Response({'message': 'Reservation rejected'})

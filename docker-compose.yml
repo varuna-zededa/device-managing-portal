@@ -5,6 +5,7 @@ services:
     volumes:
       - sqlite_data:/app/data
       - static_files:/app/static
+      - ./logs:/app/logs
     expose:
       - "8000"
 

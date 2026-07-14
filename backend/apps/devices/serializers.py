@@ -104,7 +104,7 @@ class DeviceSerializer(_DeviceValidationMixin, serializers.ModelSerializer):
         except PortalUser.DoesNotExist:
             return req.requester_email
         except Exception as e:
-            logger.warning(str(e))
+            logger.warning('PortalUser lookup for requester %s: %s', req.requester_email, e)
             return req.requester_email
 
     def get_owner_name(self, obj):
@@ -119,7 +119,7 @@ class DeviceSerializer(_DeviceValidationMixin, serializers.ModelSerializer):
         except PortalUser.DoesNotExist:
             return obj.owner_email
         except Exception as e:
-            logger.warning(str(e))
+            logger.warning('PortalUser lookup for owner %s: %s', obj.owner_email, e)
             return obj.owner_email
 
 

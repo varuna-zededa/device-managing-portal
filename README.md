@@ -75,6 +75,20 @@ Frontend runs at `http://localhost:5173` and proxies API calls to `localhost:800
 
 ### Environment variables (local)
 
+
+#### Generate the required keys:
+
+```bash
+# SECRET_KEY
+openssl rand -base64 50
+
+# ENCRYPTION_KEY (Fernet requires URL-safe base64 — tr converts + and / characters)
+openssl rand -base64 32 | tr '\+/' '\-_'
+```
+
+> **Windows users:** use Git Bash or WSL to run these commands.
+
+
 Create a `.env` file in the repo root (for Docker) or `backend/.env` (for local dev):
 
 | Variable | Required | Default | Description |
@@ -93,18 +107,6 @@ Create a `.env` file in the repo root (for Docker) or `backend/.env` (for local 
 | `CORS_ALLOWED_ORIGINS` | No | — | Allowed CORS origins (required if `DEBUG=false`) |
 | `DATABASE_URL` | No | SQLite | PostgreSQL connection string |
 | `LOAD_DEMO_DATA` | No | `false` | Load demo fixture on startup |
-
-#### Generate the required keys:
-
-```bash
-# SECRET_KEY
-openssl rand -base64 50
-
-# ENCRYPTION_KEY (Fernet requires URL-safe base64 — tr converts + and / characters)
-openssl rand -base64 32 | tr '\+/' '\-_'
-```
-
-> **Windows users:** use Git Bash or WSL to run these commands.
 
 ---
 

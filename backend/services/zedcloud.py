@@ -42,6 +42,7 @@ def fetch_device_status(
     url = f'https://{cluster.host}/api/v1/devices/name/{cluster_device_name}/status/info'
     headers = {'Authorization': f'Bearer {bearer_token}'}
 
+    logger.debug('ZedCloud GET %s', url)
     response = _client.get(url, headers=headers)
     response.raise_for_status()
 
@@ -94,12 +95,15 @@ def fetch_enterprise_self(host: str, bearer_token: str) -> dict:
     """Call /api/v1/enterprises/self. Returns {name, zcloud_id, state, state_label}."""
     url = f'https://{host}/api/v1/enterprises/self'
     headers = {'Authorization': f'Bearer {bearer_token}'}
+    logger.debug('ZedCloud GET %s', url)
     response = _client.get(url, headers=headers)
     response.raise_for_status()
     data = response.json()
     state = data.get('state', '').strip()
+    name = data.get('name', '').strip()
+    logger.debug('ZedCloud enterprise self: name=%s state=%s', name, state)
     return {
-        'name': data.get('name', '').strip(),
+        'name': name,
         'zcloud_id': data.get('id', '').strip(),
         'state': state,
         'state_label': _ENTERPRISE_STATE_LABELS.get(state, state),
@@ -110,6 +114,7 @@ def fetch_user_self(host: str, bearer_token: str) -> dict:
     """Call /api/v1/users/self. Returns {'username': '...'}."""
     url = f'https://{host}/api/v1/users/self'
     headers = {'Authorization': f'Bearer {bearer_token}'}
+    logger.debug('ZedCloud GET %s', url)
     response = _client.get(url, headers=headers)
     response.raise_for_status()
     data = response.json()
@@ -123,6 +128,7 @@ def fetch_enterprise_devices(host: str, bearer_token: str) -> list[dict]:
     page_num = 1
     while True:
         url = f'https://{host}/api/v1/devices/status?next.pageSize=200&next.pageNum={page_num}'
+        logger.debug('ZedCloud GET %s', url)
         response = _client.get(url, headers=headers)
         response.raise_for_status()
         data = response.json()
@@ -131,4 +137,5 @@ def fetch_enterprise_devices(host: str, bearer_token: str) -> list[dict]:
         if page_num >= total_pages:
             break
         page_num += 1
+    logger.debug('ZedCloud fetched %d devices from %s (%d pages)', len(all_devices), host, page_num)
     return all_devices
