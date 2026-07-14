@@ -76,5 +76,47 @@
     "model": "users.team",
     "pk": 6,
     "fields": {"name": "IT"}
+  },
+  {
+    "model": "devices.lab",
+    "pk": 1,
+    "fields": {
+      "name": "Bangalore Lab"
+    }
+  },
+  {
+    "model": "devices.lab",
+    "pk": 2,
+    "fields": {
+      "name": "Bangalore Office Space"
+    }
+  },
+  {
+    "model": "devices.lab",
+    "pk": 3,
+    "fields": {
+      "name": "Berlin Lab"
+    }
+  },
+  {
+    "model": "devices.lab",
+    "pk": 4,
+    "fields": {
+      "name": "CoreSite Lab"
+    }
+  },
+  {
+    "model": "devices.lab",
+    "pk": 5,
+    "fields": {
+      "name": "Home Lab"
+    }
+  },
+  {
+    "model": "devices.lab",
+    "pk": 6,
+    "fields": {
+      "name": "SanJose Lab"
+    }
   }
 ]
