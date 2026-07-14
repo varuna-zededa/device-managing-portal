@@ -239,6 +239,13 @@ class ClusterImportView(APIView):
         if not isinstance(config, list):
             return Response({'error': 'config must be a JSON array'}, status=status.HTTP_400_BAD_REQUEST)
 
+        total_enterprises = sum(len(entry.get('enterprises', [])) for entry in config if isinstance(entry, dict))
+        if total_enterprises > 20:
+            return Response(
+                {'error': f'Import exceeds the 20-enterprise limit ({total_enterprises} found). Split into smaller files.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         errors = []
         created_clusters = 0
         created_enterprises = 0
