@@ -1,13 +1,13 @@
 import ipaddress
 import logging
 from rest_framework import serializers
-from .models import Device, Lab, CONDITION_CHOICES, UntrackedDevice
+from .models import Device, Lab, ADMIN_CONDITION_CHOICES, SYNC_CONDITION_CHOICES, UntrackedDevice
 from apps.reservations.models import ReservationRequest
 from apps.users.models import PortalUser, Team
 
 logger = logging.getLogger(__name__)
 
-VALID_CONDITIONS = [c[0] for c in CONDITION_CHOICES]
+VALID_ADMIN_CONDITIONS = [c[0] for c in ADMIN_CONDITION_CHOICES]
 
 
 class NullableSlugRelatedField(serializers.SlugRelatedField):
@@ -53,7 +53,7 @@ class DeviceSerializer(_DeviceValidationMixin, serializers.ModelSerializer):
             'id', 'name', 'serial_number', 'description', 'cluster_device_name',
             'model', 'cluster', 'enterprise',
             'team', 'owner_email', 'owner_name',
-            'lab', 'location_detail', 'condition',
+            'lab', 'location_detail', 'admin_condition', 'sync_condition',
             'idrac_ip', 'idrac_username',
             'eve_version', 'device_connectivity', 'status', 'status_fetched_at', 'reserved_at',
             'last_purpose_text', 'last_purpose_by', 'last_purpose_at',
@@ -65,6 +65,7 @@ class DeviceSerializer(_DeviceValidationMixin, serializers.ModelSerializer):
             'owner_email', 'enterprise', 'cluster', 'cluster_device_name',
             'eve_version', 'device_connectivity',
             'last_purpose_text', 'last_purpose_by', 'last_purpose_at',
+            'sync_condition',
         ]
 
     def to_representation(self, instance):
@@ -135,7 +136,7 @@ class DeviceCreateSerializer(_DeviceValidationMixin, serializers.ModelSerializer
         fields = [
             'id', 'name', 'serial_number', 'description', 'cluster_device_name',
             'model', 'cluster', 'team', 'owner_email',
-            'lab', 'location_detail', 'condition',
+            'lab', 'location_detail', 'admin_condition',
             'idrac_ip', 'idrac_username',
         ]
 
