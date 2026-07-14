@@ -5,13 +5,17 @@ import { cn } from '@/lib/utils'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { getChoices } from '@/api/choices'
 
-const CONDITION_LABELS: Record<string, string> = {
+const ADMIN_CONDITION_LABELS: Record<string, string> = {
   normal: 'Normal',
   out_of_order: 'Out of Order',
-  needs_repair: 'Needs Repair',
   temporarily_leased: 'Temporarily Leased',
   dedicated: 'Dedicated',
+}
+
+const SYNC_CONDITION_LABELS: Record<string, string> = {
   missing: 'Missing',
+  needs_recovery: 'Needs Recovery',
+  none: 'No Sync Finding',
 }
 
 export interface SearchParams {
@@ -19,7 +23,8 @@ export interface SearchParams {
   available?: 'true' | 'false' | 'all'
   team?: string
   lab?: string
-  condition?: string
+  admin_condition?: string
+  sync_condition?: string
 }
 
 interface SearchBarProps {
@@ -39,7 +44,8 @@ export function SearchBar({ value, onChange }: SearchBarProps) {
 
   const labs = choices?.labs ?? []
   const teams = choices?.teams ?? []
-  const conditions = choices?.conditions ?? []
+  const adminConditions = choices?.admin_conditions ?? []
+  const syncConditions = choices?.sync_conditions ?? []
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
@@ -91,16 +97,32 @@ export function SearchBar({ value, onChange }: SearchBarProps) {
       </div>
 
       <Select
-        value={value.condition ?? 'all'}
-        onValueChange={(v) => onChange({ ...value, condition: v === 'all' ? undefined : v })}
+        value={value.admin_condition ?? 'all'}
+        onValueChange={(v) => onChange({ ...value, admin_condition: v === 'all' ? undefined : v })}
       >
         <SelectTrigger className="h-9 w-44 text-sm">
           <SelectValue placeholder="Condition" />
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="all">All Conditions</SelectItem>
-          {conditions.map((c) => (
-            <SelectItem key={c} value={c}>{CONDITION_LABELS[c] ?? c}</SelectItem>
+          {adminConditions.map((c) => (
+            <SelectItem key={c} value={c}>{ADMIN_CONDITION_LABELS[c] ?? c}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      <Select
+        value={value.sync_condition ?? 'all'}
+        onValueChange={(v) => onChange({ ...value, sync_condition: v === 'all' ? undefined : v })}
+      >
+        <SelectTrigger className="h-9 w-40 text-sm">
+          <SelectValue placeholder="Sync Status" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">All Sync Statuses</SelectItem>
+          <SelectItem value="none">{SYNC_CONDITION_LABELS['none']}</SelectItem>
+          {syncConditions.map((c) => (
+            <SelectItem key={c} value={c}>{SYNC_CONDITION_LABELS[c] ?? c}</SelectItem>
           ))}
         </SelectContent>
       </Select>

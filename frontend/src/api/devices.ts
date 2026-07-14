@@ -13,7 +13,8 @@ export interface Device {
   owner_name: string | null
   lab: string
   location_detail: string | null
-  condition: string
+  admin_condition: string
+  sync_condition: string | null
   idrac_ip: string | null
   idrac_username: string | null
   eve_version: string | null
@@ -37,7 +38,8 @@ export interface DevicesQueryParams {
   available?: 'true' | 'false' | 'all'
   team?: string
   lab?: string
-  condition?: string
+  admin_condition?: string
+  sync_condition?: string
 }
 
 export interface DevicePurpose {
