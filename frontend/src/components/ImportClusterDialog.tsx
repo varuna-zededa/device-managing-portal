@@ -12,8 +12,14 @@ const SAMPLE_JSON = `[
     "cluster_name": "hummingbird",
     "cluster_host": "zcloud.hummingbird.zededa.net",
     "enterprises": [
-      { "name": "Foundation",    "bearer_token": "eyJhbGci..." },
-      { "name": "200x85",        "bearer_token": "eyJhbGci..." }
+      {
+        "name": "Foundation",
+        "bearer_token": "eyJhbGci..."
+      },
+      {
+        "name": "200x85",
+        "bearer_token": "eyJhbGci..."
+      }
     ]
   }
 ]`
@@ -68,19 +74,25 @@ export function ImportClusterDialog({ open, onOpenChange }: ImportClusterDialogP
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg flex flex-col max-h-[85vh]">
         <DialogHeader>
           <DialogTitle>Import Cluster Config</DialogTitle>
           <DialogDescription>Select a JSON file to import clusters and enterprises.</DialogDescription>
         </DialogHeader>
-        <div className="space-y-4">
+        <div className="space-y-4 overflow-y-auto flex-1 pr-1">
           <div>
             <p className="text-xs font-medium text-muted-foreground mb-1">Expected format</p>
             <pre className="text-xs bg-muted rounded p-3 overflow-x-auto font-mono leading-relaxed">{SAMPLE_JSON}</pre>
           </div>
           <div>
-            <label className="text-sm font-medium">JSON File</label>
-            <input type="file" accept=".json" onChange={handleFile} className="block mt-1 text-sm" />
+            <label className="text-sm font-medium block mb-1">JSON File</label>
+            <div className="flex items-center gap-3">
+              <Button variant="outline" size="sm" onClick={() => document.getElementById('import-file-input')?.click()}>
+                Choose File
+              </Button>
+              <span className="text-sm text-muted-foreground truncate">{fileName ?? 'No file chosen'}</span>
+            </div>
+            <input id="import-file-input" type="file" accept=".json" onChange={handleFile} className="hidden" />
             {fileName && !fileError && <p className="text-xs text-muted-foreground mt-1">{fileName} — ready</p>}
             {fileError && <p className="text-xs text-destructive mt-1">{fileError}</p>}
           </div>
