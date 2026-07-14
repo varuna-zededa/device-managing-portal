@@ -1,9 +1,12 @@
+import logging
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from .models import DeviceModel
 from .serializers import DeviceModelSerializer
-from utils.permissions import IsPortalUser, IsAdminPortalUser
+from utils.permissions import IsPortalUser, IsAdminPortalUser, get_user_email
+
+logger = logging.getLogger(__name__)
 
 
 class DeviceModelListCreateView(APIView):
@@ -21,5 +24,6 @@ class DeviceModelListCreateView(APIView):
         serializer = DeviceModelSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save()
+            logger.info('DeviceModel %s created by %s', serializer.instance.name, get_user_email(request))
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

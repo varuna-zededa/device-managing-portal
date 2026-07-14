@@ -31,6 +31,7 @@ UNAVAILABLE_CONDITIONS = ('out_of_order', 'temporarily_leased', 'dedicated', 'mi
 def _handle_condition_change(device, new_condition, old_condition, changed_by):
     if new_condition == old_condition:
         return
+    logger.info('Device %s condition changed: %s → %s by %s', device.name, old_condition, new_condition, changed_by)
 
     if new_condition in ('out_of_order', 'temporarily_leased', 'missing'):
         old_owner = device.owner_email
@@ -126,6 +127,7 @@ class DeviceListCreateView(APIView):
                     reason='device_added',
                 )
             UntrackedDevice.objects.filter(serial_number=serial).delete()
+            logger.info('Device %s (serial=%s) added to inventory by %s', device.name, serial, user_email)
             return Response(DeviceSerializer(device).data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -163,6 +165,7 @@ class DeviceDetailView(APIView):
                 if idrac_password:
                     device.idrac_password_enc = encrypt(idrac_password)
                     device.save(update_fields=['idrac_password_enc', 'updated_at'])
+            logger.info('Device %s updated by %s', device.name, user_email)
             return Response(DeviceSerializer(device).data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -173,6 +176,7 @@ class DeviceDetailView(APIView):
         device = self._get_device(pk)
         if not device:
             return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+        logger.info('Device %s (serial=%s) deleted by %s', device.name, device.serial_number, user_email)
         device.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -201,6 +205,7 @@ class DeviceReserveView(APIView):
                     changed_by=requester_email,
                     reason='reserved',
                 )
+                logger.info('Device %s directly reserved by %s', device.name, requester_email)
                 return Response(DeviceSerializer(device).data)
 
         existing = ReservationRequest.objects.filter(device=device, status='pending').first()
@@ -212,7 +217,7 @@ class DeviceReserveView(APIView):
             except PortalUser.DoesNotExist:
                 pass
             except Exception as e:
-                logger.warning(str(e))
+                logger.warning('PortalUser lookup for requester %s: %s', existing.requester_email, e)
             return Response(
                 {'error': 'A pending request already exists', 'requester': requester_name, 'requester_email': existing.requester_email, 'expires_at': existing.expires_at},
                 status=status.HTTP_409_CONFLICT,
@@ -233,7 +238,7 @@ class DeviceReserveView(APIView):
         except PortalUser.DoesNotExist:
             pass
         except Exception as e:
-            logger.warning(str(e))
+            logger.warning('PortalUser lookup for owner %s on device %s: %s', device.owner_email, device.name, e)
 
         requester_user = None
         try:
@@ -241,8 +246,9 @@ class DeviceReserveView(APIView):
         except PortalUser.DoesNotExist:
             pass
         except Exception as e:
-            logger.warning(str(e))
+            logger.warning('PortalUser lookup for requester %s: %s', requester_email, e)
 
+        logger.info('Reservation request for device %s from %s (owner: %s)', device.name, requester_email, device.owner_email)
         email_utils.send_reservation_request(device, requester_user or requester_email, owner_user or device.owner_email, token)
         return Response({'message': 'Reservation request sent to device owner'}, status=status.HTTP_202_ACCEPTED)
 
@@ -283,6 +289,7 @@ class DeviceForceAssignView(APIView):
             overridden_emails = [r.requester_email for r in pending if r.requester_email != assignee_email]
             ReservationRequest.objects.filter(device=device, status='pending').update(status='expired')
 
+        logger.info('Device %s force-assigned to %s by %s (displaced: %s)', device.name, assignee_email, user_email, displaced_owner or 'none')
         for req_email in overridden_emails:
             email_utils.send_reservation_overridden(device, req_email)
 
@@ -294,7 +301,7 @@ class DeviceForceAssignView(APIView):
             except PortalUser.DoesNotExist:
                 pass
             except Exception as e:
-                logger.warning(str(e))
+                logger.warning('PortalUser lookup for assignee %s: %s', assignee_email, e)
             email_utils.send_force_assign_notice(device, displaced_owner, assignee_name)
 
         return Response(DeviceSerializer(device).data)
@@ -344,7 +351,10 @@ class DeviceReleaseView(APIView):
                 )
 
         if approved_email:
+            logger.info('Device %s released by %s; pending request auto-approved for %s', device.name, user_email, approved_email)
             email_utils.send_reservation_approved(device, approved_email)
+        else:
+            logger.info('Device %s released by %s', device.name, user_email)
 
         return Response(DeviceSerializer(device).data)
 
@@ -476,6 +486,7 @@ class DevicePurposeView(APIView):
             device.last_purpose_by = None
             device.last_purpose_at = None
             device.save(update_fields=['last_purpose_text', 'last_purpose_by', 'last_purpose_at', 'updated_at'])
+            logger.info('Device %s purpose cleared by %s', device.name, author_email)
             return Response({}, status=status.HTTP_200_OK)
 
         entry = DevicePurpose.objects.create(device=device, author_email=author_email, text=text)
@@ -489,6 +500,7 @@ class DevicePurposeView(APIView):
         device.last_purpose_at = entry.created_at
         device.save(update_fields=['last_purpose_text', 'last_purpose_by', 'last_purpose_at', 'updated_at'])
 
+        logger.info('Device %s purpose set by %s', device.name, author_email)
         return Response(DevicePurposeSerializer(entry).data, status=status.HTTP_201_CREATED)
 
 
@@ -599,4 +611,5 @@ class MoveToInventoryView(APIView):
             )
             untracked.delete()
 
+        logger.info('Untracked device %s (serial=%s) moved to inventory by %s', device.name, device.serial_number, user_email)
         return Response(DeviceSerializer(device).data, status=status.HTTP_201_CREATED)

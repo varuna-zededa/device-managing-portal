@@ -8,7 +8,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from .models import PortalUser, Team
 from .serializers import PortalUserSerializer
-from utils.permissions import IsAdminPortalUser
+from utils.permissions import IsAdminPortalUser, get_user_email
 
 _EMAIL_PREFIX_RE = re.compile(r'^[a-zA-Z0-9._-]+$')
 
@@ -47,6 +47,7 @@ class UserListCreateView(APIView):
         serializer = PortalUserSerializer(data=data)
         if serializer.is_valid():
             serializer.save()
+            logger.info('User %s (%s) created by %s', name, email, get_user_email(request))
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -73,6 +74,7 @@ class UserDetailView(APIView):
         serializer = PortalUserSerializer(user, data=data, partial=True)
         if serializer.is_valid():
             serializer.save()
+            logger.info('User %s updated by %s', user.email, get_user_email(request))
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -168,4 +170,5 @@ class UserImportView(APIView):
                 PortalUser.objects.create(email=email, name=name, team=team_obj, user_type=user_type)
                 created += 1
 
+        logger.info('User import: %d created, %d updated, %d skipped, %d errors by %s', created, updated, skipped, len(errors), get_user_email(request))
         return Response({'created': created, 'updated': updated, 'skipped': skipped, 'errors': errors})

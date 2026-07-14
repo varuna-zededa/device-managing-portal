@@ -18,7 +18,7 @@ def is_admin(email: str) -> bool:
     except PortalUser.DoesNotExist:
         return False
     except Exception as e:
-        logger.warning(str(e))
+        logger.warning('is_admin DB lookup failed for %s: %s', email, e)
         return False
 
 
