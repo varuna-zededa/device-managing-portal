@@ -1,10 +1,20 @@
+import faulthandler
 import logging
 import os
 import sys
+import threading
 
 from django.apps import AppConfig
 
 logger = logging.getLogger(__name__)
+
+
+def _thread_excepthook(args: threading.ExceptHookArgs) -> None:
+    logger.error(
+        'Unhandled exception in thread %s',
+        args.thread.name if args.thread else 'unknown',
+        exc_info=(args.exc_type, args.exc_value, args.exc_traceback),
+    )
 
 
 class EnterprisesConfig(AppConfig):
@@ -12,6 +22,9 @@ class EnterprisesConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
 
     def ready(self):
+        faulthandler.enable()
+        threading.excepthook = _thread_excepthook
+
         if 'runserver' in sys.argv:
             # Dev server: the reloader spawns a child with RUN_MAIN=true.
             # Only start in the child to avoid double-scheduling.
