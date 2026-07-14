@@ -40,11 +40,13 @@ export function ImportClusterDialog({ open, onOpenChange }: ImportClusterDialogP
     mutationFn: () => importClusters(parsed!, onConflict),
     onSuccess: (result: any) => {
       qc.invalidateQueries({ queryKey: ['clusters-enterprises'] })
+      const syncedCount = result.created_enterprises + result.updated_enterprises
       const msg = `Imported: ${result.created_clusters} clusters, ${result.created_enterprises} enterprises added, ${result.updated_enterprises} updated, ${result.skipped_enterprises} skipped.`
+      const syncMsg = syncedCount > 0 ? ` Device sync started for ${syncedCount} enterprise${syncedCount !== 1 ? 's' : ''}.` : ''
       if (result.errors?.length) {
-        toast.warning(msg + ` Errors: ${result.errors.join('; ')}`)
+        toast.warning(msg + syncMsg + ` Errors: ${result.errors.join('; ')}`)
       } else {
-        toast.success(msg)
+        toast.success(msg + syncMsg)
       }
       onOpenChange(false)
     },
