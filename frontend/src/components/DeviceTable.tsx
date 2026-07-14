@@ -4,7 +4,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { releaseDevice, deleteDevice, setDevicePurpose, type Device } from '@/api/devices'
 import { useUser } from '@/context/UserContext'
-import { cn } from '@/lib/utils'
+import { cn, formatDateTime } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -179,7 +179,7 @@ function ExpandPanel({ device }: { device: Device }) {
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-foreground mb-2">ZedCloud Status</p>
               <CopyableField label="EVE Version" value={device.eve_version ?? '—'} mono />
-              <CopyableField label="Last Refreshed" value={device.status_fetched_at ? new Date(device.status_fetched_at).toLocaleString() : '—'} />
+              <CopyableField label="Last Refreshed" value={formatDateTime(device.status_fetched_at)} />
             </div>
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-foreground mb-2">Connectivity</p>

@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { getOwnershipHistory, type Device, type OwnershipHistory } from '@/api/devices'
+import { formatDateTime } from '@/lib/utils'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
@@ -60,7 +61,7 @@ export function OwnershipHistoryModal({ device, open, onOpenChange }: OwnershipH
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Changed by {entry.changed_by} · {new Date(entry.changed_at).toLocaleString()}
+                    Changed by {entry.changed_by} · {formatDateTime(entry.changed_at)}
                   </p>
                   {entry.reason && (
                     <p className="text-xs text-muted-foreground mt-0.5 italic">{entry.reason}</p>
