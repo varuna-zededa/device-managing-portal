@@ -1,7 +1,7 @@
 services:
   backend:
     build: ./backend
-    env_file: .env
+    env_file: ./backend/.env
     volumes:
       - sqlite_data:/app/data
       - static_files:/app/static

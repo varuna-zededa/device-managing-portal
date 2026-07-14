@@ -151,6 +151,7 @@ export function ExportImportPanel() {
                 ) : (
                   <p className="text-sm text-muted-foreground">Drop CSV or JSON here, or click to browse</p>
                 )}
+                <p className="text-xs text-muted-foreground/60 mt-1">Max 200 devices per import</p>
                 <input
                   ref={fileInputRef}
                   type="file"

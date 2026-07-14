@@ -1,9 +1,10 @@
 from rest_framework import serializers
+from apps.devices.serializers import NullableSlugRelatedField
 from .models import PortalUser, Team
 
 
 class PortalUserSerializer(serializers.ModelSerializer):
-    team = serializers.SlugRelatedField(queryset=Team.objects.all(), slug_field='name')
+    team = NullableSlugRelatedField(queryset=Team.objects.all(), slug_field='name', allow_null=True, required=False)
 
     class Meta:
         model = PortalUser
@@ -21,3 +22,10 @@ class PortalUserSerializer(serializers.ModelSerializer):
                 f"'{value}' is not a valid role. Choose from: {', '.join(valid)}."
             )
         return value
+
+    def validate(self, data):
+        user_type = data.get('user_type', getattr(self.instance, 'user_type', None))
+        team = data.get('team', getattr(self.instance, 'team', None))
+        if user_type == 'member' and not team:
+            raise serializers.ValidationError({'team': 'Team is required for member users.'})
+        return data

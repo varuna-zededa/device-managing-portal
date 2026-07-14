@@ -4,8 +4,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Pencil, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
-import { getUsers, createUser, updateUser, type PortalUser } from '@/api/users'
+import { Pencil, ChevronUp, ChevronDown, ChevronsUpDown, Download, Upload } from 'lucide-react'
+import { getUsers, createUser, updateUser, exportUsers, type PortalUser } from '@/api/users'
 import { getChoices } from '@/api/choices'
 import { useUser } from '@/context/UserContext'
 import { Header } from '@/components/Header'
@@ -21,6 +21,7 @@ import {
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/components/ui/form'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { toast } from '@/components/ui/sonner'
+import { UserImportDialog } from '@/components/UserImportDialog'
 
 const createSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -45,6 +46,7 @@ function initials(name: string) {
 export default function UsersPage() {
   const { isAdmin, isLoading: isAuthLoading } = useUser()
   const [addOpen, setAddOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<PortalUser | null>(null)
   const [sortKey, setSortKey] = useState<'name' | 'email' | 'team' | 'role' | null>(null)
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
@@ -122,8 +124,22 @@ export default function UsersPage() {
     <div className="min-h-screen bg-background">
       <Header />
       <div className="pt-14">
-        <div className="flex items-center px-4 py-3 border-b border-border">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <h1 className="text-base font-semibold text-foreground">Users</h1>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={async () => {
+              const blob = await exportUsers()
+              const url = URL.createObjectURL(blob)
+              const a = document.createElement('a')
+              a.href = url; a.download = 'holocron_users.json'; a.click()
+              URL.revokeObjectURL(url)
+            }}>
+              <Download className="w-4 h-4 mr-1" />Export
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
+              <Upload className="w-4 h-4 mr-1" />Import
+            </Button>
+          </div>
         </div>
 
         {isLoading ? (
@@ -188,6 +204,7 @@ export default function UsersPage() {
       </div>
 
       <FloatingAddButton onClick={() => setAddOpen(true)} tooltip="Add User" />
+      <UserImportDialog open={importOpen} onOpenChange={setImportOpen} />
 
       <Dialog open={!!editTarget} onOpenChange={(open) => { if (!open) setEditTarget(null) }}>
         <DialogContent className="max-w-sm">

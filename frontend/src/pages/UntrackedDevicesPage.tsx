@@ -174,7 +174,7 @@ export default function UntrackedDevicesPage() {
     if (statusFilter) d = d.filter(x => x.run_state === statusFilter)
     if (serialFilter) {
       const q = serialFilter.toLowerCase()
-      d = d.filter(x => x.serial_number.toLowerCase().includes(q))
+      d = d.filter(x => x.serial_number.toLowerCase().includes(q) || x.name.toLowerCase().includes(q))
     }
     return d
   }, [allDevices, enterpriseFilter, clusterFilter, statusFilter, serialFilter])
@@ -283,7 +283,7 @@ export default function UntrackedDevicesPage() {
           </Select>
 
           <Input
-            placeholder="Serial number..."
+            placeholder="Serial or Name..."
             value={serialFilter}
             onChange={(e) => setSerialFilter(e.target.value)}
             className="w-48 h-9"

@@ -106,6 +106,16 @@ def fetch_enterprise_self(host: str, bearer_token: str) -> dict:
     }
 
 
+def fetch_user_self(host: str, bearer_token: str) -> dict:
+    """Call /api/v1/users/self. Returns {'username': '...'}."""
+    url = f'https://{host}/api/v1/users/self'
+    headers = {'Authorization': f'Bearer {bearer_token}'}
+    response = _client.get(url, headers=headers)
+    response.raise_for_status()
+    data = response.json()
+    return {'username': data.get('username', '').strip()}
+
+
 def fetch_enterprise_devices(host: str, bearer_token: str) -> list[dict]:
     """Paginate GET /api/v1/devices/status and return all device records."""
     headers = {'Authorization': f'Bearer {bearer_token}'}

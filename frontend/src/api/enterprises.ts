@@ -7,6 +7,7 @@ export interface Enterprise {
   cluster_name: string
   is_active: boolean
   zcloud_id: string
+  zcloud_username: string
   name_verified: boolean
   last_sync_at: string | null
   last_sync_status: 'ok' | 'error' | 'token_expired' | null

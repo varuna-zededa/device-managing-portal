@@ -33,7 +33,7 @@ export function Header() {
     { to: '/devices', label: 'Devices' },
     { to: '/untracked-devices', label: 'Untracked Devices' },
     { to: '/cluster-enterprises', label: 'Clusters & Enterprises' },
-    { to: '/users', label: 'Users' },
+    ...(isAdmin ? [{ to: '/users', label: 'Users' }] : []),
   ]
 
   return (

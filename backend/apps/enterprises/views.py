@@ -11,7 +11,7 @@ from rest_framework.views import APIView
 
 from apps.clusters.models import Cluster
 from apps.notifications.models import Notification
-from services.zedcloud import fetch_enterprise_self, ENTERPRISE_STATE_ACTIVE
+from services.zedcloud import fetch_enterprise_self, fetch_user_self, ENTERPRISE_STATE_ACTIVE
 from utils.crypto import encrypt
 from utils.permissions import IsAdminPortalUser
 
@@ -20,6 +20,25 @@ from .serializers import EnterpriseReadSerializer, EnterpriseUpdateSerializer
 from .sync import apply_candidates, sync_enterprise, verify_enterprise_names, _emit_token_expired
 
 logger = logging.getLogger(__name__)
+
+
+def _fetch_username(host: str, bearer_token: str, enterprise_name: str) -> str:
+    """Call /v1/users/self and return the username. Logs a warning and returns '' on any failure."""
+    try:
+        return fetch_user_self(host, bearer_token)['username']
+    except httpx.HTTPStatusError as exc:
+        code = exc.response.status_code
+        if code == 401:
+            logger.warning('fetch_user_self 401 (no/invalid token) for enterprise %s', enterprise_name)
+        elif code == 403:
+            logger.warning('fetch_user_self 403 (insufficient permissions) for enterprise %s', enterprise_name)
+        elif code == 404:
+            logger.warning('fetch_user_self 404 (user record not found) for enterprise %s', enterprise_name)
+        else:
+            logger.warning('fetch_user_self HTTP %s for enterprise %s', code, enterprise_name)
+    except httpx.RequestError as exc:
+        logger.warning('fetch_user_self network error for enterprise %s: %s', enterprise_name, exc)
+    return ''
 
 
 class EnterpriseDetailView(APIView):
@@ -91,6 +110,8 @@ class EnterpriseDetailView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        zcloud_username = _fetch_username(enterprise.cluster.host, bearer_token, enterprise.name) or enterprise.zcloud_username
+
         # Token verified — apply non-token fields from serializer, then write token fields
         # manually so we can set name_verified=True and is_active=True without a second save.
         validated = {k: v for k, v in serializer.validated_data.items() if k != 'bearer_token'}
@@ -99,7 +120,8 @@ class EnterpriseDetailView(APIView):
         enterprise.bearer_token_enc = encrypt(bearer_token)
         enterprise.name_verified = True
         enterprise.is_active = True  # re-activates if the enterprise was previously inactive
-        update_fields = list(validated.keys()) + ['bearer_token_enc', 'name_verified', 'is_active']
+        enterprise.zcloud_username = zcloud_username
+        update_fields = list(validated.keys()) + ['bearer_token_enc', 'name_verified', 'is_active', 'zcloud_username']
         if info['zcloud_id']:
             enterprise.zcloud_id = info['zcloud_id']
             update_fields.append('zcloud_id')
@@ -217,6 +239,13 @@ class ClusterImportView(APIView):
         if not isinstance(config, list):
             return Response({'error': 'config must be a JSON array'}, status=status.HTTP_400_BAD_REQUEST)
 
+        total_enterprises = sum(len(entry.get('enterprises', [])) for entry in config if isinstance(entry, dict))
+        if total_enterprises > 20:
+            return Response(
+                {'error': f'Import exceeds the 20-enterprise limit ({total_enterprises} found). Split into smaller files.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         errors = []
         created_clusters = 0
         created_enterprises = 0
@@ -274,17 +303,21 @@ class ClusterImportView(APIView):
                                 f'Token for enterprise "{ent_name}" belongs to a different ZedCloud enterprise (ID mismatch)'
                             )
                             continue
+                        zcloud_username = _fetch_username(cluster.host, bearer_token, ent_name) or existing.zcloud_username
                         existing.bearer_token_enc = encrypt(bearer_token)
+                        existing.zcloud_username = zcloud_username
                         existing.name_verified = False  # re-verify against ZedCloud
-                        existing.save(update_fields=['bearer_token_enc', 'name_verified'])
+                        existing.save(update_fields=['bearer_token_enc', 'zcloud_username', 'name_verified'])
                         updated_enterprises += 1
                     else:
                         skipped_enterprises += 1
                 else:
+                    zcloud_username = _fetch_username(cluster.host, bearer_token, ent_name)
                     Enterprise.objects.create(
                         name=ent_name,
                         cluster=cluster,
                         bearer_token_enc=encrypt(bearer_token),
+                        zcloud_username=zcloud_username,
                         # name_verified defaults to False — picked up by post-import verification
                     )
                     created_enterprises += 1

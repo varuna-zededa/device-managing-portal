@@ -98,6 +98,12 @@ class ImportView(APIView):
             logger.warning(str(e))
             return Response({'error': f'Failed to parse file: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
 
+        if len(rows) > 200:
+            return Response(
+                {'error': f'Import exceeds the 200-device limit ({len(rows)} found). Split into smaller files.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         lab_cache = {lab.name: lab for lab in Lab.objects.all()}
         team_cache = {team.name: team for team in Team.objects.all()}
         valid_labs = set(lab_cache)
