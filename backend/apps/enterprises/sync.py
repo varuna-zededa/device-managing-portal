@@ -157,7 +157,7 @@ def _apply_inventory_candidate(candidate: dict, now) -> None:
     device = candidate['device']
 
     # SUSPECT data is unreliable — mirror sync_all_enterprises behaviour: only set
-    # needs_repair to alert the admin; never overwrite enterprise/cluster/status with
+    # needs_recovery to alert the admin; never overwrite enterprise/cluster/status with
     # data from a SUSPECT device.  This prevents a single-enterprise manual sync from
     # clobbering a device's cluster assignment when it is healthy in another enterprise.
     if candidate['run_state'] == _SUSPECT_STATE:
@@ -171,6 +171,10 @@ def _apply_inventory_candidate(candidate: dict, now) -> None:
                 'sync_condition', 'enterprise', 'cluster',
                 'cluster_device_name', 'status', 'updated_at',
             ])
+        elif device.sync_condition is not None:
+            # out_of_order supersedes sync — clear any stale sync finding silently.
+            device.sync_condition = None
+            device.save(update_fields=['sync_condition', 'updated_at'])
         return
 
     update_fields = ['enterprise', 'cluster', 'eve_version', 'device_connectivity', 'status', 'status_fetched_at', 'updated_at']
@@ -184,7 +188,7 @@ def _apply_inventory_candidate(candidate: dict, now) -> None:
     device.status = candidate['status']
     device.status_fetched_at = now
     # Clear sync-owned condition flags when device is healthy and reachable again.
-    # Both 'missing' and 'needs_repair' are sync-managed; admin-set conditions
+    # Both 'missing' and 'needs_recovery' are sync-managed; admin-set conditions
     # (out_of_order, dedicated, temporarily_leased) are never touched.
     if device.sync_condition is not None:
         device.sync_condition = None
@@ -453,9 +457,8 @@ def sync_all_enterprises() -> None:
     #   2. Devices with enterprise=None but assigned to a cluster that belongs to a
     #      successfully-synced enterprise (manually imported, never yet discovered)
     # Enterprises that failed or returned zero devices are excluded to prevent false positives.
-    from apps.enterprises.models import Enterprise as _Enterprise  # noqa: PLC0415
     synced_cluster_ids = set(
-        _Enterprise.objects.filter(is_active=True)
+        Enterprise.objects.filter(is_active=True)
         .exclude(pk__in=exclude_from_missing)
         .values_list('cluster_id', flat=True)
     )
