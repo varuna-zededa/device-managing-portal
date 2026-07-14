@@ -103,6 +103,11 @@ class UserImportView(APIView):
     def post(self, request):
         raw = request.data.get('users')
         on_conflict = request.data.get('on_conflict', 'skip')
+        if on_conflict not in ('skip', 'overwrite'):
+            return Response(
+                {'error': 'on_conflict must be "skip" or "overwrite"'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         if isinstance(raw, str):
             try:
@@ -114,6 +119,12 @@ class UserImportView(APIView):
 
         if not isinstance(data, list):
             return Response({'error': 'Expected a JSON array'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if len(data) > 100:
+            return Response(
+                {'error': f'Import exceeds the 100-user limit ({len(data)} found). Split into smaller files.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         team_cache = {t.name: t for t in Team.objects.all()}
         valid_user_types = {c[0] for c in PortalUser._meta.get_field('user_type').choices}
@@ -142,6 +153,12 @@ class UserImportView(APIView):
             if existing:
                 if on_conflict == 'skip':
                     skipped += 1; continue
+                # Guard: prevent demoting an admin when they would be the last one.
+                if existing.user_type == 'admin' and user_type != 'admin':
+                    remaining = PortalUser.objects.filter(user_type='admin').exclude(pk=existing.pk).count()
+                    if remaining == 0:
+                        errors.append(f'Row {i + 1}: cannot demote {email} — they are the last admin')
+                        skipped += 1; continue
                 existing.name = name
                 existing.team = team_obj
                 existing.user_type = user_type
