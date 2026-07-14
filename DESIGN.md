@@ -231,7 +231,7 @@ refresh on the next full page load because `GET /api/v1/choices/` queries this t
 id    int   PK auto
 name  str   unique (max 50 chars); e.g. "ST", "EVE", "PLATFORM"
 ```
-Pre-seeded entries: EVE · PLATFORM · ST.
+Pre-seeded entries: ST · EVE · PLE · SRE · Cloud · IT.
 New teams can be added via Django admin — all Team dropdowns refresh on next page load (same pattern as Lab).
 
 ### User
@@ -239,7 +239,7 @@ New teams can be added via Django admin — all Team dropdowns refresh on next p
 id          int   PK auto
 name        str
 email       str   unique — identity anchor
-team        FK    → Team.id (PROTECT, NOT NULL)
+team        FK    → Team.id (PROTECT, nullable); required for member users; optional for admin users
 user_type   enum  admin | member | guest
 ```
 - `guest` — read-only; can log in and view the device table and expand panels; cannot perform any
@@ -253,6 +253,7 @@ name              str      enterprise name (from ZedCloud)
 cluster_id        int      FK → Cluster.id (CASCADE)
 bearer_token_enc  bytes    Fernet-encrypted ZedCloud API bearer token (write-only; never returned in API)
 zcloud_id         str      enterprise UUID from ZedCloud /v1/enterprises/self
+zcloud_username   str      username of the ZedCloud user who owns the bearer token (from /v1/users/self); blank if fetch fails
 is_active         bool     False when ZedCloud reports the enterprise is not ENTERPRISE_STATE_ACTIVE
 name_verified     bool     True after verify_enterprise_names() confirms state is active AND name matches ZedCloud; resets on token update or import overwrite; NOT set on inactive or name-mismatch branches
 last_sync_at      datetime nullable — when the last sync completed

@@ -13,6 +13,7 @@ Holocron is an internal web portal for Zededa test teams to manage shared physic
 - **Fetch Status** — pulls live EVE version, run state, and connectivity from ZedCloud on demand
 - **Condition flags** — Out of Order, Needs Repair, Temporarily Leased, Dedicated, Missing
 - **Admin controls** — force-assign, bulk CSV import/export, user management
+- **User import/export** — JSON bulk import/export for portal users (skip or overwrite on conflict)
 - **Ownership history** — append-only audit log per device
 - **Email notifications** — reservation requests, approvals, out-of-order alerts
 - **Encrypted credentials** — iDRAC passwords and admin-managed enterprise bearer tokens stored with Fernet encryption
@@ -37,7 +38,7 @@ Holocron is an internal web portal for Zededa test teams to manage shared physic
 
 ### Prerequisites
 
-- Python 3.12+
+- [uv](https://docs.astral.sh/uv/getting-started/installation/) — Python package manager (`brew install uv` on macOS) — handles `.venv` creation and package installs automatically
 - Node.js 20+
 - Git 2.x+
 
@@ -45,19 +46,19 @@ Holocron is an internal web portal for Zededa test teams to manage shared physic
 
 ```bash
 cd backend
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
 
-# Create .env (copy from example and fill in values)
-cp ../.env.example .env
+# Create .env from the example and fill in the two required keys
+cp .env.example .env
 
 # Run migrations and seed data
-python manage.py migrate
-python manage.py loaddata fixtures/clusters_seed.json
+uv run python manage.py migrate
+uv run python manage.py loaddata fixtures/clusters_seed.json
+
+# Create the first admin user
+uv run python manage.py create_admin --email=you@example.com --name="Your Name"
 
 # Start dev server
-python manage.py runserver
+uv run python manage.py runserver
 ```
 
 Backend runs at `http://localhost:8000`.
@@ -93,15 +94,17 @@ Create a `.env` file in the repo root (for Docker) or `backend/.env` (for local 
 | `DATABASE_URL` | No | SQLite | PostgreSQL connection string |
 | `LOAD_DEMO_DATA` | No | `false` | Load demo fixture on startup |
 
-Generate the required keys:
+#### Generate the required keys:
 
 ```bash
 # SECRET_KEY
-python3 -c "import secrets, string; print(''.join(secrets.choice(string.ascii_letters + string.digits + '!@#$%^&*') for _ in range(50)))"
+openssl rand -base64 50
 
-# ENCRYPTION_KEY
-python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+# ENCRYPTION_KEY (Fernet requires URL-safe base64 — tr converts + and / characters)
+openssl rand -base64 32 | tr '\+/' '\-_'
 ```
+
+> **Windows users:** use Git Bash or WSL to run these commands.
 
 ---
 
@@ -120,8 +123,8 @@ git clone <repo-url>
 cd device-managing-portal
 
 # Create and fill in .env
-cp .env.example .env
-nano .env
+cp backend/.env.example backend/.env
+nano backend/.env
 
 # Build and start
 docker compose build

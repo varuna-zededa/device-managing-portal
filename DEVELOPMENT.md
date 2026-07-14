@@ -15,12 +15,12 @@ All endpoints are prefixed `/api/v1/`. The frontend axios client (`src/api/clien
 
 ```bash
 # Backend
-cd backend && python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+cd backend
 cp .env.example .env          # set SECRET_KEY and ENCRYPTION_KEY
-python manage.py migrate
-python manage.py loaddata clusters_seed.json
-python manage.py runserver    # http://localhost:8000
+uv run python manage.py migrate
+uv run python manage.py loaddata clusters_seed.json
+uv run python manage.py create_admin --email=you@example.com --name="Your Name"
+uv run python manage.py runserver    # http://localhost:8000
 
 # Frontend (separate terminal)
 cd frontend && npm install
@@ -30,9 +30,9 @@ npm run dev                   # http://localhost:5173 — proxies /api/* to :800
 Generate keys:
 ```bash
 # SECRET_KEY
-python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
-# ENCRYPTION_KEY
-python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+openssl rand -base64 50
+# ENCRYPTION_KEY (Fernet requires URL-safe base64)
+openssl rand -base64 32 | tr '\+/' '\-_'
 ```
 
 Django admin (create superuser first): `python manage.py createsuperuser` → `/admin/`
@@ -220,6 +220,13 @@ def fetch_device_status(
 - Used by `ClusterEnterpriseListCreateView.post()` to validate and name enterprises created via the UI
 - Constants also in `services/zedcloud.py`: `ENTERPRISE_STATE_ACTIVE = 'ENTERPRISE_STATE_ACTIVE'`; `_ENTERPRISE_STATE_LABELS` maps state strings to human-readable labels
 
+**`fetch_user_self(host, bearer_token)`** — fetches the ZedCloud user associated with a bearer token:
+- Lives in `services/zedcloud.py`
+- Calls `GET /v1/users/self` and returns `{'username': str}`
+- Called after every successful token verification (enterprise create, token rotation, import overwrite/create)
+- Result stored in `Enterprise.zcloud_username`; displayed on the enterprise card in the UI
+- Failure is non-blocking — logs a warning (401 = no/invalid token, 403 = insufficient permissions, 404 = user not found) and stores `''`
+
 **Device status endpoint — `POST /api/v1/devices/{id}/status/`**
 - Accepts `enterprise_id` (integer FK) — **not** a raw bearer token
 - Backend looks up the `Enterprise` row by id, decrypts `bearer_token_enc` server-side, then calls ZedCloud
@@ -253,9 +260,10 @@ frontend/src/
 ├── api/
 │   ├── client.ts          axios instance; auto-injects X-User-Email from localStorage
 │   ├── devices.ts         device CRUD + reserve/release/status/history
-│   ├── users.ts           user CRUD
+│   ├── users.ts           user CRUD + exportUsers/importUsers (JSON)
 │   ├── choices.ts         getChoices() → {labs, teams, conditions, enterprises}
 │   ├── enterprises.ts     getClusters/createCluster/updateCluster/deleteCluster; createEnterprise/updateEnterprise/deleteEnterprise/syncEnterprise; ClusterExport/Import
+│   ├── deviceModels.ts    getDeviceModels/createDeviceModel
 │   ├── notifications.ts   getNotifications/markNotificationRead/markAllNotificationsRead
 │   └── untracked.ts       getUntrackedDevices/moveToInventory
 ├── context/UserContext.tsx useUser() → {user, isAdmin}; redirects to /login if no session
@@ -267,8 +275,9 @@ frontend/src/
 │   ├── DeviceFormModal.tsx
 │   ├── ReserveDialog.tsx
 │   ├── OwnershipHistoryModal.tsx
-│   ├── MoveToInventoryDialog.tsx
+│   ├── MoveToInventoryDialog.tsx  searchable + creatable device model combobox; creates new model via POST /api/v1/models/ before move
 │   ├── ImportClusterDialog.tsx
+│   ├── UserImportDialog.tsx
 │   └── ui/                shadcn/ui base components
 └── pages/
     ├── DevicesPage.tsx           summary bar; passes filter state to SearchBar + DeviceTable
@@ -298,7 +307,7 @@ const mutation = useMutation({
 })
 ```
 
-Cache keys in use: `['devices']`, `['users']`, `['choices']`, `['reservations','pending']`, `['reservations','mine']`, `['notifications']`, `['clusters-enterprises']`, `['untracked-devices']`.  
+Cache keys in use: `['devices']`, `['users']`, `['choices']`, `['reservations','pending']`, `['reservations','mine']`, `['notifications']`, `['clusters-enterprises']`, `['untracked-devices']`, `['device-models']`.  
 `choices` uses `staleTime: Infinity` — cache cleared on full page reload.
 
 ### Condition constants (both in `DeviceTable.tsx`)
