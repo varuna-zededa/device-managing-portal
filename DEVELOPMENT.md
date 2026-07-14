@@ -79,7 +79,9 @@ backend/
 └── utils/
     ├── crypto.py                encrypt(str)->bytes; decrypt(bytes)->str
     ├── email.py                 all outbound email functions (incl. token-expiry + nightly digest)
-    └── permissions.py           get_user_email(), is_admin(); IsPortalUser, IsAdminPortalUser, IsOwnerOrAdmin
+    ├── log_filters.py           RequestIDFilter — stamps request_id on every LogRecord
+    ├── permissions.py           get_user_email(), is_admin(); IsPortalUser, IsAdminPortalUser, IsOwnerOrAdmin
+    └── request_context.py       ContextVar holder; get_request_id() / set_request_id()
 ```
 
 ### Auth pattern — every protected view
@@ -231,6 +233,101 @@ def fetch_device_status(
 - Accepts `enterprise_id` (integer FK) — **not** a raw bearer token
 - Backend looks up the `Enterprise` row by id, decrypts `bearer_token_enc` server-side, then calls ZedCloud
 - Do not pass bearer tokens directly from the frontend
+
+### Logging
+
+Every module declares a module-level logger — no exceptions:
+
+```python
+import logging
+logger = logging.getLogger(__name__)
+```
+
+#### Request ID
+
+`RequestIDMiddleware` (first in the middleware stack) assigns a UUID4 to every HTTP request and stores it in a `ContextVar` (`utils/request_context.py`). `RequestIDFilter` stamps it automatically on every log record — no change to call sites needed.
+
+Log lines look like:
+
+```
+2026-07-14 10:23:45,123 INFO     [a3f2b1c0-4e12] apps.devices.views: Device 42 status fetched for user@example.com
+2026-07-14 10:23:45,190 WARNING  [a3f2b1c0-4e12] services.zedcloud: ZedCloud HTTP 503 for device my-device
+2026-07-14 10:24:01,002 INFO     [sync-7f3a1b]   apps.enterprises.sync: Starting sync_all_enterprises
+2026-07-14 10:24:01,401 INFO     [-]              apps.enterprises.apps: APScheduler started
+```
+
+The ID is echoed in the `X-Request-ID` response header so the browser can correlate an error to its server-side trace.
+
+#### Background job IDs
+
+Call `set_request_id()` at the very top of any new background or scheduled function:
+
+```python
+import uuid
+from utils.request_context import set_request_id
+
+def my_scheduled_job() -> None:
+    set_request_id(f'job-{uuid.uuid4().hex[:8]}')
+    logger.info('Starting my_scheduled_job')
+    ...
+```
+
+Without this, all lines from concurrent jobs share the default `[-]` marker and are ungreppable.
+
+#### Log levels — when to use each
+
+| Level | When |
+|---|---|
+| `DEBUG` | Per-request detail, intermediate values — verbose, off by default in prod |
+| `INFO` | Job start/end, significant state changes (enterprise synced, device marked missing) |
+| `WARNING` | Recoverable errors — ZedCloud non-200, decrypt failure, email failure; **always include context** |
+| `ERROR` | Unhandled thread exceptions (via `threading.excepthook`), unexpected unrecoverable states |
+| `exception` | Inside `except` blocks where you want the full traceback attached automatically |
+
+Always include enough context to identify the failing entity without opening the DB:
+
+```python
+# Bad — tells you nothing
+logger.warning(str(e))
+
+# Good
+logger.warning('ZedCloud HTTP %s syncing enterprise %s', code, enterprise.name)
+logger.warning('Email send failed for device %s to %s: %s', device.name, owner_email, e)
+logger.exception('Sync failed for enterprise %s', enterprise.name)
+```
+
+Never log bearer tokens, `idrac_password_enc`, or any decrypted secret.
+
+#### Env vars
+
+| Var | Default | Notes |
+|---|---|---|
+| `LOG_LEVEL` | `INFO` | Set to `DEBUG` for full request tracing during debugging |
+| `LOG_DIR` | `backend/logs/` locally; `/app/logs/` in Docker | Directory must exist before server starts |
+| `ADMIN_EMAILS` | _(empty)_ | Comma-separated; receives Django 500-error email alerts |
+
+#### Finding logs
+
+- **Local dev:** `backend/logs/portal.log` — rotated daily, 30 days retained
+- **Docker:** `./logs/portal.log` — bind-mounted from repo root `logs/`; also available via `docker logs <container>` (console handler stays active)
+
+Grep workflows:
+
+```bash
+# Trace a single UI request end-to-end
+grep 'a3f2b1c0-4e12' logs/portal.log
+
+# Trace a single sync run
+grep 'sync-7f3a1b' logs/portal.log
+
+# All warnings and above from the last hour
+grep -E 'WARNING|ERROR' logs/portal.log | tail -200
+
+# Watch live (Docker)
+docker logs --follow portal-backend
+```
+
+---
 
 ### Choices endpoint (`apps/devices/views.py` → `ChoicesView`)
 ```python
@@ -461,6 +558,12 @@ UntrackedDevice.objects.update_or_create(
 ```
 - `unique_together = ('serial_number', 'enterprise')` is the lookup key
 - Notification kinds: `token_expired` | `sync_error` | `name_mismatch` | `enterprise_inactive`; `unique_together = [('kind', 'enterprise')]` so repeated failures do not create duplicate rows
+
+### New background job or scheduled task
+- [ ] Call `set_request_id(f'<prefix>-{uuid.uuid4().hex[:8]}')` as the very first line
+- [ ] Add `logger.info('Starting <job_name>')` at the top and `logger.info('<job_name> complete')` at the bottom
+- [ ] If scheduled via APScheduler: register in `apps/enterprises/apps.py` → `_start_scheduler()` — **do not add a new scheduler instance**
+- [ ] If run in a background daemon thread (e.g. post-import): document the thread purpose in CLAUDE.md under "Never do"
 
 ### New Lab or Team
 No code changes. Django admin → Labs (or Teams) → Add.
