@@ -16,12 +16,16 @@ _TOKEN_RE = re.compile(r'/[0-9a-f]{64}(?=/|$)')
 _SKIP_PREFIXES = ('/static/', '/admin/', '/favicon')
 
 
+_REQUEST_ID_RE = re.compile(r'[^a-zA-Z0-9\-]')
+
+
 class RequestIDMiddleware:
     def __init__(self, get_response):
         self.get_response = get_response
 
     def __call__(self, request):
-        request_id = request.META.get('HTTP_X_REQUEST_ID') or str(uuid.uuid4())
+        raw = request.META.get('HTTP_X_REQUEST_ID', '').strip()
+        request_id = _REQUEST_ID_RE.sub('', raw)[:64] or str(uuid.uuid4())
         set_request_id(request_id)
         response = self.get_response(request)
         response['X-Request-ID'] = request_id

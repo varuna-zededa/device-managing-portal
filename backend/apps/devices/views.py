@@ -31,7 +31,7 @@ UNAVAILABLE_CONDITIONS = ('out_of_order', 'temporarily_leased', 'dedicated', 'mi
 def _handle_condition_change(device, new_condition, old_condition, changed_by):
     if new_condition == old_condition:
         return
-    logger.info('Device %s condition changed: %s → %s by %s', device.name, old_condition, new_condition, changed_by)
+    logger.info('Device %s condition changed: %s -> %s by %s', device.name, old_condition, new_condition, changed_by)
 
     if new_condition in ('out_of_order', 'temporarily_leased', 'missing'):
         old_owner = device.owner_email

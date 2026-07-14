@@ -335,7 +335,7 @@ class ClusterImportView(APIView):
             'skipped_enterprises': skipped_enterprises,
         }
 
-        logger.info('Cluster import by %s: %d clusters, %d enterprises created, %d updated, %d skipped', get_user_email(request), created_clusters, created_enterprises, updated_enterprises, skipped_enterprises)
+        logger.info('Cluster import by %s: %d clusters, %d enterprises created, %d updated, %d skipped, %d errors', get_user_email(request), created_clusters, created_enterprises, updated_enterprises, skipped_enterprises, len(errors))
 
         if created_enterprises > 0 or updated_enterprises > 0:
             threading.Thread(target=verify_enterprise_names, daemon=True).start()

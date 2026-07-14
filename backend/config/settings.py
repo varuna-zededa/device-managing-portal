@@ -1,5 +1,5 @@
 import environ
-import logging.handlers
+import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -118,6 +118,7 @@ LOG_LEVEL = env('LOG_LEVEL', default='INFO')
 # Default resolves to backend/logs/ locally and /app/logs/ inside Docker
 # (BASE_DIR is /app inside the container when settings.py is at /app/config/settings.py)
 LOG_DIR = env('LOG_DIR', default=str(BASE_DIR / 'logs'))
+os.makedirs(LOG_DIR, exist_ok=True)
 
 LOGGING = {
     'version': 1,
