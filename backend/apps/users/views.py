@@ -1,9 +1,12 @@
+import json
 import logging
 import re
+from django.http import HttpResponse
+from django.utils import timezone
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from .models import PortalUser
+from .models import PortalUser, Team
 from .serializers import PortalUserSerializer
 from utils.permissions import IsAdminPortalUser
 
@@ -72,3 +75,80 @@ class UserDetailView(APIView):
             serializer.save()
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class UserExportView(APIView):
+    permission_classes = [IsAdminPortalUser]
+
+    def get(self, request):
+        users = PortalUser.objects.select_related('team').order_by('name')
+        data = [
+            {
+                'name': u.name,
+                'email': u.email,
+                'team': u.team.name if u.team else '',
+                'user_type': u.user_type,
+            }
+            for u in users
+        ]
+        ts = timezone.now().strftime('%Y%m%d_%H%M%S')
+        resp = HttpResponse(json.dumps(data, indent=2), content_type='application/json')
+        resp['Content-Disposition'] = f'attachment; filename="holocron_users_{ts}.json"'
+        return resp
+
+
+class UserImportView(APIView):
+    permission_classes = [IsAdminPortalUser]
+
+    def post(self, request):
+        raw = request.data.get('users')
+        on_conflict = request.data.get('on_conflict', 'skip')
+
+        if isinstance(raw, str):
+            try:
+                data = json.loads(raw)
+            except json.JSONDecodeError as e:
+                return Response({'error': f'Invalid JSON: {e}'}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            data = raw
+
+        if not isinstance(data, list):
+            return Response({'error': 'Expected a JSON array'}, status=status.HTTP_400_BAD_REQUEST)
+
+        team_cache = {t.name: t for t in Team.objects.all()}
+        valid_user_types = {c[0] for c in PortalUser._meta.get_field('user_type').choices}
+        created = updated = skipped = 0
+        errors = []
+
+        for i, row in enumerate(data):
+            email = (row.get('email') or '').strip().lower()
+            name = (row.get('name') or '').strip()
+            team_name = (row.get('team') or '').strip()
+            user_type = (row.get('user_type') or 'member').strip()
+
+            if not email:
+                errors.append(f'Row {i + 1}: email is required'); skipped += 1; continue
+            if not name:
+                errors.append(f'Row {i + 1}: name is required'); skipped += 1; continue
+            if user_type not in valid_user_types:
+                errors.append(f'Row {i + 1}: invalid user_type "{user_type}"'); skipped += 1; continue
+
+            team_obj = team_cache.get(team_name) if team_name else None
+            if user_type == 'member' and not team_obj:
+                errors.append(f'Row {i + 1}: team is required for member users (got "{team_name}")')
+                skipped += 1; continue
+
+            existing = PortalUser.objects.filter(email=email).first()
+            if existing:
+                if on_conflict == 'skip':
+                    skipped += 1; continue
+                existing.name = name
+                existing.team = team_obj
+                existing.user_type = user_type
+                existing.save()
+                updated += 1
+            else:
+                PortalUser.objects.create(email=email, name=name, team=team_obj, user_type=user_type)
+                created += 1
+
+        return Response({'created': created, 'updated': updated, 'skipped': skipped, 'errors': errors})
