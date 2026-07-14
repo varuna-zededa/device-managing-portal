@@ -533,7 +533,7 @@ if (!isAdmin) return <Navigate to="/devices" replace />
 States not in the map default to tier 99 (lowest priority). Tie-break: earlier `first_seen_at` on `UntrackedDevice` wins.
 
 **New helper functions in `sync.py`:**
-- `_apply_inventory_candidate(candidate, now)` — writes a single resolved candidate dict to a `Device` or `UntrackedDevice` row; handles SUSPECT special case (marks `needs_repair` on `condition='normal'` devices, skips all other field updates)
+- `_apply_inventory_candidate(candidate, now)` — writes a single resolved candidate dict to a `Device` or `UntrackedDevice` row; handles SUSPECT special case (sets `sync_condition='needs_recovery'`, clears enterprise/cluster/cluster_device_name, sets status='Suspect'; for `out_of_order` devices, clears any stale `sync_condition` to `None` instead)
 - `apply_candidates(candidates, now)` — applies a list of candidates directly without cross-enterprise conflict resolution; used by `EnterpriseSyncView.post()` and `EnterpriseDetailView.patch()` (single-enterprise paths)
 
 **Token rotation improvements (`EnterpriseDetailView.patch()` in `views.py`):**

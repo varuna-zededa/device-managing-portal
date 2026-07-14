@@ -31,7 +31,7 @@ It contains exact file paths, code patterns, and checklists for every common imp
 - **Never** writable via API or CSV import — always in `read_only_fields` on `DeviceSerializer`
 - `missing`: device not seen in ZedCloud this sync cycle
 - `needs_recovery`: device seen in ZedCloud but only in SUSPECT run-state across all enterprises
-- Sync never writes `sync_condition` when `admin_condition='out_of_order'` (out_of_order supersedes sync)
+- Sync never sets a non-null `sync_condition` value when `admin_condition='out_of_order'` (out_of_order supersedes sync); the recovery path in `_apply_inventory_candidate` does clear `sync_condition` to `None` for out_of_order devices — this is intentional
 - CSV importer: `_normalize_admin_condition()` normalizes `admin_condition` values only; `sync_condition` is never read from CSV
 
 **Never** store title-case or spaced forms in the DB for either field.
@@ -155,7 +155,7 @@ It contains exact file paths, code patterns, and checklists for every common imp
 - Token-expired notification is **deleted on next successful sync** — `Notification.objects.filter(kind='token_expired', enterprise=enterprise).delete()` runs in the success branch of both `sync_all_enterprises()` and the post-token-rotation background thread
 - `ClusterImportView` overwrite path verifies bearer token identity before saving — calls `fetch_enterprise_self()` and rejects the token if the returned `zcloud_id` differs from the stored one
 - Missing-mark in `sync_all_enterprises()` covers **both** `enterprise__isnull=False` (tracked) AND `enterprise=None` devices whose `cluster` belongs to a successfully-synced enterprise — so manually-imported devices on a known cluster are marked missing if not seen in ZedCloud
-- SUSPECT winner → sets `sync_condition='needs_recovery'`, clears enterprise/cluster/cluster_device_name, sets status='Suspect'; skip if `admin_condition='out_of_order'`
+- SUSPECT winner → sets `sync_condition='needs_recovery'`, clears enterprise/cluster/cluster_device_name, sets status='Suspect'; if `admin_condition='out_of_order'`, clears any stale `sync_condition` to `None` instead of marking `needs_recovery`
 - Recovery (non-SUSPECT seen in ZedCloud) → clears `sync_condition` (sets to None)
 
 ### Notifications (admin)
