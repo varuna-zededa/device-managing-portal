@@ -1,12 +1,15 @@
 from django.db import models
 
-CONDITION_CHOICES = [
+ADMIN_CONDITION_CHOICES = [
     ('normal', 'Normal'),
     ('out_of_order', 'Out of Order'),
-    ('needs_repair', 'Needs Repair'),
     ('temporarily_leased', 'Temporarily Leased'),
     ('dedicated', 'Dedicated'),
+]
+
+SYNC_CONDITION_CHOICES = [
     ('missing', 'Missing'),
+    ('needs_recovery', 'Needs Recovery'),
 ]
 
 
@@ -40,7 +43,8 @@ class Device(models.Model):
         'devices.Lab', on_delete=models.PROTECT, related_name='devices',
     )
     location_detail = models.CharField(max_length=500, blank=True, null=True)
-    condition = models.CharField(max_length=20, choices=CONDITION_CHOICES, default='normal')
+    admin_condition = models.CharField(max_length=20, choices=ADMIN_CONDITION_CHOICES, default='normal')
+    sync_condition = models.CharField(max_length=20, choices=SYNC_CONDITION_CHOICES, null=True, blank=True)
     idrac_ip = models.CharField(max_length=100, blank=True, null=True)
     idrac_username = models.CharField(max_length=100, blank=True, null=True)
     idrac_password_enc = models.BinaryField(blank=True, null=True)
@@ -58,12 +62,17 @@ class Device(models.Model):
     class Meta:
         constraints = [
             models.CheckConstraint(
-                condition=models.Q(condition__in=[
-                    'normal', 'out_of_order', 'needs_repair',
-                    'temporarily_leased', 'dedicated', 'missing',
+                condition=models.Q(admin_condition__in=[
+                    'normal', 'out_of_order', 'temporarily_leased', 'dedicated',
                 ]),
-                name='device_condition_valid',
-            )
+                name='device_admin_condition_valid',
+            ),
+            models.CheckConstraint(
+                condition=models.Q(sync_condition__isnull=True) | models.Q(sync_condition__in=[
+                    'missing', 'needs_recovery',
+                ]),
+                name='device_sync_condition_valid',
+            ),
         ]
 
     def save(self, *args, **kwargs):
@@ -78,7 +87,8 @@ class Device(models.Model):
     def is_available(self):
         return (
             not self.owner_email
-            and self.condition not in ('out_of_order', 'temporarily_leased', 'dedicated', 'missing')
+            and self.admin_condition == 'normal'
+            and self.sync_condition is None
         )
 
 

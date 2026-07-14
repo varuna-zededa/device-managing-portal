@@ -18,12 +18,23 @@ It contains exact file paths, code patterns, and checklists for every common imp
 
 ## Critical conventions — read before touching any file
 
-### Condition values
-- Stored in DB as **snake_case**: `needs_repair`, `out_of_order`, `temporarily_leased`, `dedicated`, `missing`
-- **Never** store title-case or spaced forms in the DB
-- Displayed in the frontend with: `value.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())`
-- CSV importer normalizes incoming condition strings to snake_case via `_normalize_condition()` in `admin_tools/views.py`
-- Full enum: `normal | out_of_order | needs_repair | temporarily_leased | dedicated | missing`
+### Condition fields — two separate fields, not one
+
+`admin_condition` — user-controlled, always set, never null:
+- Values: `normal | out_of_order | temporarily_leased | dedicated`
+- Stored as snake_case; displayed with `value.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())`
+- The only condition field editable via API or CSV import
+- `out_of_order` → emails all admins; other values do not
+
+`sync_condition` — sync-engine-controlled, nullable (null = no finding):
+- Values: `missing | needs_recovery`
+- **Never** writable via API or CSV import — always in `read_only_fields` on `DeviceSerializer`
+- `missing`: device not seen in ZedCloud this sync cycle
+- `needs_recovery`: device seen in ZedCloud but only in SUSPECT run-state across all enterprises
+- Sync never sets a non-null `sync_condition` value when `admin_condition='out_of_order'` (out_of_order supersedes sync); the recovery path in `_apply_inventory_candidate` does clear `sync_condition` to `None` for out_of_order devices — this is intentional
+- CSV importer: `_normalize_admin_condition()` normalizes `admin_condition` values only; `sync_condition` is never read from CSV
+
+**Never** store title-case or spaced forms in the DB for either field.
 
 ### ZedCloud API field names (verified against live API)
 - Interface name field: **`ifName`** — NOT `name` (a common mistake)
@@ -57,16 +68,15 @@ It contains exact file paths, code patterns, and checklists for every common imp
 - Never return encrypted fields in API responses
 
 ### Availability rule
-`is_available = owner_email IS NULL AND condition NOT IN (out_of_order, temporarily_leased, dedicated, missing)`
+`is_available = owner_email IS NULL AND admin_condition == 'normal' AND sync_condition IS NULL`
 - This property is on the `Device` model
-- `UNAVAILABLE_CONDITIONS` tuple must be kept in sync in **two places**:
-  - `apps/devices/views.py`
-  - `apps/reservations/views.py`
+- No `UNAVAILABLE_CONDITIONS` tuple — the two-field check is the single source of truth
+- Reservation approve gate in `apps/reservations/views.py`: `if device.admin_condition != 'normal' or device.sync_condition is not None:`
 
 ### Email
 - Wrapper: `utils/email.py`; no-op if `settings.EMAIL_HOST` is blank
 - Always use `fail_silently=False` + catch and `logger.warning()` — never swallow silently
-- `out_of_order` condition → email all admins; `missing`, `temporarily_leased`, `dedicated` do not
+- `admin_condition='out_of_order'` → email all admins; all other conditions do not
 
 ### Logging
 - Every module must declare `logger = logging.getLogger(__name__)` at the top — no bare `print()`, no inline `logging.warning()`
@@ -110,7 +120,6 @@ It contains exact file paths, code patterns, and checklists for every common imp
 - Do **not** return `idrac_password_enc` or `bearer_token_enc` (Enterprise) in any API response
 - Do **not** use Django's built-in User model for portal users — use `apps.users.models.PortalUser`
 - Do **not** catch email exceptions and pass silently — log them with `logger.warning()`
-- Do **not** forget to update both `UNAVAILABLE_CONDITIONS` locations when changing the unavailable set
 - Do **not** use `fetch` or bare `axios` in frontend — always use `src/api/client.ts`
 - Do **not** read `request.META.get('HTTP_X_USER_EMAIL')` directly in views — use `get_user_email(request)` from `utils.permissions`
 - Do **not** omit `permission_classes` on any view — `DEFAULT_PERMISSION_CLASSES = []`, so undecorated views are fully public
@@ -124,8 +133,8 @@ It contains exact file paths, code patterns, and checklists for every common imp
 - Do **not** pass raw bearer tokens from the frontend for device status fetch — the endpoint `POST /api/v1/devices/{id}/status/` accepts `enterprise_id`; backend decrypts the token server-side
 - Do **not** use boolean `is_online`/`is_suspect` flags for cross-enterprise conflict resolution — use `_run_state_tier()` (the `_RUN_STATE_TIER` dict lookup) so all run-state priorities are centralized and consistent
 - Do **not** skip `RUN_STATE_SUSPECT` devices at intake — they are valid candidates and must enter the conflict resolver; only `RUN_STATE_UNPROVISIONED` and `RUN_STATE_PROVISIONED` are skipped at intake (via `_SKIPPED_STATES`)
-- Do **not** mark `needs_repair` inside the per-enterprise loop — the SUSPECT winner check happens in the apply phase (`_apply_inventory_candidate()`) after ALL enterprises have been processed and the winning candidate has been selected
-- Do **not** make `cluster`, `cluster_device_name`, `eve_version`, or `device_connectivity` writable via `DeviceSerializer` — they are sync-owned; add them to `read_only_fields` instead
+- Do **not** mark `needs_recovery` inside the per-enterprise loop — the SUSPECT winner check happens in the apply phase after ALL enterprises have been processed and the winning candidate has been selected
+- Do **not** make `cluster`, `cluster_device_name`, `eve_version`, `device_connectivity`, or `sync_condition` writable via `DeviceSerializer` — they are sync-owned; add them to `read_only_fields` instead
 - Do **not** reassign `device.enterprise` or `device.cluster` in `DeviceStatusView` — status fetch is read-only for device ownership; device placement is managed exclusively by the sync engine
 - Do **not** delete an enterprise that has linked inventory `Device` rows — check `Device.objects.filter(enterprise=enterprise).exists()` first and return 409
 - Do **not** allow non-admin portal users to move untracked devices to inventory — `MoveToInventoryView` uses `IsAdminPortalUser`
@@ -145,6 +154,9 @@ It contains exact file paths, code patterns, and checklists for every common imp
 - `_emit_token_expired(enterprise)` in `sync.py` is the shared helper for creating the `token_expired` Notification and sending the alert email — call it from every token-failure path; never inline the `get_or_create` block
 - Token-expired notification is **deleted on next successful sync** — `Notification.objects.filter(kind='token_expired', enterprise=enterprise).delete()` runs in the success branch of both `sync_all_enterprises()` and the post-token-rotation background thread
 - `ClusterImportView` overwrite path verifies bearer token identity before saving — calls `fetch_enterprise_self()` and rejects the token if the returned `zcloud_id` differs from the stored one
+- Missing-mark in `sync_all_enterprises()` covers **both** `enterprise__isnull=False` (tracked) AND `enterprise=None` devices whose `cluster` belongs to a successfully-synced enterprise — so manually-imported devices on a known cluster are marked missing if not seen in ZedCloud
+- SUSPECT winner → sets `sync_condition='needs_recovery'`, clears enterprise/cluster/cluster_device_name, sets status='Suspect'; if `admin_condition='out_of_order'`, clears any stale `sync_condition` to `None` instead of marking `needs_recovery`
+- Recovery (non-SUSPECT seen in ZedCloud) → clears `sync_condition` (sets to None)
 
 ### Notifications (admin)
 - `Notification` model: `apps/notifications/models.py` — kinds: `token_expired`, `sync_error`, `name_mismatch`, `enterprise_inactive`; has `enterprise` FK; `unique_together = [('kind', 'enterprise')]`

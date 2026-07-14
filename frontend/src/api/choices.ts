@@ -9,7 +9,8 @@ export interface EnterpriseChoice {
 export interface Choices {
   labs: string[]
   teams: string[]
-  conditions: string[]
+  admin_conditions: string[]
+  sync_conditions: string[]
   enterprises: EnterpriseChoice[]
 }
 

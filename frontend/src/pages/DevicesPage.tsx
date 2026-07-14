@@ -53,7 +53,14 @@ export default function DevicesPage() {
     ? Math.floor((Date.now() - dataUpdatedAt) / 60000)
     : 0
 
-  const hasFilters = !!(searchParams.q || searchParams.available !== 'all' || searchParams.team || searchParams.lab || searchParams.condition)
+  const hasFilters = !!(
+    searchParams.q
+    || searchParams.available !== 'all'
+    || searchParams.team
+    || searchParams.lab
+    || searchParams.admin_condition
+    || searchParams.sync_condition
+  )
   const isStale = staleMinutes > 16
 
   const summary = !isLoading ? {
@@ -61,10 +68,11 @@ export default function DevicesPage() {
     available: devices.filter(d => d.is_available).length,
     reserved: devices.filter(d => d.reserved_at !== null).length,
     online: devices.filter(d => d.status === 'Online').length,
-    needsRepair: devices.filter(d => d.condition === 'needs_repair').length,
-    outOfOrder: devices.filter(d => d.condition === 'out_of_order').length,
-    leased: devices.filter(d => d.condition === 'temporarily_leased').length,
-    missing: devices.filter(d => d.condition === 'missing').length,
+    outOfOrder: devices.filter(d => d.admin_condition === 'out_of_order').length,
+    leased: devices.filter(d => d.admin_condition === 'temporarily_leased').length,
+    dedicated: devices.filter(d => d.admin_condition === 'dedicated').length,
+    missing: devices.filter(d => d.sync_condition === 'missing').length,
+    needsRecovery: devices.filter(d => d.sync_condition === 'needs_recovery').length,
   } : null
 
   return (
@@ -80,10 +88,11 @@ export default function DevicesPage() {
                 <Dot /><span className="text-status-online">{summary.available} available</span>
                 {summary.reserved > 0 && <><Dot /><span>{summary.reserved} reserved</span></>}
                 <Dot /><span>{summary.online} online</span>
-                {summary.needsRepair > 0 && <><Dot /><span className="text-yellow-400">{summary.needsRepair} needs repair</span></>}
                 {summary.outOfOrder > 0 && <><Dot /><span className="text-red-400">{summary.outOfOrder} out of order</span></>}
                 {summary.leased > 0 && <><Dot /><span className="text-violet-400">{summary.leased} leased</span></>}
+                {summary.dedicated > 0 && <><Dot /><span className="text-blue-400">{summary.dedicated} dedicated</span></>}
                 {summary.missing > 0 && <><Dot /><span className="text-orange-400">{summary.missing} missing</span></>}
+                {summary.needsRecovery > 0 && <><Dot /><span className="text-yellow-400">{summary.needsRecovery} needs recovery</span></>}
               </p>
             )}
           </div>

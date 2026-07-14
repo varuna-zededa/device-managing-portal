@@ -16,6 +16,7 @@ import { ImportClusterDialog } from '@/components/ImportClusterDialog'
 import { FloatingAddButton } from '@/components/FloatingAddButton'
 import { toast } from '@/components/ui/sonner'
 import { Plus, Download, Upload, RefreshCw, Pencil, Trash2, ChevronDown, ChevronRight } from 'lucide-react'
+import { formatDateTime } from '@/lib/utils'
 
 function syncBadge(status: Enterprise['last_sync_status']) {
   if (!status) return null
@@ -31,10 +32,6 @@ function syncBadge(status: Enterprise['last_sync_status']) {
   )
 }
 
-function timeStr(dt: string | null) {
-  if (!dt) return '—'
-  return new Date(dt).toLocaleString()
-}
 
 export default function ClusterEnterprisesPage() {
   const qc = useQueryClient()
@@ -77,7 +74,12 @@ export default function ClusterEnterprisesPage() {
 
   const createEntMut = useMutation({
     mutationFn: (clusterId: number) => createEnterprise(clusterId, { bearer_token: newEntToken }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['clusters-enterprises'] }); setAddingEnterpriseFor(null); setNewEntToken('') },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['clusters-enterprises'] })
+      setAddingEnterpriseFor(null)
+      setNewEntToken('')
+      toast.success('Enterprise added. Device sync started.')
+    },
     onError: (e: any) => toast.error(e?.response?.data?.bearer_token ?? e?.response?.data?.error ?? 'Failed'),
   })
 
@@ -188,7 +190,7 @@ export default function ClusterEnterprisesPage() {
                                 </Tooltip>
                               )}
                             </div>
-                            <p className="text-xs text-muted-foreground mt-1">{timeStr(ent.last_sync_at)}</p>
+                            <p className="text-xs text-muted-foreground mt-1"><span className="font-medium">Last synced:</span> {formatDateTime(ent.last_sync_at)}</p>
                           </div>
                           {isAdmin && (
                             <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">

@@ -11,7 +11,7 @@ from django.http import HttpResponse
 from django.utils import timezone
 from django.core.validators import validate_email
 from django.core.exceptions import ValidationError as DjangoValidationError
-from apps.devices.models import Device, Lab, CONDITION_CHOICES, UntrackedDevice
+from apps.devices.models import Device, Lab, ADMIN_CONDITION_CHOICES, UntrackedDevice
 from apps.devices.serializers import DeviceSerializer
 from apps.clusters.models import Cluster
 from apps.device_models.models import DeviceModel
@@ -19,7 +19,7 @@ from apps.users.models import Team
 from .models import RequestLog
 from utils.permissions import get_user_email, IsAdminPortalUser, IsPortalUser
 
-_VALID_CONDITIONS = {c[0] for c in CONDITION_CHOICES}
+_VALID_ADMIN_CONDITIONS = {c[0] for c in ADMIN_CONDITION_CHOICES}
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +42,8 @@ class ExportView(APIView):
             header = [
                 'id', 'name', 'serial_number', 'description',
                 'cluster', 'cluster_device_name', 'model', 'customer_partner_name',
-                'team', 'owner_email', 'lab', 'location_detail', 'condition',
+                'team', 'owner_email', 'lab', 'location_detail',
+                'admin_condition', 'sync_condition',
                 'idrac_ip', 'idrac_username', 'eve_version', 'device_connectivity',
                 'status', 'last_purpose_text', 'created_at', 'updated_at',
             ]
@@ -55,7 +56,8 @@ class ExportView(APIView):
                     d.model.name if d.model else '',
                     d.model.customer_partner_name if d.model else '',
                     d.team.name if d.team else '', d.owner_email or '', d.lab.name, d.location_detail or '',
-                    d.condition, d.idrac_ip or '', d.idrac_username or '',
+                    d.admin_condition, d.sync_condition or '',
+                    d.idrac_ip or '', d.idrac_username or '',
                     d.eve_version or '',
                     json.dumps(d.device_connectivity) if d.device_connectivity else '',
                     d.status or '', d.last_purpose_text or '',
@@ -144,12 +146,13 @@ class ImportView(APIView):
 
                 defaults = {}
                 for field in ('name', 'description', 'owner_email',
-                              'location_detail', 'condition', 'idrac_ip', 'eve_version',
+                              'location_detail', 'admin_condition', 'idrac_ip', 'eve_version',
                               'status', 'cluster_device_name'):
                     if row.get(field) not in (None, ''):
                         defaults[field] = row[field]
-                if 'condition' in defaults:
-                    defaults['condition'] = _normalize_condition(defaults['condition'])
+                if 'admin_condition' in defaults:
+                    defaults['admin_condition'] = _normalize_admin_condition(defaults['admin_condition'])
+                # sync_condition is read-only — never written from CSV import
                 if model_obj:
                     defaults['model'] = model_obj
                 if cluster_obj:
@@ -205,6 +208,7 @@ _FIELD_ALIASES = {
     'cluster_device': 'cluster_device_name',
     'location': 'location_detail',
     'lab_location': 'lab',
+    'condition': 'admin_condition',
 }
 
 def _normalize_key(key):
@@ -212,7 +216,7 @@ def _normalize_key(key):
     return _FIELD_ALIASES.get(k, k)
 
 
-def _normalize_condition(value):
+def _normalize_admin_condition(value):
     """Convert any casing/spacing variant to the DB snake_case format."""
     if not value:
         return value
@@ -220,7 +224,7 @@ def _normalize_condition(value):
 
 _TEMPLATE_HEADERS = [
     'name', 'serial_number', 'model', 'cluster', 'cluster_device_name',
-    'team', 'lab', 'location_detail', 'condition', 'description',
+    'team', 'lab', 'location_detail', 'admin_condition', 'description',
     'idrac_ip', 'idrac_username', 'owner_email',
 ]
 
@@ -262,11 +266,16 @@ def _validate_import_row(row, row_num, valid_labs, valid_teams):
         except ValueError:
             errs.append(f'idrac_ip "{ip}" is not a valid IP address')
 
-    condition = (row.get('condition') or '').strip()
-    if condition:
-        normalized = _normalize_condition(condition)
-        if normalized not in _VALID_CONDITIONS:
-            errs.append(f'condition "{condition}" is not valid — must be one of: {", ".join(sorted(_VALID_CONDITIONS))}')
+    admin_condition = (row.get('admin_condition') or '').strip()
+    if admin_condition:
+        normalized = _normalize_admin_condition(admin_condition)
+        if normalized not in _VALID_ADMIN_CONDITIONS:
+            errs.append(
+                f'admin_condition "{admin_condition}" is not valid — '
+                f'must be one of: {", ".join(sorted(_VALID_ADMIN_CONDITIONS))}'
+            )
+        elif normalized == 'dedicated' and not (row.get('team') or '').strip():
+            errs.append('admin_condition "dedicated" requires a team value')
 
     lab = (row.get('lab') or '').strip()
     if lab and lab not in valid_labs:

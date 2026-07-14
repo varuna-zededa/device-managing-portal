@@ -4,6 +4,7 @@ import { useQuery, useMutation } from '@tanstack/react-query'
 import { CheckCircle, XCircle, Clock } from 'lucide-react'
 import { getReservationByToken, approveReservation, rejectReservation } from '@/api/reservations'
 import { Button } from '@/components/ui/button'
+import { formatDateTime } from '@/lib/utils'
 
 function apiErrorMessage(err: unknown): string {
   const resp = (err as { response?: { data?: { error?: string; detail?: string } } })?.response
@@ -108,7 +109,7 @@ export default function ConfirmReservationPage() {
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">Expires at</span>
-            <span className="font-medium">{new Date(data.expires_at).toLocaleString()}</span>
+            <span className="font-medium">{formatDateTime(data.expires_at)}</span>
           </div>
         </div>
 

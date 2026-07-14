@@ -106,8 +106,8 @@ def send_nightly_digest():
     if not admin_emails:
         return
 
-    missing_devices = list(Device.objects.filter(condition='missing').select_related('cluster', 'enterprise'))
-    out_of_order_devices = list(Device.objects.filter(condition='out_of_order'))
+    missing_devices = list(Device.objects.filter(sync_condition='missing').select_related('cluster', 'enterprise'))
+    out_of_order_devices = list(Device.objects.filter(admin_condition='out_of_order'))
     problem_enterprises = list(
         Enterprise.objects.filter(last_sync_status__in=['error', 'token_expired']).select_related('cluster')
     )

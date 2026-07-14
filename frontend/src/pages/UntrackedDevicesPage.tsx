@@ -18,13 +18,9 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { useUser } from '@/context/UserContext'
-import { cn } from '@/lib/utils'
+import { cn, formatDateTime } from '@/lib/utils'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-
-function timeStr(dt: string) {
-  return new Date(dt).toLocaleString()
-}
 
 function Dot() {
   return <span className="text-muted-foreground text-base select-none">·</span>
@@ -35,6 +31,14 @@ function formatRunState(raw: string) {
 }
 
 // ── Status badge (matches DeviceTable) ───────────────────────────────────────
+
+const STATUS_PRIORITY: string[] = [
+  'Online', 'Preparing Poweroff', 'Prepared Poweroff',  // Tier 1
+  'Rebooting', 'Booting', 'BaseOS Updating', 'Maintenance',  // Tier 2
+  'Powering Off',  // Tier 3
+  'Offline',       // Tier 4
+  'Suspect',       // Tier 5
+]
 
 const STATUS_BADGE: Record<string, string> = {
   Online:               'bg-badge-online-bg text-badge-online-fg border-badge-online-border',
@@ -100,8 +104,8 @@ function ExpandPanel({ device }: { device: UntrackedDevice }) {
           <div className="bg-card rounded-md border border-border p-4 space-y-4">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-foreground mb-2">Timeline</p>
-              <CopyableField label="First Seen" value={timeStr(device.first_seen_at)} />
-              <CopyableField label="Last Seen" value={timeStr(device.last_seen_at)} />
+              <CopyableField label="First Seen" value={formatDateTime(device.first_seen_at)} />
+              <CopyableField label="Last Seen" value={formatDateTime(device.last_seen_at)} />
             </div>
           </div>
         </div>
@@ -226,7 +230,11 @@ export default function UntrackedDevicesPage() {
               <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <span className="text-foreground">{summary.total} total</span>
                 <Dot /><span>{summary.clusters} cluster{summary.clusters !== 1 ? 's' : ''}</span>
-                {Object.entries(summary.stateCounts).sort().map(([label, count]) => (
+                {Object.entries(summary.stateCounts).sort(([a], [b]) => {
+                    const ai = STATUS_PRIORITY.indexOf(a)
+                    const bi = STATUS_PRIORITY.indexOf(b)
+                    return (ai === -1 ? STATUS_PRIORITY.length : ai) - (bi === -1 ? STATUS_PRIORITY.length : bi)
+                  }).map(([label, count]) => (
                   <span key={label} className="flex items-center gap-1.5">
                     <Dot /><span>{count} {label.toLowerCase()}</span>
                   </span>

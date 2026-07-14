@@ -24,20 +24,22 @@ import { toast } from '@/components/ui/sonner'
 import { useUser } from '@/context/UserContext'
 import { cn } from '@/lib/utils'
 
-const CONDITION_LABELS: Record<string, string> = {
+const ADMIN_CONDITION_LABELS: Record<string, string> = {
   normal: 'Normal',
   out_of_order: 'Out of Order',
-  needs_repair: 'Needs Repair',
   temporarily_leased: 'Temporarily Leased',
   dedicated: 'Dedicated',
-  missing: 'Missing',
 }
 
-const CONDITION_COLORS: Record<string, string> = {
+const ADMIN_CONDITION_COLORS: Record<string, string> = {
   out_of_order: 'text-red-400',
-  needs_repair: 'text-yellow-400',
   temporarily_leased: 'text-violet-400',
   dedicated: 'text-blue-400',
+}
+
+const SYNC_CONDITION_LABELS: Record<string, string> = {
+  missing: 'Missing',
+  needs_recovery: 'Needs Recovery',
 }
 
 const schema = z.object({
@@ -50,13 +52,13 @@ const schema = z.object({
   team: z.string().optional(),
   description: z.string().optional(),
   location_detail: z.string().optional(),
-  condition: z.string().default('normal'),
+  admin_condition: z.string().default('normal'),
   idrac_ip: z.union([z.literal(''), z.string().ip({ message: 'Enter a valid IPv4 or IPv6 address' })]).optional(),
   idrac_username: z.string().optional(),
   idrac_password: z.string().optional(),
   owner_email: z.string().optional(),
 }).refine(
-  (d) => d.condition !== 'dedicated' || !!d.team,
+  (d) => d.admin_condition !== 'dedicated' || !!d.team,
   { message: 'Team is required for dedicated devices', path: ['team'] },
 )
 
@@ -83,7 +85,7 @@ export function DeviceFormModal({ device, open, onOpenChange }: DeviceFormModalP
 
   const labs = choices?.labs ?? []
   const teams = choices?.teams ?? []
-  const conditions = choices?.conditions ?? []
+  const adminConditions = choices?.admin_conditions ?? []
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -97,7 +99,7 @@ export function DeviceFormModal({ device, open, onOpenChange }: DeviceFormModalP
       team: '',
       description: '',
       location_detail: '',
-      condition: 'normal',
+      admin_condition: 'normal',
       idrac_ip: '',
       idrac_username: '',
       idrac_password: '',
@@ -119,7 +121,7 @@ export function DeviceFormModal({ device, open, onOpenChange }: DeviceFormModalP
         team: device?.team ?? '',
         description: device?.description ?? '',
         location_detail: device?.location_detail ?? '',
-        condition: device?.condition ?? 'normal',
+        admin_condition: device?.admin_condition ?? 'normal',
         idrac_ip: device?.idrac_ip ?? '',
         idrac_username: device?.idrac_username ?? '',
         idrac_password: '',
@@ -249,12 +251,16 @@ export function DeviceFormModal({ device, open, onOpenChange }: DeviceFormModalP
                           onValueChange={field.onChange}
                           placeholder="Select cluster..."
                           hintBelow
+                          disabled={isEdit}
                         />
                       </FormControl>
-                      <Button type="button" variant="outline" size="icon" className="shrink-0" aria-label="Add cluster" onClick={() => setAddClusterOpen(true)}>
-                        <Plus className="w-4 h-4" aria-hidden="true" />
-                      </Button>
+                      {!isEdit && (
+                        <Button type="button" variant="outline" size="icon" className="shrink-0" aria-label="Add cluster" onClick={() => setAddClusterOpen(true)}>
+                          <Plus className="w-4 h-4" aria-hidden="true" />
+                        </Button>
+                      )}
                     </div>
+                    {isEdit && <p className="text-xs text-muted-foreground">Managed by sync</p>}
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -267,12 +273,14 @@ export function DeviceFormModal({ device, open, onOpenChange }: DeviceFormModalP
                         className="font-mono"
                         spellCheck={false}
                         autoComplete="off"
+                        disabled={isEdit}
                         onChange={(e) => {
                           clusterNameEditedRef.current = true
                           field.onChange(e)
                         }}
                       />
                     </FormControl>
+                    {isEdit && <p className="text-xs text-muted-foreground">Managed by sync</p>}
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -293,7 +301,7 @@ export function DeviceFormModal({ device, open, onOpenChange }: DeviceFormModalP
                     <FormMessage />
                   </FormItem>
                 )} />
-                <FormField control={form.control} name="condition" render={({ field }) => (
+                <FormField control={form.control} name="admin_condition" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Condition</FormLabel>
                     <Select value={field.value} onValueChange={field.onChange}>
@@ -301,14 +309,23 @@ export function DeviceFormModal({ device, open, onOpenChange }: DeviceFormModalP
                         <SelectTrigger><SelectValue /></SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {conditions.map((c) => (
-                          <SelectItem key={c} value={c} className={cn(CONDITION_COLORS[c])}>
-                            {CONDITION_LABELS[c] ?? c}
+                        {adminConditions.map((c) => (
+                          <SelectItem key={c} value={c} className={cn(ADMIN_CONDITION_COLORS[c])}>
+                            {ADMIN_CONDITION_LABELS[c] ?? c}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                     <FormMessage />
+                    {isEdit && device?.sync_condition && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Sync finding:{' '}
+                        <span className="text-yellow-400 font-medium">
+                          {SYNC_CONDITION_LABELS[device.sync_condition] ?? device.sync_condition}
+                        </span>{' '}
+                        — managed by sync
+                      </p>
+                    )}
                   </FormItem>
                 )} />
               </div>

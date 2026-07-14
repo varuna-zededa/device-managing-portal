@@ -50,8 +50,8 @@ backend/
 ├── apps/clusters/               Cluster model + CRUD
 ├── apps/device_models/          DeviceModel (name + customer_partner_name)
 ├── apps/devices/
-│   ├── models.py                Device, Lab, UntrackedDevice, CONDITION_CHOICES
-│   ├── views.py                 DeviceViewSet; UNAVAILABLE_CONDITIONS; _handle_condition_change; ChoicesView; UntrackedDeviceListView; MoveToInventoryView
+│   ├── models.py                Device, Lab, UntrackedDevice, ADMIN_CONDITION_CHOICES, SYNC_CONDITION_CHOICES
+│   ├── views.py                 DeviceViewSet; _handle_admin_condition_change; ChoicesView; UntrackedDeviceListView; MoveToInventoryView
 │   ├── serializers.py
 │   ├── admin.py                 Device, Lab registered
 │   ├── untracked_urls.py        /api/v1/untracked-devices/ routes
@@ -72,9 +72,9 @@ backend/
 │   ├── models.py                Notification (kind, enterprise FK, title, body, is_read)
 │   └── urls.py                  /api/v1/notifications/ routes
 ├── apps/reservations/
-│   ├── views.py                 reservation flow; _UNAVAILABLE_CONDITIONS (keep in sync with devices/views.py)
+│   ├── views.py                 reservation flow; approve gate: admin_condition=='normal' AND sync_condition is None
 │   └── models.py                ReservationRequest
-├── apps/admin_tools/views.py    ExportView, ImportView, ImportTemplateView, LatencyView, _normalize_condition()
+├── apps/admin_tools/views.py    ExportView, ImportView, ImportTemplateView, LatencyView, _normalize_admin_condition()
 ├── services/zedcloud.py         fetch_device_status(); fetch_enterprise_devices(); SerialMismatchError
 └── utils/
     ├── crypto.py                encrypt(str)->bytes; decrypt(bytes)->str
@@ -126,14 +126,15 @@ device.idrac_password_enc = encrypt(raw_password)
 raw = decrypt(device.idrac_password_enc)
 ```
 
-#### Condition change side-effects (`apps/devices/views.py` → `_handle_condition_change`)
-| New condition | Clears owner | Expires requests | Emails admins |
+#### Admin condition change side-effects (`apps/devices/views.py` → `_handle_admin_condition_change`)
+
+Only `admin_condition` changes trigger side-effects. `sync_condition` is set by the sync engine and has no side-effect logic.
+
+| New `admin_condition` | Clears owner | Expires requests | Emails admins |
 |---|---|---|---|
 | `out_of_order` | yes | yes | yes |
 | `temporarily_leased` | yes | yes | no |
-| `missing` | yes | yes | no |
 | `dedicated` | yes | yes | no (requires `device.team` set) |
-| `needs_repair` | no | no | no |
 | `normal` (clear) | no | no | no |
 
 ### Serializer field validation pattern
@@ -332,13 +333,15 @@ docker logs --follow portal-backend
 ### Choices endpoint (`apps/devices/views.py` → `ChoicesView`)
 ```python
 return Response({
-    'labs':        list(Lab.objects.values_list('name', flat=True)),
-    'teams':       list(Team.objects.values_list('name', flat=True)),
-    'conditions':  [c[0] for c in CONDITION_CHOICES],
-    'enterprises': list(Enterprise.objects.filter(is_active=True).values('id', 'name', cluster_name=F('cluster__name'))),
+    'labs':             list(Lab.objects.values_list('name', flat=True)),
+    'teams':            list(Team.objects.values_list('name', flat=True)),
+    'admin_conditions': [c[0] for c in ADMIN_CONDITION_CHOICES],
+    'sync_conditions':  [c[0] for c in SYNC_CONDITION_CHOICES],
+    'enterprises':      list(Enterprise.objects.filter(is_active=True).values('id', 'name', cluster_name=F('cluster__name'))),
 })
 ```
 Do not hardcode lab, team, or enterprise lists here. The `enterprises` list is used by the Fetch Status dialog dropdown.
+`choices` is cached with `staleTime: Infinity` on the frontend — uses `admin_conditions` and `sync_conditions` keys (no `conditions` key).
 
 ### Migrations
 ```bash
@@ -358,15 +361,15 @@ frontend/src/
 │   ├── client.ts          axios instance; auto-injects X-User-Email from localStorage
 │   ├── devices.ts         device CRUD + reserve/release/status/history
 │   ├── users.ts           user CRUD + exportUsers/importUsers (JSON)
-│   ├── choices.ts         getChoices() → {labs, teams, conditions, enterprises}
+│   ├── choices.ts         getChoices() → {labs, teams, admin_conditions, sync_conditions, enterprises}
 │   ├── enterprises.ts     getClusters/createCluster/updateCluster/deleteCluster; createEnterprise/updateEnterprise/deleteEnterprise/syncEnterprise; ClusterExport/Import
 │   ├── deviceModels.ts    getDeviceModels/createDeviceModel
 │   ├── notifications.ts   getNotifications/markNotificationRead/markAllNotificationsRead
 │   └── untracked.ts       getUntrackedDevices/moveToInventory
 ├── context/UserContext.tsx useUser() → {user, isAdmin}; redirects to /login if no session
 ├── components/
-│   ├── DeviceTable.tsx    CONDITION_STYLES, CONDITION_BADGE_STYLES, sort logic, expand panel
-│   ├── SearchBar.tsx      CONDITION_LABELS; filter order: availability→condition→lab→team
+│   ├── DeviceTable.tsx    ADMIN_CONDITION_STYLES, SYNC_CONDITION_STYLES, ADMIN_CONDITION_BADGE_STYLES, SYNC_CONDITION_BADGE_STYLES, sort logic, expand panel
+│   ├── SearchBar.tsx      ADMIN_CONDITION_LABELS, SYNC_CONDITION_LABELS; filter order: availability→condition→sync status→lab→team
 │   ├── Header.tsx
 │   ├── NotificationPanel.tsx  admin notifications (token_expired/sync_error/name_mismatch/enterprise_inactive); name_mismatch has inline action buttons
 │   ├── DeviceFormModal.tsx
@@ -407,26 +410,35 @@ const mutation = useMutation({
 Cache keys in use: `['devices']`, `['users']`, `['choices']`, `['reservations','pending']`, `['reservations','mine']`, `['notifications']`, `['clusters-enterprises']`, `['untracked-devices']`, `['device-models']`.  
 `choices` uses `staleTime: Infinity` — cache cleared on full page reload.
 
-### Condition constants (both in `DeviceTable.tsx`)
+### Condition constants (`DeviceTable.tsx`)
+
+Two separate sets — admin (user-controlled) and sync (engine-controlled):
+
 ```typescript
-const CONDITION_STYLES: Record<string, string> = {
+// Row border: admin wins over sync; neither if both normal/null
+const ADMIN_CONDITION_STYLES: Record<string, string> = {
   out_of_order:       'border-l-4 border-l-red-500 bg-red-950/10',
-  needs_repair:       'border-l-4 border-l-yellow-400 bg-yellow-950/10',
   temporarily_leased: 'border-l-4 border-l-violet-400 bg-violet-950/10',
   dedicated:          'border-l-4 border-l-blue-400 bg-blue-950/10',
-  missing:            'border-l-4 border-l-orange-400 bg-orange-50/10',
+}
+const SYNC_CONDITION_STYLES: Record<string, string> = {
+  missing:         'border-l-4 border-l-orange-400 bg-orange-50/10',
+  needs_recovery:  'border-l-4 border-l-yellow-400 bg-yellow-950/10',
 }
 
-const CONDITION_BADGE_STYLES: Record<string, string> = {
+// Badges: admin badge shown first; sync badge suppressed when admin_condition='out_of_order'
+const ADMIN_CONDITION_BADGE_STYLES: Record<string, string> = {
   out_of_order:       'bg-red-500/20 text-red-400 border-red-500/30',
-  needs_repair:       'bg-yellow-400/20 text-yellow-400 border-yellow-400/30',
   temporarily_leased: 'bg-violet-400/20 text-violet-400 border-violet-400/30',
   dedicated:          'bg-blue-400/20 text-blue-400 border-blue-400/30',
-  missing:            'bg-orange-400/20 text-orange-400 border-orange-400/30',
+}
+const SYNC_CONDITION_BADGE_STYLES: Record<string, string> = {
+  missing:         'bg-orange-400/20 text-orange-400 border-orange-400/30',
+  needs_recovery:  'bg-yellow-400/20 text-yellow-400 border-yellow-400/30',
 }
 ```
 
-`CONDITION_LABELS` (in `SearchBar.tsx`) maps the same keys to display strings.
+`ADMIN_CONDITION_LABELS` and `SYNC_CONDITION_LABELS` (in `SearchBar.tsx`) map the same keys to display strings.
 
 ### Sort pattern (DeviceTable.tsx)
 ```typescript
@@ -457,16 +469,26 @@ if (!isAdmin) return <Navigate to="/devices" replace />
 
 ## Feature checklists
 
-### New device condition
-- [ ] `apps/devices/models.py` — add `('snake_case', 'Display Name')` to `CONDITION_CHOICES`
-- [ ] `apps/devices/models.py` — add to `is_available` exclusion if it blocks reservation
-- [ ] `apps/devices/views.py` — add to `UNAVAILABLE_CONDITIONS` if it clears owner + blocks reserve
-- [ ] `apps/reservations/views.py` — add to `_UNAVAILABLE_CONDITIONS` (keep in sync)
-- [ ] `apps/devices/views.py` — add branch in `_handle_condition_change()` for side-effects
-- [ ] `frontend/src/components/DeviceTable.tsx` — add to `CONDITION_STYLES`, `CONDITION_BADGE_STYLES`
-- [ ] `frontend/src/components/DeviceTable.tsx` — add to `isUnavailable` if it blocks reserve UI
-- [ ] `frontend/src/components/SearchBar.tsx` — add to `CONDITION_LABELS`
+### New admin condition (user-controlled)
+- [ ] `apps/devices/models.py` — add `('snake_case', 'Display Name')` to `ADMIN_CONDITION_CHOICES`
+- [ ] `apps/devices/models.py` — update `is_available` if the new condition blocks reservation
+- [ ] `apps/devices/views.py` — add branch in `_handle_admin_condition_change()` for side-effects
+- [ ] `apps/reservations/views.py` — update approve gate if the new condition should block reserve
+- [ ] `frontend/src/components/DeviceTable.tsx` — add to `ADMIN_CONDITION_STYLES`, `ADMIN_CONDITION_BADGE_STYLES`
+- [ ] `frontend/src/components/DeviceTable.tsx` — update `isUnavailable` if it blocks reserve UI
+- [ ] `frontend/src/components/SearchBar.tsx` — add to `ADMIN_CONDITION_LABELS`
+- [ ] `frontend/src/components/DeviceFormModal.tsx` — add to `ADMIN_CONDITION_LABELS`, `ADMIN_CONDITION_COLORS`
+- [ ] `apps/admin_tools/views.py` — add to `_VALID_ADMIN_CONDITIONS`
 - [ ] Run `makemigrations` + `migrate`
+
+### New sync condition (sync-engine-controlled)
+- [ ] `apps/devices/models.py` — add `('snake_case', 'Display Name')` to `SYNC_CONDITION_CHOICES`
+- [ ] `apps/enterprises/sync.py` — add logic to set the new value in `sync_all_enterprises()` or `_apply_inventory_candidate()`
+- [ ] `frontend/src/components/DeviceTable.tsx` — add to `SYNC_CONDITION_STYLES`, `SYNC_CONDITION_BADGE_STYLES`
+- [ ] `frontend/src/components/SearchBar.tsx` — add to `SYNC_CONDITION_LABELS`
+- [ ] `frontend/src/components/DeviceFormModal.tsx` — add to `SYNC_CONDITION_LABELS` (read-only hint)
+- [ ] Run `makemigrations` + `migrate`
+- [ ] **Never** add new sync conditions to `DeviceSerializer` writable fields or CSV import
 
 ### Device Purpose
 - Model: `apps/reservations/models.py` → `DevicePurpose` (device FK, author_email, text, created_at)
@@ -511,7 +533,7 @@ if (!isAdmin) return <Navigate to="/devices" replace />
 States not in the map default to tier 99 (lowest priority). Tie-break: earlier `first_seen_at` on `UntrackedDevice` wins.
 
 **New helper functions in `sync.py`:**
-- `_apply_inventory_candidate(candidate, now)` — writes a single resolved candidate dict to a `Device` or `UntrackedDevice` row; handles SUSPECT special case (marks `needs_repair` on `condition='normal'` devices, skips all other field updates)
+- `_apply_inventory_candidate(candidate, now)` — writes a single resolved candidate dict to a `Device` or `UntrackedDevice` row; handles SUSPECT special case (sets `sync_condition='needs_recovery'`, clears enterprise/cluster/cluster_device_name, sets status='Suspect'; for `out_of_order` devices, clears any stale `sync_condition` to `None` instead)
 - `apply_candidates(candidates, now)` — applies a list of candidates directly without cross-enterprise conflict resolution; used by `EnterpriseSyncView.post()` and `EnterpriseDetailView.patch()` (single-enterprise paths)
 
 **Token rotation improvements (`EnterpriseDetailView.patch()` in `views.py`):**

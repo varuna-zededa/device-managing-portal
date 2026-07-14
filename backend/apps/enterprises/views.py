@@ -14,6 +14,7 @@ from apps.notifications.models import Notification
 from services.zedcloud import fetch_enterprise_self, fetch_user_self, ENTERPRISE_STATE_ACTIVE
 from utils.crypto import encrypt
 from utils.permissions import IsAdminPortalUser, get_user_email
+from utils.request_context import set_request_id
 
 from .models import Enterprise
 from .serializers import EnterpriseReadSerializer, EnterpriseUpdateSerializer
@@ -257,6 +258,7 @@ class ClusterImportView(APIView):
         created_enterprises = 0
         updated_enterprises = 0
         skipped_enterprises = 0
+        enterprises_to_sync: list = []
 
         for entry in config:
             cluster_host = (entry.get('cluster_host') or '').strip()
@@ -315,11 +317,12 @@ class ClusterImportView(APIView):
                         existing.name_verified = False  # re-verify against ZedCloud
                         existing.save(update_fields=['bearer_token_enc', 'zcloud_username', 'name_verified'])
                         updated_enterprises += 1
+                        enterprises_to_sync.append(existing)
                     else:
                         skipped_enterprises += 1
                 else:
                     zcloud_username = _fetch_username(cluster.host, bearer_token, ent_name)
-                    Enterprise.objects.create(
+                    new_ent = Enterprise.objects.create(
                         name=ent_name,
                         cluster=cluster,
                         bearer_token_enc=encrypt(bearer_token),
@@ -327,6 +330,7 @@ class ClusterImportView(APIView):
                         # name_verified defaults to False — picked up by post-import verification
                     )
                     created_enterprises += 1
+                    enterprises_to_sync.append(new_ent)
 
         result = {
             'created_clusters': created_clusters,
@@ -339,6 +343,31 @@ class ClusterImportView(APIView):
 
         if created_enterprises > 0 or updated_enterprises > 0:
             threading.Thread(target=verify_enterprise_names, daemon=True).start()
+
+        if enterprises_to_sync:
+            def _import_sync(ents):
+                import uuid
+                set_request_id(f'sync-{uuid.uuid4().hex[:8]}')
+                for ent in ents:
+                    try:
+                        seen, candidates = sync_enterprise(ent)
+                        apply_candidates(candidates, timezone.now())
+                        ent.last_sync_status = 'ok'
+                        ent.last_sync_error = None
+                        logger.info('Post-import sync succeeded for enterprise %s', ent.name)
+                    except httpx.HTTPStatusError as exc:
+                        code = exc.response.status_code
+                        ent.last_sync_status = 'token_expired' if code in (401, 403) else 'error'
+                        ent.last_sync_error = f'HTTP {code}'
+                        logger.warning('Post-import sync HTTP error for enterprise %s: %s', ent.name, exc)
+                    except Exception as exc:
+                        ent.last_sync_status = 'error'
+                        ent.last_sync_error = str(exc)
+                        logger.warning('Post-import sync failed for enterprise %s: %s', ent.name, exc)
+                    finally:
+                        ent.last_sync_at = timezone.now()
+                        ent.save(update_fields=['last_sync_at', 'last_sync_status', 'last_sync_error'])
+            threading.Thread(target=_import_sync, args=(enterprises_to_sync,), daemon=True).start()
 
         if errors:
             result['errors'] = errors

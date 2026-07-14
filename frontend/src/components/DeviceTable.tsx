@@ -4,7 +4,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { releaseDevice, deleteDevice, setDevicePurpose, type Device } from '@/api/devices'
 import { useUser } from '@/context/UserContext'
-import { cn } from '@/lib/utils'
+import { cn, formatDateTime } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -110,20 +110,26 @@ function timeAgo(iso: string | null): string {
 
 // ── Style maps ───────────────────────────────────────────────────────────────
 
-const CONDITION_STYLES: Record<string, string> = {
+const ADMIN_CONDITION_STYLES: Record<string, string> = {
   out_of_order: 'border-l-4 border-l-red-500 bg-red-50/10',
-  needs_repair: 'border-l-4 border-l-yellow-400 bg-yellow-50/10',
   temporarily_leased: 'border-l-4 border-l-violet-400 bg-violet-50/10',
   dedicated: 'border-l-4 border-l-blue-400 bg-blue-50/10',
-  missing: 'border-l-4 border-l-orange-400 bg-orange-50/10',
 }
 
-const CONDITION_BADGE_STYLES: Record<string, string> = {
+const SYNC_CONDITION_STYLES: Record<string, string> = {
+  missing: 'border-l-4 border-l-orange-400 bg-orange-50/10',
+  needs_recovery: 'border-l-4 border-l-yellow-400 bg-yellow-50/10',
+}
+
+const ADMIN_CONDITION_BADGE_STYLES: Record<string, string> = {
   out_of_order: 'bg-red-500/20 text-red-400 border-red-500/30',
-  needs_repair: 'bg-yellow-400/20 text-yellow-400 border-yellow-400/30',
   temporarily_leased: 'bg-violet-400/20 text-violet-400 border-violet-400/30',
   dedicated: 'bg-blue-400/20 text-blue-400 border-blue-400/30',
+}
+
+const SYNC_CONDITION_BADGE_STYLES: Record<string, string> = {
   missing: 'bg-orange-400/20 text-orange-400 border-orange-400/30',
+  needs_recovery: 'bg-yellow-400/20 text-yellow-400 border-yellow-400/30',
 }
 
 const STATUS_BADGE: Record<string, string> = {
@@ -179,7 +185,7 @@ function ExpandPanel({ device }: { device: Device }) {
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-foreground mb-2">ZedCloud Status</p>
               <CopyableField label="EVE Version" value={device.eve_version ?? '—'} mono />
-              <CopyableField label="Last Refreshed" value={device.status_fetched_at ? new Date(device.status_fetched_at).toLocaleString() : '—'} />
+              <CopyableField label="Last Refreshed" value={formatDateTime(device.status_fetched_at)} />
             </div>
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-foreground mb-2">Connectivity</p>
@@ -451,12 +457,20 @@ export function DeviceTable({
       <ResizableTableCell columnId="name" copyValue={device.name}>
         <div className="flex flex-col items-start gap-0.5">
           <span className="font-medium truncate">{device.name}</span>
-          {device.condition !== 'normal' && (
+          {device.admin_condition !== 'normal' && (
             <span className={cn(
               'inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold',
-              CONDITION_BADGE_STYLES[device.condition],
+              ADMIN_CONDITION_BADGE_STYLES[device.admin_condition],
             )}>
-              {device.condition.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+              {device.admin_condition.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
+            </span>
+          )}
+          {device.sync_condition && device.admin_condition !== 'out_of_order' && (
+            <span className={cn(
+              'inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold',
+              SYNC_CONDITION_BADGE_STYLES[device.sync_condition],
+            )}>
+              {device.sync_condition.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
             </span>
           )}
         </div>
@@ -655,10 +669,12 @@ export function DeviceTable({
           <TableBody>
             {sorted.map((device) => {
               const isExpanded = expandedIds.has(device.id)
-              const condClass = CONDITION_STYLES[device.condition] ?? ''
+              const condClass = ADMIN_CONDITION_STYLES[device.admin_condition]
+                ?? SYNC_CONDITION_STYLES[device.sync_condition ?? '']
+                ?? ''
               const isOwner = device.owner_email === currentUser?.email
-              const isUnavailable = ['out_of_order', 'temporarily_leased', 'missing'].includes(device.condition)
-              const isDedicated = device.condition === 'dedicated'
+              const isUnavailable = device.admin_condition !== 'normal' || device.sync_condition !== null
+              const isDedicated = device.admin_condition === 'dedicated'
               const cells = mkColCells(device, isOwner, isUnavailable, isDedicated)
 
               return [
