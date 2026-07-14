@@ -14,6 +14,7 @@ class Enterprise(models.Model):
     )
     bearer_token_enc = models.BinaryField()
     zcloud_id = models.CharField(max_length=100, blank=True, default='')
+    zcloud_username = models.CharField(max_length=254, blank=True, default='')
     is_active = models.BooleanField(default=True)
     name_verified = models.BooleanField(default=False)
     last_sync_at = models.DateTimeField(null=True, blank=True)
