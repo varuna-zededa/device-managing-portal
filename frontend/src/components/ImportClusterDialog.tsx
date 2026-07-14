@@ -85,7 +85,7 @@ export function ImportClusterDialog({ open, onOpenChange }: ImportClusterDialogP
             <pre className="text-xs bg-muted rounded p-3 overflow-x-auto font-mono leading-relaxed">{SAMPLE_JSON}</pre>
           </div>
           <div>
-            <label className="text-sm font-medium block mb-1">JSON File</label>
+            <label className="text-sm font-medium block mb-1">JSON File <span className="text-xs font-normal text-muted-foreground">(max 20 enterprises)</span></label>
             <div className="flex items-center gap-3">
               <Button variant="outline" size="sm" onClick={() => document.getElementById('import-file-input')?.click()}>
                 Choose File
