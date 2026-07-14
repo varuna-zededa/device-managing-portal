@@ -1,5 +1,6 @@
 import logging
 import re
+import uuid
 
 import httpx
 from django.utils import timezone
@@ -7,6 +8,7 @@ from django.utils import timezone
 from services.zedcloud import STATUS_MAP, ENTERPRISE_STATE_ACTIVE, fetch_enterprise_devices, fetch_enterprise_self, fetch_user_self
 from utils.crypto import decrypt
 from utils.email import send_token_expiry_alert
+from utils.request_context import set_request_id
 
 logger = logging.getLogger(__name__)
 
@@ -333,6 +335,7 @@ def apply_candidates(candidates: list[dict], now) -> None:
 
 
 def sync_all_enterprises() -> None:
+    set_request_id(f'sync-{uuid.uuid4().hex[:8]}')
     from apps.devices.models import Device  # noqa: PLC0415
     from apps.enterprises.models import Enterprise  # noqa: PLC0415
     from apps.notifications.models import Notification  # noqa: PLC0415
@@ -442,6 +445,7 @@ def sync_all_enterprises() -> None:
 
 def verify_enterprise_names() -> None:
     """Post-import trigger: for any enterprise not yet name-verified, call ZedCloud and notify on mismatch."""
+    set_request_id(f'verify-{uuid.uuid4().hex[:8]}')
     import json
     from apps.notifications.models import Notification
     from .models import Enterprise
