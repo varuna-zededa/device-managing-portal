@@ -23,6 +23,7 @@ interface ResizableTableContextValue {
   endKeyboardResize: () => void;
   registerColumn: (columnId: string, config?: Omit<ColumnConfig, "id">) => void;
   autoFitColumns: () => void;
+  autoFitColumn: (columnId: string) => void;
 }
 
 const ResizableTableContext = React.createContext<ResizableTableContextValue | null>(null);
@@ -93,6 +94,27 @@ const ResizableTable = React.forwardRef<HTMLTableElement, ResizableTableProps>(
       keyboardResizingRef.current = false;
     }, []);
 
+    const autoFitColumn = React.useCallback((columnId: string) => {
+      if (!containerRef.current) return;
+      const cells = containerRef.current.querySelectorAll<HTMLElement>(`[data-column-id="${columnId}"]`);
+      if (cells.length === 0) return;
+
+      let maxContentWidth = 0;
+      cells.forEach((cell) => {
+        const truncSpan = cell.querySelector<HTMLElement>('.truncate');
+        if (truncSpan) {
+          maxContentWidth = Math.max(maxContentWidth, truncSpan.scrollWidth);
+        }
+      });
+
+      if (maxContentWidth === 0) return;
+
+      const col = columns.find((c) => c.id === columnId);
+      const minWidth = col?.minWidth ?? 30;
+      // 32px = px-4 padding (16px each side); 8px buffer for copy button / sort icon
+      setColumnWidths((prev) => ({ ...prev, [columnId]: Math.max(minWidth, maxContentWidth + 40) }));
+    }, [columns, setColumnWidths]);
+
     const autoFitColumns = React.useCallback(() => {
       if (!containerRef.current || isResizing || keyboardResizingRef.current) return;
       const totalRegistered = columnOrder.length;
@@ -149,7 +171,7 @@ const ResizableTable = React.forwardRef<HTMLTableElement, ResizableTableProps>(
 
     return (
       <ResizableTableContext.Provider
-        value={{ columnWidths, startResize, setColumnWidth, beginKeyboardResize, endKeyboardResize, registerColumn, autoFitColumns }}
+        value={{ columnWidths, startResize, setColumnWidth, beginKeyboardResize, endKeyboardResize, registerColumn, autoFitColumns, autoFitColumn }}
       >
         <div ref={containerRef} className="relative w-full overflow-x-auto">
           <table
@@ -189,7 +211,7 @@ function SortIcon({ sortDirection, onSort }: { sortDirection?: "asc" | "desc" | 
 
 const ResizableTableHead = React.forwardRef<HTMLTableCellElement, ResizableTableHeadProps>(
   ({ className, columnId, minWidth = 60, defaultWidth = 150, isLast = false, tooltipContent, enableTooltip = true, sortDirection, onSort, sortLeading, draggable, children, onClick, ...props }, ref) => {
-    const { columnWidths, startResize, registerColumn } = useResizableTable();
+    const { columnWidths, startResize, registerColumn, autoFitColumn } = useResizableTable();
 
     React.useEffect(() => {
       registerColumn(columnId, { minWidth, defaultWidth });
@@ -202,6 +224,7 @@ const ResizableTableHead = React.forwardRef<HTMLTableCellElement, ResizableTable
         ref={ref}
         scope="col"
         draggable={draggable}
+        data-column-id={columnId}
         className={cn(
           "relative h-12 px-4 text-left align-middle font-medium text-muted-foreground select-none",
           onSort && "cursor-pointer hover:text-foreground",
@@ -239,6 +262,15 @@ const ResizableTableHead = React.forwardRef<HTMLTableCellElement, ResizableTable
               e.preventDefault();
               e.stopPropagation();
               startResize(columnId, e.clientX);
+            }}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+            onDoubleClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              autoFitColumn(columnId);
             }}
           />
         )}
@@ -282,6 +314,7 @@ const ResizableTableCell = React.forwardRef<HTMLTableCellElement, ResizableTable
     return (
       <td
         ref={ref}
+        data-column-id={columnId}
         className={cn("p-4 align-middle [&:has([role=checkbox])]:pr-0 group/cell", className)}
         style={{ overflow: "hidden", maxWidth: 0 }}
         {...props}
