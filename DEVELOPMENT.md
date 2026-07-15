@@ -616,6 +616,7 @@ No code changes. Django admin → Labs (or Teams) → Add.
 1. Add function to `utils/email.py` following existing pattern
 2. Call from view with `fail_silently=False` + catch + `logger.warning()`
 3. No-op if `settings.EMAIL_HOST` is blank — no special handling needed
+4. All email links use `settings.PORTAL_BASE_URL` (via `utils/email.py`) — set `PORTAL_BASE_URL=http://<hostname>` in `.env` for production deployments; defaults to `http://localhost:80`
 
 ### New write endpoint (validation checklist)
 - [ ] Declare `permission_classes` explicitly on every view — omitting them makes the endpoint public
