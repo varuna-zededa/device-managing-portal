@@ -1,5 +1,6 @@
 import logging
 import re
+import threading
 import uuid
 
 import httpx
@@ -12,6 +13,13 @@ from utils.email import send_token_expiry_alert
 from utils.request_context import set_request_id
 
 logger = logging.getLogger(__name__)
+
+_sync_lock = threading.Lock()
+
+
+def is_sync_running() -> bool:
+    return _sync_lock.locked()
+
 
 # ── Serial / model filters ────────────────────────────────────────────────────
 
@@ -347,6 +355,16 @@ def apply_candidates(candidates: list[dict], now) -> None:
 
 
 def sync_all_enterprises() -> None:
+    if not _sync_lock.acquire(blocking=False):
+        logger.info('sync_all_enterprises already running — skipping')
+        return
+    try:
+        _sync_all_enterprises_inner()
+    finally:
+        _sync_lock.release()
+
+
+def _sync_all_enterprises_inner() -> None:
     set_request_id(f'sync-{uuid.uuid4().hex[:8]}')
     from apps.devices.models import Device  # noqa: PLC0415
     from apps.enterprises.models import Enterprise  # noqa: PLC0415
@@ -478,6 +496,8 @@ def sync_all_enterprises() -> None:
     ).update(sync_condition='missing', updated_at=now)
 
     logger.info('sync_all_enterprises complete. Seen serials: %d', len(all_seen_serials))
+    from apps.enterprises.models import PortalSettings  # noqa: PLC0415
+    PortalSettings.objects.filter(pk=1).update(last_sync_at=now)
 
 
 def verify_enterprise_names() -> None:

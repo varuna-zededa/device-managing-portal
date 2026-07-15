@@ -79,6 +79,9 @@ export async function importClusters(config: unknown[], onConflict: 'overwrite' 
 
 export interface SyncInterval {
   sync_interval_minutes: number
+  last_sync_at: string | null
+  next_sync_at: string | null
+  sync_running: boolean
 }
 
 export async function getSyncInterval(): Promise<SyncInterval> {
@@ -89,4 +92,8 @@ export async function getSyncInterval(): Promise<SyncInterval> {
 export async function updateSyncInterval(minutes: number): Promise<SyncInterval> {
   const res = await client.patch('/enterprises/sync-interval/', { sync_interval_minutes: minutes })
   return res.data
+}
+
+export async function syncAllEnterprises(): Promise<void> {
+  await client.post('/enterprises/sync-all/')
 }

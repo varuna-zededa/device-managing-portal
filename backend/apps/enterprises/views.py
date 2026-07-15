@@ -13,13 +13,13 @@ from apps.clusters.models import Cluster
 from apps.notifications.models import Notification
 from services.zedcloud import fetch_enterprise_self, fetch_user_self, ENTERPRISE_STATE_ACTIVE
 from utils.crypto import encrypt
-from utils.permissions import IsAdminPortalUser, get_user_email
+from utils.permissions import IsAdminPortalUser, IsPortalUser, get_user_email, is_admin
 from utils.request_context import set_request_id
 
 from .apps import get_scheduler
 from .models import Enterprise, PortalSettings
 from .serializers import EnterpriseReadSerializer, EnterpriseUpdateSerializer
-from .sync import apply_candidates, sync_enterprise, verify_enterprise_names, _emit_token_expired
+from .sync import apply_candidates, is_sync_running, sync_all_enterprises, sync_enterprise, verify_enterprise_names, _emit_token_expired
 
 logger = logging.getLogger(__name__)
 
@@ -44,13 +44,30 @@ def _fetch_username(host: str, bearer_token: str, enterprise_name: str) -> str:
 
 
 class SyncIntervalView(APIView):
-    permission_classes = [IsAdminPortalUser]
+    permission_classes = [IsPortalUser]
+
+    def _next_sync_at(self):
+        scheduler = get_scheduler()
+        if not scheduler:
+            return None
+        job = scheduler.get_job('sync_enterprises')
+        if not job or not job.next_run_time:
+            return None
+        return job.next_run_time.isoformat()
 
     def get(self, request):
         settings = PortalSettings.get()
-        return Response({'sync_interval_minutes': settings.sync_interval_minutes})
+        return Response({
+            'sync_interval_minutes': settings.sync_interval_minutes,
+            'last_sync_at': settings.last_sync_at.isoformat() if settings.last_sync_at else None,
+            'next_sync_at': self._next_sync_at(),
+            'sync_running': is_sync_running(),
+        })
 
     def patch(self, request):
+        if not is_admin(get_user_email(request)):
+            return Response({'error': 'Admin required'}, status=status.HTTP_403_FORBIDDEN)
+
         value = request.data.get('sync_interval_minutes')
         if not isinstance(value, int) or value < 1:
             return Response(
@@ -68,7 +85,20 @@ class SyncIntervalView(APIView):
             scheduler.reschedule_job('sync_enterprises', trigger=IntervalTrigger(minutes=value))
 
         logger.info('Sync interval updated to %d minutes by %s', value, get_user_email(request))
-        return Response({'sync_interval_minutes': value})
+        return Response({
+            'sync_interval_minutes': value,
+            'next_sync_at': self._next_sync_at(),
+            'sync_running': is_sync_running(),
+        })
+
+
+class SyncAllEnterprisesView(APIView):
+    permission_classes = [IsPortalUser]
+
+    def post(self, request):
+        logger.info('Manual sync-all triggered by %s', get_user_email(request))
+        threading.Thread(target=sync_all_enterprises, daemon=True).start()
+        return Response({'status': 'sync started'})
 
 
 class EnterpriseDetailView(APIView):
