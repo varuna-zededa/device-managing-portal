@@ -36,7 +36,7 @@
     "pk": 5,
     "fields": {
       "name": "thor",
-      "host": "zedcontrol.thor.zededa.net"
+      "host": "zedcontrol.thor.zededa.dev"
     }
   },
   {
