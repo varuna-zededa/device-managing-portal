@@ -1,6 +1,3 @@
-import threading
-import uuid
-
 import httpx
 from django.db.models import Count
 from django.utils import timezone
@@ -11,11 +8,9 @@ from .models import Cluster
 from .serializers import ClusterSerializer
 from apps.enterprises.models import Enterprise
 from apps.enterprises.serializers import EnterpriseCreateSerializer, EnterpriseReadSerializer
-from apps.enterprises.sync import apply_candidates, sync_enterprise
 from services.zedcloud import fetch_enterprise_self, fetch_user_self, ENTERPRISE_STATE_ACTIVE
 from utils.crypto import encrypt
 from utils.permissions import IsPortalUser, IsAdminPortalUser, get_user_email
-from utils.request_context import set_request_id
 
 import logging
 logger = logging.getLogger(__name__)
@@ -162,30 +157,4 @@ class ClusterEnterpriseListCreateView(APIView):
             name_verified=True,
         )
         logger.info('Enterprise %s created on cluster %s by %s', enterprise.name, cluster.name, get_user_email(request))
-
-        def _initial_sync():
-            set_request_id(f'sync-{uuid.uuid4().hex[:8]}')
-            try:
-                seen, candidates = sync_enterprise(enterprise)
-                apply_candidates(candidates, timezone.now())
-                enterprise.last_sync_status = 'ok'
-                enterprise.last_sync_error = None
-                enterprise.last_sync_error_code = None
-                logger.info('Initial sync succeeded for enterprise %s', enterprise.name)
-            except httpx.HTTPStatusError as exc:
-                code = exc.response.status_code
-                enterprise.last_sync_status = 'token_expired' if code in (401, 403) else 'error'
-                enterprise.last_sync_error = 'Unauthorized — token may be expired or revoked' if code in (401, 403) else 'ZedCloud API request failed'
-                enterprise.last_sync_error_code = code
-                logger.warning('Initial sync HTTP error for enterprise %s: %s', enterprise.name, exc)
-            except Exception as exc:
-                enterprise.last_sync_status = 'error'
-                enterprise.last_sync_error = str(exc)
-                enterprise.last_sync_error_code = None
-                logger.warning('Initial sync failed for enterprise %s: %s', enterprise.name, exc)
-            finally:
-                enterprise.last_sync_at = timezone.now()
-                enterprise.save(update_fields=['last_sync_at', 'last_sync_status', 'last_sync_error', 'last_sync_error_code'])
-
-        threading.Thread(target=_initial_sync, daemon=True).start()
         return Response(EnterpriseReadSerializer(enterprise).data, status=status.HTTP_201_CREATED)

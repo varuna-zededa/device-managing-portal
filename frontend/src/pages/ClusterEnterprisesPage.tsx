@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   getClusters, createCluster, updateCluster, deleteCluster,
-  createEnterprise, updateEnterprise, deleteEnterprise, syncEnterprise, exportClusters,
+  createEnterprise, updateEnterprise, deleteEnterprise, exportClusters,
   getSyncInterval, updateSyncInterval, syncAllEnterprises,
   type ClusterWithEnterprises, type Enterprise,
 } from '@/api/enterprises'
@@ -119,7 +119,7 @@ export default function ClusterEnterprisesPage() {
       qc.invalidateQueries({ queryKey: ['clusters-enterprises'] })
       setAddingEnterpriseFor(null)
       setNewEntToken('')
-      toast.success('Enterprise added. Device sync started.')
+      toast.success('Enterprise added.')
     },
     onError: (e: any) => toast.error(e?.response?.data?.bearer_token ?? e?.response?.data?.error ?? 'Failed'),
   })
@@ -134,12 +134,6 @@ export default function ClusterEnterprisesPage() {
     mutationFn: (id: number) => deleteEnterprise(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['clusters-enterprises'] }),
     onError: () => toast.error('Failed to delete enterprise'),
-  })
-
-  const syncEntMut = useMutation({
-    mutationFn: (id: number) => syncEnterprise(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['clusters-enterprises'] }); toast.success('Sync triggered') },
-    onError: () => toast.error('Sync failed'),
   })
 
   async function handleExport() {
@@ -315,9 +309,6 @@ export default function ClusterEnterprisesPage() {
                           </div>
                           {isAdmin && (
                             <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                              <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => syncEntMut.mutate(ent.id)} disabled={syncEntMut.isPending}>
-                                <RefreshCw className="w-3 h-3" />
-                              </Button>
                               <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => { setEditingEnterprise(ent); setEditEntName(ent.name); setEditEntToken('') }}>
                                 <Pencil className="w-3 h-3" />
                               </Button>
