@@ -377,32 +377,36 @@ def sync_all_enterprises() -> None:
                 exclude_from_missing.append(enterprise.pk)
             enterprise.last_sync_status = 'ok'
             enterprise.last_sync_error = None
+            enterprise.last_sync_error_code = None
             Notification.objects.filter(kind='token_expired', enterprise=enterprise).delete()
             sync_ok = True
         except TokenDecryptError as exc:
             enterprise.last_sync_status = 'error'
             enterprise.last_sync_error = 'Bearer token cannot be decrypted — re-enter it'
+            enterprise.last_sync_error_code = None
             logger.warning('Cannot decrypt token for enterprise %s: %s', enterprise.name, exc)
         except httpx.HTTPStatusError as exc:
             code = exc.response.status_code
+            enterprise.last_sync_error_code = code
             if code in (401, 403):
                 enterprise.last_sync_status = 'token_expired'
-                enterprise.last_sync_error = f'HTTP {code}'
+                enterprise.last_sync_error = 'Unauthorized — token may be expired or revoked'
                 # Dedup: one notification per (kind, enterprise) pair.
                 _emit_token_expired(enterprise)
             else:
                 enterprise.last_sync_status = 'error'
-                enterprise.last_sync_error = f'HTTP {code}'
+                enterprise.last_sync_error = 'ZedCloud API request failed'
             logger.warning('ZedCloud HTTP %s for enterprise %s', code, enterprise.name)
             exclude_from_missing.append(enterprise.pk)
         except Exception as exc:
             enterprise.last_sync_status = 'error'
             enterprise.last_sync_error = str(exc)
+            enterprise.last_sync_error_code = None
             logger.exception('Sync failed for enterprise %s', enterprise.name)
             exclude_from_missing.append(enterprise.pk)
         finally:
             enterprise.last_sync_at = timezone.now()
-            enterprise.save(update_fields=['last_sync_at', 'last_sync_status', 'last_sync_error'])
+            enterprise.save(update_fields=['last_sync_at', 'last_sync_status', 'last_sync_error', 'last_sync_error_code'])
 
         if not sync_ok:
             continue

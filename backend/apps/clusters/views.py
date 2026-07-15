@@ -170,19 +170,22 @@ class ClusterEnterpriseListCreateView(APIView):
                 apply_candidates(candidates, timezone.now())
                 enterprise.last_sync_status = 'ok'
                 enterprise.last_sync_error = None
+                enterprise.last_sync_error_code = None
                 logger.info('Initial sync succeeded for enterprise %s', enterprise.name)
             except httpx.HTTPStatusError as exc:
                 code = exc.response.status_code
                 enterprise.last_sync_status = 'token_expired' if code in (401, 403) else 'error'
-                enterprise.last_sync_error = f'HTTP {code}'
+                enterprise.last_sync_error = 'Unauthorized — token may be expired or revoked' if code in (401, 403) else 'ZedCloud API request failed'
+                enterprise.last_sync_error_code = code
                 logger.warning('Initial sync HTTP error for enterprise %s: %s', enterprise.name, exc)
             except Exception as exc:
                 enterprise.last_sync_status = 'error'
                 enterprise.last_sync_error = str(exc)
+                enterprise.last_sync_error_code = None
                 logger.warning('Initial sync failed for enterprise %s: %s', enterprise.name, exc)
             finally:
                 enterprise.last_sync_at = timezone.now()
-                enterprise.save(update_fields=['last_sync_at', 'last_sync_status', 'last_sync_error'])
+                enterprise.save(update_fields=['last_sync_at', 'last_sync_status', 'last_sync_error', 'last_sync_error_code'])
 
         threading.Thread(target=_initial_sync, daemon=True).start()
         return Response(EnterpriseReadSerializer(enterprise).data, status=status.HTTP_201_CREATED)
