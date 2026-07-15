@@ -139,10 +139,14 @@ const ResizableTable = React.forwardRef<HTMLTableElement, ResizableTableProps>(
         const c = columns.find((col) => col.id === id);
         return sum + (c?.minWidth ?? 30);
       }, 0);
-      const cappedWidth = Math.min(desiredWidth, remaining - otherMinTotal);
+      // Cap to available space, but never below the column's own minWidth.
+      const cappedWidth = Math.max(minWidth, Math.min(desiredWidth, remaining - otherMinTotal));
       const availableForOthers = remaining - cappedWidth;
       const otherCurrentTotal = otherCols.reduce((sum, id) => sum + (columnWidths[id] ?? 150), 0);
-      const otherScale = otherCurrentTotal > 0 ? availableForOthers / otherCurrentTotal : 1;
+      // Clamp scale to [0, 1] — never let other columns grow beyond their current size.
+      const otherScale = otherCurrentTotal > 0
+        ? Math.min(1, availableForOthers / otherCurrentTotal)
+        : 1;
 
       setColumnWidths((prev) => {
         const newWidths: Record<string, number> = { ...prev, [columnId]: cappedWidth };
