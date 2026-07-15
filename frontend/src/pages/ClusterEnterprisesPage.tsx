@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   getClusters, createCluster, updateCluster, deleteCluster,
   createEnterprise, updateEnterprise, deleteEnterprise, syncEnterprise, exportClusters,
-  getSyncInterval, updateSyncInterval,
+  getSyncInterval, updateSyncInterval, syncAllEnterprises,
   type ClusterWithEnterprises, type Enterprise,
 } from '@/api/enterprises'
 import { Header } from '@/components/Header'
@@ -17,6 +17,16 @@ import { FloatingAddButton } from '@/components/FloatingAddButton'
 import { toast } from '@/components/ui/sonner'
 import { Plus, Download, Upload, RefreshCw, Pencil, Trash2, ChevronDown, ChevronRight } from 'lucide-react'
 import { formatDateTime } from '@/lib/utils'
+
+function timeAgo(iso: string): string {
+  const secs = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
+  if (secs < 60) return 'just now'
+  const mins = Math.floor(secs / 60)
+  if (mins < 60) return `${mins} min ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  return `${Math.floor(hrs / 24)}d ago`
+}
 
 function syncBadge(status: Enterprise['last_sync_status']) {
   if (!status) return null
@@ -55,10 +65,10 @@ export default function ClusterEnterprisesPage() {
     queryFn: getClusters,
   })
 
-  const { data: intervalData } = useQuery({
+  const { data: intervalData, refetch: refetchInterval } = useQuery({
     queryKey: ['sync-interval'],
     queryFn: getSyncInterval,
-    enabled: isAdmin,
+    refetchInterval: (query) => query.state.data?.sync_running ? 3_000 : 60_000,
   })
 
   useEffect(() => {
@@ -76,6 +86,12 @@ export default function ClusterEnterprisesPage() {
       toast.success('Sync interval updated')
     },
     onError: () => toast.error('Failed to update sync interval'),
+  })
+
+  const syncAllMut = useMutation({
+    mutationFn: syncAllEnterprises,
+    onSuccess: () => { refetchInterval(); toast.success('Sync started for all enterprises') },
+    onError: () => toast.error('Failed to trigger sync'),
   })
 
   useEffect(() => {
@@ -153,61 +169,85 @@ export default function ClusterEnterprisesPage() {
         </div>
 
         <div className="px-4 py-4 space-y-3">
-          {isAdmin && (
-            <div className="flex items-center gap-3 border border-border/30 rounded px-4 py-3 bg-muted/20">
-              <span className="text-sm font-medium shrink-0">Auto-sync interval</span>
-              {editingInterval ? (
-                <>
-                  <Input
-                    type="number"
-                    min={1}
-                    className="h-7 text-xs w-24"
-                    value={syncIntervalDraft}
-                    onChange={(e) => setSyncIntervalDraft(e.target.value)}
-                    autoFocus
-                  />
-                  <span className="text-xs text-muted-foreground">minutes</span>
-                  <Button
-                    size="sm"
-                    className="h-7 text-xs"
-                    disabled={!syncIntervalDraft || updateIntervalMut.isPending}
-                    onClick={() => {
-                      const v = parseInt(syncIntervalDraft, 10)
-                      if (v > 0) updateIntervalMut.mutate(v)
-                    }}
-                  >
-                    {updateIntervalMut.isPending ? 'Saving…' : 'Save'}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 text-xs"
-                    onClick={() => {
-                      setSyncIntervalDraft(String(intervalData?.sync_interval_minutes ?? ''))
-                      setEditingInterval(false)
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <span className="text-sm">{intervalData?.sync_interval_minutes ?? '—'} minutes</span>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 text-xs"
-                    onClick={() => {
-                      setSyncIntervalDraft(String(intervalData?.sync_interval_minutes ?? ''))
-                      setEditingInterval(true)
-                    }}
-                  >
-                    <Pencil className="w-3 h-3 mr-1" />Edit
-                  </Button>
-                </>
-              )}
-            </div>
-          )}
+          {(() => {
+            const nextSyncMins = intervalData?.next_sync_at
+              ? Math.max(0, Math.round((new Date(intervalData.next_sync_at).getTime() - Date.now()) / 60_000))
+              : null
+            return (
+              <div className="flex items-center gap-3 border border-border/30 rounded px-4 py-3 bg-muted/20">
+                <span className="text-sm font-medium shrink-0">Auto-sync interval</span>
+                {isAdmin && editingInterval ? (
+                  <>
+                    <Input
+                      type="number"
+                      min={1}
+                      className="h-7 text-xs w-24"
+                      value={syncIntervalDraft}
+                      onChange={(e) => setSyncIntervalDraft(e.target.value)}
+                      autoFocus
+                    />
+                    <span className="text-xs text-muted-foreground">minutes</span>
+                    <Button
+                      size="sm"
+                      className="h-7 text-xs"
+                      disabled={!syncIntervalDraft || updateIntervalMut.isPending}
+                      onClick={() => {
+                        const v = parseInt(syncIntervalDraft, 10)
+                        if (v > 0) updateIntervalMut.mutate(v)
+                      }}
+                    >
+                      {updateIntervalMut.isPending ? 'Saving…' : 'Save'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                      onClick={() => {
+                        setSyncIntervalDraft(String(intervalData?.sync_interval_minutes ?? ''))
+                        setEditingInterval(false)
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-sm">{intervalData?.sync_interval_minutes ?? '—'} minutes</span>
+                    {isAdmin && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs"
+                        onClick={() => {
+                          setSyncIntervalDraft(String(intervalData?.sync_interval_minutes ?? ''))
+                          setEditingInterval(true)
+                        }}
+                      >
+                        <Pencil className="w-3 h-3 mr-1" />Edit
+                      </Button>
+                    )}
+                  </>
+                )}
+                <span className="text-xs text-muted-foreground ml-1">
+                  {intervalData?.last_sync_at
+                    ? `Last synced ${timeAgo(intervalData.last_sync_at)}`
+                    : 'Never synced'}
+                  {nextSyncMins !== null && ` · Next in ${nextSyncMins} min`}
+                </span>
+                <div className="w-px h-4 bg-border/40 mx-1 shrink-0" />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs"
+                  disabled={syncAllMut.isPending || !!intervalData?.sync_running}
+                  onClick={() => syncAllMut.mutate()}
+                >
+                  <RefreshCw className={`w-3 h-3 mr-1 ${intervalData?.sync_running ? 'animate-spin' : ''}`} />
+                  {intervalData?.sync_running ? 'Syncing…' : 'Sync Now'}
+                </Button>
+              </div>
+            )
+          })()}
 
           {isAdmin && addingCluster && (
             <div className="border rounded p-4 space-y-3 bg-muted/30">
@@ -256,7 +296,7 @@ export default function ClusterEnterprisesPage() {
                           <div className="min-w-0">
                             <p className="text-sm font-medium truncate">
                               {ent.name}
-                              {ent.zcloud_username && (
+                              {isAdmin && ent.zcloud_username && (
                                 <span className="font-normal text-muted-foreground"> — {ent.zcloud_username}</span>
                               )}
                             </p>
