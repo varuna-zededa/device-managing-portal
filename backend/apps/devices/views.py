@@ -1,8 +1,12 @@
+import csv
+import io
+import json
 import logging
 import secrets
 from datetime import timedelta
 
 from django.db import transaction
+from django.http import HttpResponse
 from django.utils import timezone
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -17,6 +21,7 @@ from apps.device_models.models import DeviceModel
 from apps.reservations.models import ReservationRequest, DevicePurpose, OwnershipHistory
 from apps.reservations.serializers import DevicePurposeSerializer, OwnershipHistorySerializer
 from apps.users.models import Team, PortalUser
+from apps.notifications.models import Notification
 from utils.crypto import encrypt, decrypt
 from utils import email as email_utils
 from utils.permissions import get_user_email, is_admin, IsPortalUser, IsAdminPortalUser
@@ -282,6 +287,15 @@ class DeviceForceAssignView(APIView):
         displaced_owner = device.owner_email
         overridden_emails = []
 
+        assignee_name = assignee_email
+        try:
+            u = PortalUser.objects.get(email=assignee_email)
+            assignee_name = u.name
+        except PortalUser.DoesNotExist:
+            pass
+        except Exception as e:
+            logger.warning('PortalUser lookup for assignee %s: %s', assignee_email, e)
+
         with transaction.atomic():
             device.owner_email = assignee_email
             device.reserved_at = timezone.now()
@@ -298,19 +312,19 @@ class DeviceForceAssignView(APIView):
             overridden_emails = [r.requester_email for r in pending if r.requester_email != assignee_email]
             ReservationRequest.objects.filter(device=device, status='pending').update(status='expired')
 
+            if displaced_owner and displaced_owner != assignee_email:
+                Notification.objects.create(
+                    kind='force_assigned',
+                    recipient_email=displaced_owner,
+                    title=f'Device {device.name} was reassigned',
+                    body=f'An admin assigned this device to {assignee_name}.',
+                )
+
         logger.info('Device %s force-assigned to %s by %s (displaced: %s)', device.name, assignee_email, user_email, displaced_owner or 'none')
         for req_email in overridden_emails:
             email_utils.send_reservation_overridden(device, req_email)
 
         if displaced_owner and displaced_owner != assignee_email:
-            assignee_name = assignee_email
-            try:
-                u = PortalUser.objects.get(email=assignee_email)
-                assignee_name = u.name
-            except PortalUser.DoesNotExist:
-                pass
-            except Exception as e:
-                logger.warning('PortalUser lookup for assignee %s: %s', assignee_email, e)
             email_utils.send_force_assign_notice(device, displaced_owner, assignee_name)
 
         return Response(DeviceSerializer(device).data)
@@ -559,6 +573,64 @@ class UntrackedDeviceListView(APIView):
             qs = qs.filter(serial_number__icontains=serial)
         serializer = UntrackedDeviceSerializer(qs[:200], many=True)
         return Response(serializer.data)
+
+
+_UNTRACKED_EXPORT_HEADERS = [
+    'name', 'serial_number', 'model', 'cluster', 'cluster_device_name',
+    'team', 'lab', 'location_detail', 'admin_condition', 'description',
+    'idrac_ip', 'idrac_username', 'owner_email',
+]
+
+
+class UntrackedDeviceExportView(APIView):
+    permission_classes = [IsAdminPortalUser]
+
+    def get(self, request):
+        fmt = request.query_params.get('fmt', 'csv').lower()
+        qs = (
+            UntrackedDevice.objects
+            .filter(run_state='RUN_STATE_ONLINE')
+            .select_related('enterprise__cluster')
+            .order_by('name')
+        )
+        logger.info('Untracked online device export (%s) by %s', fmt, get_user_email(request))
+        ts = timezone.now().strftime('%Y%m%d_%H%M%S')
+        filename_base = f'holocron_online_untracked_{ts}'
+
+        rows = [
+            {
+                'name': d.name,
+                'serial_number': d.serial_number,
+                'model': d.model or '',
+                'cluster': d.enterprise.cluster.name,
+                'cluster_device_name': d.name,
+                'team': '',
+                'lab': '',
+                'location_detail': '',
+                'admin_condition': 'normal',
+                'description': '',
+                'idrac_ip': '',
+                'idrac_username': '',
+                'owner_email': '',
+            }
+            for d in qs
+        ]
+
+        if fmt == 'json':
+            resp = HttpResponse(
+                json.dumps(rows, indent=2),
+                content_type='application/json',
+            )
+            resp['Content-Disposition'] = f'attachment; filename="{filename_base}.json"'
+            return resp
+
+        output = io.StringIO()
+        writer = csv.DictWriter(output, fieldnames=_UNTRACKED_EXPORT_HEADERS)
+        writer.writeheader()
+        writer.writerows(rows)
+        resp = HttpResponse(output.getvalue(), content_type='text/csv')
+        resp['Content-Disposition'] = f'attachment; filename="{filename_base}.csv"'
+        return resp
 
 
 class MoveToInventoryView(APIView):

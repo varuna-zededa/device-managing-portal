@@ -12,6 +12,7 @@ export interface Enterprise {
   last_sync_at: string | null
   last_sync_status: 'ok' | 'error' | 'token_expired' | null
   last_sync_error: string | null
+  last_sync_error_code: number | null
 }
 
 export interface ClusterWithEnterprises {
@@ -74,4 +75,25 @@ export async function exportClusters(): Promise<Blob> {
 export async function importClusters(config: unknown[], onConflict: 'overwrite' | 'skip'): Promise<unknown> {
   const res = await client.post('/clusters/import/', { config: JSON.stringify(config), on_conflict: onConflict })
   return res.data
+}
+
+export interface SyncInterval {
+  sync_interval_minutes: number
+  last_sync_at: string | null
+  next_sync_at: string | null
+  sync_running: boolean
+}
+
+export async function getSyncInterval(): Promise<SyncInterval> {
+  const res = await client.get('/enterprises/sync-interval/')
+  return res.data
+}
+
+export async function updateSyncInterval(minutes: number): Promise<SyncInterval> {
+  const res = await client.patch('/enterprises/sync-interval/', { sync_interval_minutes: minutes })
+  return res.data
+}
+
+export async function syncAllEnterprises(): Promise<void> {
+  await client.post('/enterprises/sync-all/')
 }

@@ -8,6 +8,12 @@ from django.apps import AppConfig
 
 logger = logging.getLogger(__name__)
 
+_scheduler = None
+
+
+def get_scheduler():
+    return _scheduler
+
 
 def _thread_excepthook(args: threading.ExceptHookArgs) -> None:
     logger.error(
@@ -39,6 +45,7 @@ class EnterprisesConfig(AppConfig):
         self._start_scheduler()
 
     def _start_scheduler(self):
+        global _scheduler
         try:
             from apscheduler.schedulers.background import BackgroundScheduler
             from apscheduler.triggers.cron import CronTrigger
@@ -47,10 +54,16 @@ class EnterprisesConfig(AppConfig):
             from apps.enterprises.sync import sync_all_enterprises
             from utils.email import send_nightly_digest
 
+            try:
+                from apps.enterprises.models import PortalSettings
+                interval_minutes = PortalSettings.get().sync_interval_minutes
+            except Exception:
+                interval_minutes = 60
+
             scheduler = BackgroundScheduler(timezone='UTC')
             scheduler.add_job(
                 sync_all_enterprises,
-                trigger=IntervalTrigger(hours=1),
+                trigger=IntervalTrigger(minutes=interval_minutes),
                 id='sync_enterprises',
                 replace_existing=True,
                 max_instances=1,
@@ -64,6 +77,7 @@ class EnterprisesConfig(AppConfig):
                 max_instances=1,
             )
             scheduler.start()
-            logger.info('APScheduler started (sync every 1h, digest at midnight UTC)')
+            _scheduler = scheduler
+            logger.info('APScheduler started (sync every %d min, digest at midnight UTC)', interval_minutes)
         except Exception as exc:
             logger.exception('Failed to start APScheduler: %s', exc)

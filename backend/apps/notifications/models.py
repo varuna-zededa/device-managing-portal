@@ -5,6 +5,7 @@ KIND_CHOICES = [
     ('sync_error', 'Sync Error'),
     ('name_mismatch', 'Name Mismatch'),
     ('enterprise_inactive', 'Enterprise Inactive'),
+    ('force_assigned', 'Force Assigned'),
 ]
 
 
@@ -17,6 +18,8 @@ class Notification(models.Model):
         on_delete=models.CASCADE,
         related_name='notifications',
     )
+    # Non-null = user-specific notification; null = admin-facing system alert.
+    recipient_email = models.EmailField(null=True, blank=True, db_index=True)
     title = models.CharField(max_length=300)
     body = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)

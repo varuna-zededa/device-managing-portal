@@ -249,7 +249,7 @@ interface DeviceTableProps {
   onRetry: () => void
   onClearFilters: () => void
   hasFilters: boolean
-  onAdd: () => void
+  onAdd?: () => void
 }
 
 export function DeviceTable({
@@ -630,7 +630,7 @@ export function DeviceTable({
     return (
       <div className="flex flex-col items-center justify-center py-24 gap-4">
         <p className="text-foreground">No devices yet</p>
-        <Button onClick={onAdd}>Add Device</Button>
+        {onAdd && <Button onClick={onAdd}>Add Device</Button>}
       </div>
     )
   }

@@ -35,3 +35,8 @@ export async function moveToInventory(
   const res = await client.post(`/untracked-devices/${id}/move-to-inventory/`, data)
   return res.data
 }
+
+export async function exportOnlineUntrackedDevices(fmt: 'csv' | 'json'): Promise<Blob> {
+  const res = await client.get('/untracked-devices/export/', { params: { fmt }, responseType: 'blob' })
+  return res.data
+}

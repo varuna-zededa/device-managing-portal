@@ -11,7 +11,7 @@ class EnterpriseReadSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'zcloud_id', 'zcloud_username', 'cluster', 'cluster_name',
             'is_active', 'name_verified',
-            'last_sync_at', 'last_sync_status', 'last_sync_error',
+            'last_sync_at', 'last_sync_status', 'last_sync_error', 'last_sync_error_code',
         ]
 
 

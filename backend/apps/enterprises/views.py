@@ -13,12 +13,13 @@ from apps.clusters.models import Cluster
 from apps.notifications.models import Notification
 from services.zedcloud import fetch_enterprise_self, fetch_user_self, ENTERPRISE_STATE_ACTIVE
 from utils.crypto import encrypt
-from utils.permissions import IsAdminPortalUser, get_user_email
+from utils.permissions import IsAdminPortalUser, IsPortalUser, get_user_email
 from utils.request_context import set_request_id
 
-from .models import Enterprise
+from .apps import get_scheduler
+from .models import Enterprise, PortalSettings
 from .serializers import EnterpriseReadSerializer, EnterpriseUpdateSerializer
-from .sync import apply_candidates, sync_enterprise, verify_enterprise_names, _emit_token_expired
+from .sync import apply_candidates, is_sync_running, sync_all_enterprises, sync_enterprise, verify_enterprise_names, _emit_token_expired
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,69 @@ def _fetch_username(host: str, bearer_token: str, enterprise_name: str) -> str:
     except httpx.RequestError as exc:
         logger.warning('fetch_user_self network error for enterprise %s: %s', enterprise_name, exc)
     return ''
+
+
+class SyncIntervalView(APIView):
+    permission_classes = [IsPortalUser]
+
+    def get_permissions(self):
+        if self.request.method == 'PATCH':
+            return [IsAdminPortalUser()]
+        return [IsPortalUser()]
+
+    def _next_sync_at(self):
+        scheduler = get_scheduler()
+        if not scheduler:
+            return None
+        job = scheduler.get_job('sync_enterprises')
+        if not job or not job.next_run_time:
+            return None
+        return job.next_run_time.isoformat()
+
+    def get(self, request):
+        settings = PortalSettings.get()
+        return Response({
+            'sync_interval_minutes': settings.sync_interval_minutes,
+            'last_sync_at': settings.last_sync_at.isoformat() if settings.last_sync_at else None,
+            'next_sync_at': self._next_sync_at(),
+            'sync_running': is_sync_running(),
+        })
+
+    def patch(self, request):
+        value = request.data.get('sync_interval_minutes')
+        if not isinstance(value, int) or value < 1:
+            return Response(
+                {'error': 'sync_interval_minutes must be a positive integer'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        settings = PortalSettings.get()
+        settings.sync_interval_minutes = value
+        settings.save(update_fields=['sync_interval_minutes'])
+
+        scheduler = get_scheduler()
+        if scheduler:
+            from apscheduler.triggers.interval import IntervalTrigger
+            try:
+                scheduler.reschedule_job('sync_enterprises', trigger=IntervalTrigger(minutes=value))
+            except Exception as exc:
+                logger.warning('reschedule_job sync_enterprises failed: %s', exc)
+
+        logger.info('Sync interval updated to %d minutes by %s', value, get_user_email(request))
+        return Response({
+            'sync_interval_minutes': value,
+            'next_sync_at': self._next_sync_at(),
+            'sync_running': is_sync_running(),
+        })
+
+
+class SyncAllEnterprisesView(APIView):
+    permission_classes = [IsPortalUser]
+
+    def post(self, request):
+        logger.info('Manual sync-all triggered by %s', get_user_email(request))
+        threading.Thread(target=sync_all_enterprises, daemon=True).start()
+        return Response({'status': 'sync started'})
 
 
 class EnterpriseDetailView(APIView):
@@ -139,20 +203,23 @@ class EnterpriseDetailView(APIView):
                 apply_candidates(candidates, timezone.now())
                 enterprise.last_sync_status = 'ok'
                 enterprise.last_sync_error = None
+                enterprise.last_sync_error_code = None
                 Notification.objects.filter(kind='token_expired', enterprise=enterprise).delete()
                 logger.info('Post-token-rotation sync succeeded for enterprise %s', enterprise.name)
             except httpx.HTTPStatusError as exc:
                 code = exc.response.status_code
                 enterprise.last_sync_status = 'token_expired' if code in (401, 403) else 'error'
-                enterprise.last_sync_error = f'HTTP {code}'
+                enterprise.last_sync_error = 'Unauthorized — token may be expired or revoked' if code in (401, 403) else 'ZedCloud API request failed'
+                enterprise.last_sync_error_code = code
                 logger.warning('Post-token-rotation sync HTTP error for enterprise %s: %s', enterprise.name, exc)
             except Exception as exc:
                 enterprise.last_sync_status = 'error'
                 enterprise.last_sync_error = str(exc)
+                enterprise.last_sync_error_code = None
                 logger.warning('Post-token-rotation sync failed for enterprise %s: %s', enterprise.name, exc)
             finally:
                 enterprise.last_sync_at = timezone.now()
-                enterprise.save(update_fields=['last_sync_at', 'last_sync_status', 'last_sync_error'])
+                enterprise.save(update_fields=['last_sync_at', 'last_sync_status', 'last_sync_error', 'last_sync_error_code'])
 
         threading.Thread(target=_sync_after_token_rotation, daemon=True).start()
 
@@ -187,17 +254,20 @@ class EnterpriseSyncView(APIView):
             apply_candidates(candidates, timezone.now())
             enterprise.last_sync_status = 'ok'
             enterprise.last_sync_error = None
+            enterprise.last_sync_error_code = None
         except httpx.HTTPStatusError as exc:
             code = exc.response.status_code
             enterprise.last_sync_status = 'token_expired' if code in (401, 403) else 'error'
-            enterprise.last_sync_error = f'HTTP {code}'
+            enterprise.last_sync_error = 'Unauthorized — token may be expired or revoked' if code in (401, 403) else 'ZedCloud API request failed'
+            enterprise.last_sync_error_code = code
             if code in (401, 403):
                 _emit_token_expired(enterprise)
         except Exception as exc:
             enterprise.last_sync_status = 'error'
             enterprise.last_sync_error = str(exc)
+            enterprise.last_sync_error_code = None
         enterprise.last_sync_at = timezone.now()
-        enterprise.save(update_fields=['last_sync_at', 'last_sync_status', 'last_sync_error'])
+        enterprise.save(update_fields=['last_sync_at', 'last_sync_status', 'last_sync_error', 'last_sync_error_code'])
         logger.info('Manual sync for enterprise %s complete: status=%s', enterprise.name, enterprise.last_sync_status)
         return Response(EnterpriseReadSerializer(enterprise).data)
 
@@ -354,19 +424,22 @@ class ClusterImportView(APIView):
                         apply_candidates(candidates, timezone.now())
                         ent.last_sync_status = 'ok'
                         ent.last_sync_error = None
+                        ent.last_sync_error_code = None
                         logger.info('Post-import sync succeeded for enterprise %s', ent.name)
                     except httpx.HTTPStatusError as exc:
                         code = exc.response.status_code
                         ent.last_sync_status = 'token_expired' if code in (401, 403) else 'error'
-                        ent.last_sync_error = f'HTTP {code}'
+                        ent.last_sync_error = 'Unauthorized — token may be expired or revoked' if code in (401, 403) else 'ZedCloud API request failed'
+                        ent.last_sync_error_code = code
                         logger.warning('Post-import sync HTTP error for enterprise %s: %s', ent.name, exc)
                     except Exception as exc:
                         ent.last_sync_status = 'error'
                         ent.last_sync_error = str(exc)
+                        ent.last_sync_error_code = None
                         logger.warning('Post-import sync failed for enterprise %s: %s', ent.name, exc)
                     finally:
                         ent.last_sync_at = timezone.now()
-                        ent.save(update_fields=['last_sync_at', 'last_sync_status', 'last_sync_error'])
+                        ent.save(update_fields=['last_sync_at', 'last_sync_status', 'last_sync_error', 'last_sync_error_code'])
             threading.Thread(target=_import_sync, args=(enterprises_to_sync,), daemon=True).start()
 
         if errors:

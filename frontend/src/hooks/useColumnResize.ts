@@ -41,7 +41,7 @@ function migrateStorage() {
   } catch { /* ignore */ }
 }
 
-migrateStorage();
+let _migrated = false;
 
 export const useColumnResize = ({
   tableId,
@@ -50,28 +50,26 @@ export const useColumnResize = ({
 }: UseColumnResizeOptions): UseColumnResizeReturn => {
   const storageKey = `table-column-widths-${tableId}`;
 
+  // Run once per page load — only when at least one storage-backed table is mounted.
+  if (persistToStorage && !_migrated) {
+    migrateStorage();
+    _migrated = true;
+  }
+
   const getInitialWidths = useCallback((): Record<string, number> => {
+    // NOTE: columns=[] at mount time, so we cannot use it here.
+    // Return raw stored values; the [columns] effect will apply minWidth and fill
+    // any missing columns with defaultWidth once columns register.
     if (persistToStorage) {
       try {
         const stored = localStorage.getItem(storageKey);
-        if (stored) {
-          const parsed = JSON.parse(stored) as Record<string, number>;
-          const defaultWidths: Record<string, number> = {};
-          columns.forEach((col) => {
-            defaultWidths[col.id] = parsed[col.id] ?? col.defaultWidth ?? DEFAULT_COLUMN_WIDTH;
-          });
-          return defaultWidths;
-        }
+        if (stored) return JSON.parse(stored) as Record<string, number>;
       } catch (e) {
         console.warn('Failed to load column widths from storage:', e);
       }
     }
-    const defaultWidths: Record<string, number> = {};
-    columns.forEach((col) => {
-      defaultWidths[col.id] = col.defaultWidth ?? DEFAULT_COLUMN_WIDTH;
-    });
-    return defaultWidths;
-  }, [columns, persistToStorage, storageKey]);
+    return {};
+  }, [persistToStorage, storageKey]);
 
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>(getInitialWidths);
   const [resizingColumn, setResizingColumn] = useState<string | null>(null);
@@ -88,17 +86,19 @@ export const useColumnResize = ({
 
   useEffect(() => {
     setColumnWidths((prev) => {
+      // Start from prev so stored values for not-yet-registered columns
+      // survive as columns register one by one.
+      const next: Record<string, number> = { ...prev };
       let changed = false;
-      const next: Record<string, number> = {};
       for (const col of columns) {
         const minWidth = col.minWidth ?? DEFAULT_MIN_WIDTH;
         const defaultWidth = col.defaultWidth ?? DEFAULT_COLUMN_WIDTH;
         const existing = prev[col.id];
-        next[col.id] = existing !== undefined ? Math.max(minWidth, existing) : defaultWidth;
-        if (next[col.id] !== existing) changed = true;
-      }
-      if (Object.keys(prev).some((id) => !columns.some((col) => col.id === id))) {
-        changed = true;
+        const desired = existing !== undefined ? Math.max(minWidth, existing) : defaultWidth;
+        if (desired !== next[col.id]) {
+          next[col.id] = desired;
+          changed = true;
+        }
       }
       return changed ? next : prev;
     });

@@ -1,7 +1,7 @@
 import { useMemo, useState, Fragment } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronRight, MoreHorizontal } from 'lucide-react'
-import { getUntrackedDevices, type UntrackedDevice } from '@/api/untracked'
+import { ChevronRight, Download, MoreHorizontal } from 'lucide-react'
+import { getUntrackedDevices, exportOnlineUntrackedDevices, type UntrackedDevice } from '@/api/untracked'
 import { Header } from '@/components/Header'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -15,8 +15,9 @@ import {
   TableHeader, TableBody, TableRow,
 } from '@/components/ui/resizable-table'
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { toast } from '@/components/ui/sonner'
 import { useUser } from '@/context/UserContext'
 import { cn, formatDateTime } from '@/lib/utils'
 
@@ -219,6 +220,20 @@ export default function UntrackedDevicesPage() {
 
   const summary = !isLoading ? buildSummary([...onlineDevices, ...otherDevices]) : null
 
+  async function handleExport(fmt: 'csv' | 'json') {
+    try {
+      const blob = await exportOnlineUntrackedDevices(fmt)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `holocron_online_untracked.${fmt}`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      toast.error('Export failed')
+    }
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
@@ -242,6 +257,20 @@ export default function UntrackedDevicesPage() {
               </p>
             )}
           </div>
+          {isAdmin && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <Download className="w-4 h-4 mr-1" />Export Online
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => handleExport('csv')}>Download CSV</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => handleExport('json')}>Download JSON</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
 
         <div className="flex gap-3 px-4 py-3 border-b border-border items-center">

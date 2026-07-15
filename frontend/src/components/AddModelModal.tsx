@@ -61,7 +61,7 @@ export function AddModelModal({ open, onOpenChange, onCreated }: AddModelModalPr
               name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Model Name</FormLabel>
+                  <FormLabel>Model Name *</FormLabel>
                   <FormControl><Input placeholder="e.g. Dell R750" {...field} spellCheck={false} autoComplete="off" /></FormControl>
                   <FormMessage />
                 </FormItem>

@@ -95,7 +95,7 @@ Create a `.env` file in the repo root (for Docker) or `backend/.env` (for local 
 |---|---|---|---|
 | `SECRET_KEY` | Yes | — | Django secret key |
 | `ENCRYPTION_KEY` | Yes | — | Fernet key for encrypted fields |
-| `ALLOWED_HOSTS` | No | `*` | Comma-separated hostnames |
+| `ALLOWED_HOSTS` | No | `*` | Comma-separated hostnames, e.g. `holocron.zededa.internal,10.250.2.16,localhost,127.0.0.1` |
 | `DEBUG` | No | `false` | Enable Django debug mode |
 | `SMTP_HOST` | No | _(blank)_ | SMTP server — email disabled if blank |
 | `SMTP_PORT` | No | `587` | SMTP port |
@@ -187,7 +187,7 @@ For a company-wide deployment:
 
 1. **Use PostgreSQL** — set `DATABASE_URL=postgres://user:pass@host:5432/dbname` in `.env`
 2. **Generate a fresh `ENCRYPTION_KEY`** — never reuse the demo key in production
-3. **Set `ALLOWED_HOSTS`** to the real hostname (e.g. `holocron.internal`)
+3. **Set `ALLOWED_HOSTS`** to the real hostname and server IP (e.g. `holocron.zededa.internal,10.250.2.16,localhost,127.0.0.1`)
 4. **Configure SMTP** — set `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS` for email notifications
 5. **TLS** — place an nginx or Caddy reverse proxy in front for HTTPS; the app listens on port 80
 6. **Do not set `LOAD_DEMO_DATA`** — the database starts empty; admins add real data via the portal UI

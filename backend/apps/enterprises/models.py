@@ -22,6 +22,7 @@ class Enterprise(models.Model):
         max_length=20, choices=SYNC_STATUS_CHOICES, null=True, blank=True,
     )
     last_sync_error = models.TextField(null=True, blank=True)
+    last_sync_error_code = models.IntegerField(null=True, blank=True)
 
     class Meta:
         unique_together = ('name', 'cluster')
@@ -29,3 +30,16 @@ class Enterprise(models.Model):
 
     def __str__(self):
         return f'{self.name} ({self.cluster.name})'
+
+
+class PortalSettings(models.Model):
+    sync_interval_minutes = models.PositiveIntegerField(default=60)
+    last_sync_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'Portal Settings'
+
+    @classmethod
+    def get(cls):
+        obj, _ = cls.objects.get_or_create(pk=1, defaults={'sync_interval_minutes': 60})
+        return obj

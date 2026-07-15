@@ -108,11 +108,11 @@ export default function DevicesPage() {
           onRetry={() => refetch()}
           onClearFilters={() => updateSearch({})}
           hasFilters={hasFilters}
-          onAdd={() => setAddOpen(true)}
+          onAdd={isAdmin ? () => setAddOpen(true) : undefined}
         />
       </div>
 
-      <FloatingAddButton onClick={() => setAddOpen(true)} tooltip="Add Device" />
+      {isAdmin && <FloatingAddButton onClick={() => setAddOpen(true)} tooltip="Add Device" />}
 
       <DeviceFormModal open={addOpen} onOpenChange={setAddOpen} />
     </div>

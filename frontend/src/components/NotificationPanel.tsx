@@ -57,12 +57,14 @@ export function NotificationBell() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['reservations'] }),
   })
 
-  const { data: adminNotifications = [] } = useQuery({
+  const { data: allNotifications = [] } = useQuery({
     queryKey: ['notifications'],
     queryFn: getNotifications,
-    enabled: isAdmin,
     refetchInterval: config?.notification_refresh_ms ?? 30_000,
   })
+
+  const adminNotifications = allNotifications.filter((n) => n.recipient_email === null)
+  const userNotifications = allNotifications.filter((n) => n.recipient_email !== null)
 
   const markReadMut = useMutation({
     mutationFn: (id: number) => markNotificationRead(id),
@@ -97,9 +99,10 @@ export function NotificationBell() {
   }
 
   const unreadAdminCount = adminNotifications.filter((n) => !n.is_read).length
+  const unreadUserCount = userNotifications.filter((n) => !n.is_read).length
 
   const actionable = pending.filter((r) => r.status === 'pending')
-  const count = actionable.length + unreadAdminCount
+  const count = actionable.length + unreadAdminCount + unreadUserCount
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -187,6 +190,44 @@ export function NotificationBell() {
           </div>
         )}
 
+        {userNotifications.length > 0 && (
+          <div>
+            <div className="px-3 pt-3 pb-1 flex items-center justify-between">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">For you</p>
+              {unreadUserCount > 0 && (
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground hover:text-foreground"
+                  onClick={() => markAllReadMut.mutate()}
+                >
+                  Mark all read
+                </button>
+              )}
+            </div>
+            {userNotifications.slice(0, 10).map((n) => (
+              <div
+                key={n.id}
+                className={cn('px-3 py-2 border-b border-border/50', !n.is_read && 'bg-muted/20')}
+              >
+                <p className={cn('text-sm font-medium', !n.is_read && 'text-foreground')}>{n.title}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{n.body}</p>
+                <div className="flex items-center justify-between mt-1">
+                  <p className="text-xs text-muted-foreground">{timeAgo(n.created_at)}</p>
+                  {!n.is_read && (
+                    <button
+                      type="button"
+                      className="text-xs text-muted-foreground hover:text-foreground"
+                      onClick={() => markReadMut.mutate(n.id)}
+                    >
+                      Dismiss
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         {isAdmin && adminNotifications.length > 0 && (
           <div>
             <div className="px-3 pt-3 pb-1 flex items-center justify-between">
@@ -260,7 +301,7 @@ export function NotificationBell() {
           </div>
         )}
 
-        {actionable.length === 0 && mine.length === 0 && (!isAdmin || adminNotifications.length === 0) && (
+        {actionable.length === 0 && mine.length === 0 && userNotifications.length === 0 && (!isAdmin || adminNotifications.length === 0) && (
           <div className="py-8 text-center text-sm text-foreground">
             No notifications
           </div>

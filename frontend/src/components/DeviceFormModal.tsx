@@ -216,9 +216,11 @@ export function DeviceFormModal({ device, open, onOpenChange }: DeviceFormModalP
                           placeholder="Select model..."
                         />
                       </FormControl>
-                      <Button type="button" variant="outline" size="icon" className="shrink-0" aria-label="Add model" onClick={() => setAddModelOpen(true)}>
-                        <Plus className="w-4 h-4" aria-hidden="true" />
-                      </Button>
+                      {isAdmin && (
+                        <Button type="button" variant="outline" size="icon" className="shrink-0" aria-label="Add model" onClick={() => setAddModelOpen(true)}>
+                          <Plus className="w-4 h-4" aria-hidden="true" />
+                        </Button>
+                      )}
                     </div>
                     <FormMessage />
                   </FormItem>
