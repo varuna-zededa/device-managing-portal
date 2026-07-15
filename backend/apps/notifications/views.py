@@ -34,8 +34,9 @@ class NotificationReadView(APIView):
             n = Notification.objects.get(pk=pk)
         except Notification.DoesNotExist:
             return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
-        # Users can only mark their own notifications; admins can mark any.
-        if n.recipient_email and n.recipient_email != user_email and not is_admin(user_email):
+        # Users can only mark their own user-targeted notifications; admins can mark any.
+        # recipient_email=None means system alert — only admins may mark those.
+        if (n.recipient_email is None or n.recipient_email != user_email) and not is_admin(user_email):
             return Response({'error': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
         if not n.is_read:
             n.is_read = True
@@ -51,7 +52,11 @@ class NotificationReadAllView(APIView):
         user_email = get_user_email(request)
         now = timezone.now()
         if is_admin(user_email):
-            Notification.objects.filter(is_read=False).update(is_read=True, read_at=now)
+            # Mark system alerts + admin's own user notifications — not other users' notifications.
+            Notification.objects.filter(
+                Q(recipient_email__isnull=True) | Q(recipient_email=user_email),
+                is_read=False,
+            ).update(is_read=True, read_at=now)
         else:
             Notification.objects.filter(recipient_email=user_email, is_read=False).update(is_read=True, read_at=now)
         return Response({'ok': True})

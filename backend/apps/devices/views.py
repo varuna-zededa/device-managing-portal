@@ -21,6 +21,7 @@ from apps.device_models.models import DeviceModel
 from apps.reservations.models import ReservationRequest, DevicePurpose, OwnershipHistory
 from apps.reservations.serializers import DevicePurposeSerializer, OwnershipHistorySerializer
 from apps.users.models import Team, PortalUser
+from apps.notifications.models import Notification
 from utils.crypto import encrypt, decrypt
 from utils import email as email_utils
 from utils.permissions import get_user_email, is_admin, IsPortalUser, IsAdminPortalUser
@@ -286,6 +287,15 @@ class DeviceForceAssignView(APIView):
         displaced_owner = device.owner_email
         overridden_emails = []
 
+        assignee_name = assignee_email
+        try:
+            u = PortalUser.objects.get(email=assignee_email)
+            assignee_name = u.name
+        except PortalUser.DoesNotExist:
+            pass
+        except Exception as e:
+            logger.warning('PortalUser lookup for assignee %s: %s', assignee_email, e)
+
         with transaction.atomic():
             device.owner_email = assignee_email
             device.reserved_at = timezone.now()
@@ -302,27 +312,20 @@ class DeviceForceAssignView(APIView):
             overridden_emails = [r.requester_email for r in pending if r.requester_email != assignee_email]
             ReservationRequest.objects.filter(device=device, status='pending').update(status='expired')
 
+            if displaced_owner and displaced_owner != assignee_email:
+                Notification.objects.create(
+                    kind='force_assigned',
+                    recipient_email=displaced_owner,
+                    title=f'Device {device.name} was reassigned',
+                    body=f'An admin assigned this device to {assignee_name}.',
+                )
+
         logger.info('Device %s force-assigned to %s by %s (displaced: %s)', device.name, assignee_email, user_email, displaced_owner or 'none')
         for req_email in overridden_emails:
             email_utils.send_reservation_overridden(device, req_email)
 
         if displaced_owner and displaced_owner != assignee_email:
-            assignee_name = assignee_email
-            try:
-                u = PortalUser.objects.get(email=assignee_email)
-                assignee_name = u.name
-            except PortalUser.DoesNotExist:
-                pass
-            except Exception as e:
-                logger.warning('PortalUser lookup for assignee %s: %s', assignee_email, e)
             email_utils.send_force_assign_notice(device, displaced_owner, assignee_name)
-            from apps.notifications.models import Notification  # noqa: PLC0415
-            Notification.objects.create(
-                kind='force_assigned',
-                recipient_email=displaced_owner,
-                title=f'Device {device.name} was reassigned',
-                body=f'An admin assigned this device to {assignee_name}.',
-            )
 
         return Response(DeviceSerializer(device).data)
 

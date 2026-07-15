@@ -41,7 +41,7 @@ function migrateStorage() {
   } catch { /* ignore */ }
 }
 
-migrateStorage();
+let _migrated = false;
 
 export const useColumnResize = ({
   tableId,
@@ -49,6 +49,12 @@ export const useColumnResize = ({
   persistToStorage = true,
 }: UseColumnResizeOptions): UseColumnResizeReturn => {
   const storageKey = `table-column-widths-${tableId}`;
+
+  // Run once per page load — only when at least one storage-backed table is mounted.
+  if (persistToStorage && !_migrated) {
+    migrateStorage();
+    _migrated = true;
+  }
 
   const getInitialWidths = useCallback((): Record<string, number> => {
     // NOTE: columns=[] at mount time, so we cannot use it here.

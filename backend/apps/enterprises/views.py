@@ -13,7 +13,7 @@ from apps.clusters.models import Cluster
 from apps.notifications.models import Notification
 from services.zedcloud import fetch_enterprise_self, fetch_user_self, ENTERPRISE_STATE_ACTIVE
 from utils.crypto import encrypt
-from utils.permissions import IsAdminPortalUser, IsPortalUser, get_user_email, is_admin
+from utils.permissions import IsAdminPortalUser, IsPortalUser, get_user_email
 from utils.request_context import set_request_id
 
 from .apps import get_scheduler
@@ -46,6 +46,11 @@ def _fetch_username(host: str, bearer_token: str, enterprise_name: str) -> str:
 class SyncIntervalView(APIView):
     permission_classes = [IsPortalUser]
 
+    def get_permissions(self):
+        if self.request.method == 'PATCH':
+            return [IsAdminPortalUser()]
+        return [IsPortalUser()]
+
     def _next_sync_at(self):
         scheduler = get_scheduler()
         if not scheduler:
@@ -65,9 +70,6 @@ class SyncIntervalView(APIView):
         })
 
     def patch(self, request):
-        if not is_admin(get_user_email(request)):
-            return Response({'error': 'Admin required'}, status=status.HTTP_403_FORBIDDEN)
-
         value = request.data.get('sync_interval_minutes')
         if not isinstance(value, int) or value < 1:
             return Response(
@@ -82,7 +84,10 @@ class SyncIntervalView(APIView):
         scheduler = get_scheduler()
         if scheduler:
             from apscheduler.triggers.interval import IntervalTrigger
-            scheduler.reschedule_job('sync_enterprises', trigger=IntervalTrigger(minutes=value))
+            try:
+                scheduler.reschedule_job('sync_enterprises', trigger=IntervalTrigger(minutes=value))
+            except Exception as exc:
+                logger.warning('reschedule_job sync_enterprises failed: %s', exc)
 
         logger.info('Sync interval updated to %d minutes by %s', value, get_user_email(request))
         return Response({
