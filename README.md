@@ -1,6 +1,6 @@
 # Holocron — Lab Device Management Portal
 
-Holocron is an internal web portal for Zededa test teams to manage shared physical lab devices. It provides real-time visibility into device ownership, EVE OS status, and connectivity — and a structured reservation workflow so engineers don't step on each other's devices.
+Holocron is an internal web portal for Zededa test teams to manage shared physical lab devices. Built on Django 6 and React 19, it provides real-time visibility into device ownership, EVE OS status, and connectivity — and a structured reservation workflow so engineers don't step on each other's devices.
 
 > Full design spec: [DESIGN.md](DESIGN.md) | Implementation reference: [DEVELOPMENT.md](DEVELOPMENT.md)
 
@@ -93,20 +93,29 @@ Create a `.env` file in the repo root (for Docker) or `backend/.env` (for local 
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `SECRET_KEY` | Yes | — | Django secret key |
-| `ENCRYPTION_KEY` | Yes | — | Fernet key for encrypted fields |
-| `ALLOWED_HOSTS` | No | `*` | Comma-separated hostnames, e.g. `holocron.zededa.internal,10.250.2.16,localhost,127.0.0.1` |
-| `DEBUG` | No | `false` | Enable Django debug mode |
-| `SMTP_HOST` | No | _(blank)_ | SMTP server — email disabled if blank |
+| **Django core** | | | |
+| `SECRET_KEY` | Yes | — | Django secret key — generate with `openssl rand -base64 50` |
+| `ENCRYPTION_KEY` | Yes | — | Fernet key for encrypted fields (iDRAC passwords, bearer tokens) |
+| `DEBUG` | No | `false` | Enable Django debug mode — also enables `CORS_ALLOW_ALL_ORIGINS`; never set in production |
+| `ALLOWED_HOSTS` | No | `*` | Comma-separated hostnames Django accepts, e.g. `holocron.zededa.internal,10.250.2.16,localhost` |
+| `DATABASE_URL` | No | SQLite | PostgreSQL connection string, e.g. `postgres://user:pass@host:5432/dbname`; defaults to `data/db.sqlite3` |
+| `CORS_ALLOWED_ORIGINS` | No | — | Comma-separated allowed CORS origins — required when `DEBUG=false`, e.g. `https://holocron.zededa.internal` |
+| **Email (SMTP)** | | | |
+| `SMTP_HOST` | No | _(blank)_ | SMTP server hostname — all email is disabled if blank |
 | `SMTP_PORT` | No | `587` | SMTP port |
 | `SMTP_USER` | No | — | SMTP username |
-| `SMTP_PASS` | No | — | SMTP password / App Password |
-| `SMTP_FROM` | No | `device-portal@zededa.com` | Sender address |
-| `ADMIN_EMAILS` | No | — | Comma-separated admin emails for alerts |
-| `PORTAL_BASE_URL` | No | `http://localhost:80` | Base URL used in email links |
-| `CORS_ALLOWED_ORIGINS` | No | — | Allowed CORS origins (required if `DEBUG=false`) |
-| `DATABASE_URL` | No | SQLite | PostgreSQL connection string |
-| `LOAD_DEMO_DATA` | No | `false` | Load demo fixture on startup |
+| `SMTP_PASS` | No | — | SMTP password or App Password |
+| `SMTP_FROM` | No | `device-portal@zededa.com` | From address for portal notification emails |
+| `ADMIN_EMAILS` | No | — | Comma-separated addresses for Django's `ADMINS` setting — receives **500 crash emails** from Django only; not used for portal admin notifications (those go to users with `admin` role in the portal) |
+| `SERVER_EMAIL` | No | _(SMTP_FROM)_ | From address used by Django when sending crash emails to `ADMIN_EMAILS` |
+| `PORTAL_BASE_URL` | No | `http://localhost:80` | Base URL embedded in portal notification email links |
+| **Logging** | | | |
+| `LOG_LEVEL` | No | `INFO` | Log verbosity for portal code: `DEBUG`, `INFO`, `WARNING`, or `ERROR` |
+| `LOG_DIR` | No | `backend/logs` | Directory for rotating log files (`portal.log`); mapped to `./logs` in Docker |
+| **Portal behavior** | | | |
+| `LOAD_DEMO_DATA` | No | `false` | Load the demo fixture on startup — populates devices, users, labs, and teams for demonstration |
+| `DEVICE_LIST_REFRESH_MS` | No | `300000` | How often the device table auto-refreshes in the browser (milliseconds) |
+| `NOTIFICATION_REFRESH_MS` | No | `30000` | How often the notification panel polls for new alerts (milliseconds) |
 
 ---
 
