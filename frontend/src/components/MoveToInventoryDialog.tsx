@@ -28,6 +28,7 @@ export function MoveToInventoryDialog({ device, open, onOpenChange }: Props) {
     if (!open) {
       setLab('')
       setModelId('')
+      setAddModelOpen(false)
     }
   }, [open])
 
