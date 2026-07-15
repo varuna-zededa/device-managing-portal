@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   getClusters, createCluster, updateCluster, deleteCluster,
   createEnterprise, updateEnterprise, deleteEnterprise, syncEnterprise, exportClusters,
+  getSyncInterval, updateSyncInterval,
   type ClusterWithEnterprises, type Enterprise,
 } from '@/api/enterprises'
 import { Header } from '@/components/Header'
@@ -10,7 +11,6 @@ import { useUser } from '@/context/UserContext'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { ImportClusterDialog } from '@/components/ImportClusterDialog'
 import { FloatingAddButton } from '@/components/FloatingAddButton'
@@ -47,10 +47,35 @@ export default function ClusterEnterprisesPage() {
   const [editingEnterprise, setEditingEnterprise] = useState<Enterprise | null>(null)
   const [editEntName, setEditEntName] = useState('')
   const [editEntToken, setEditEntToken] = useState('')
+  const [syncIntervalDraft, setSyncIntervalDraft] = useState('')
+  const [editingInterval, setEditingInterval] = useState(false)
 
   const { data: clusters = [], isLoading } = useQuery({
     queryKey: ['clusters-enterprises'],
     queryFn: getClusters,
+  })
+
+  const { data: intervalData } = useQuery({
+    queryKey: ['sync-interval'],
+    queryFn: getSyncInterval,
+    enabled: isAdmin,
+  })
+
+  useEffect(() => {
+    if (intervalData && !syncIntervalDraft) {
+      setSyncIntervalDraft(String(intervalData.sync_interval_minutes))
+    }
+  }, [intervalData])
+
+  const updateIntervalMut = useMutation({
+    mutationFn: (minutes: number) => updateSyncInterval(minutes),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ['sync-interval'] })
+      setSyncIntervalDraft(String(data.sync_interval_minutes))
+      setEditingInterval(false)
+      toast.success('Sync interval updated')
+    },
+    onError: () => toast.error('Failed to update sync interval'),
   })
 
   useEffect(() => {
@@ -128,6 +153,62 @@ export default function ClusterEnterprisesPage() {
         </div>
 
         <div className="px-4 py-4 space-y-3">
+          {isAdmin && (
+            <div className="flex items-center gap-3 border border-border/30 rounded px-4 py-3 bg-muted/20">
+              <span className="text-sm font-medium shrink-0">Auto-sync interval</span>
+              {editingInterval ? (
+                <>
+                  <Input
+                    type="number"
+                    min={1}
+                    className="h-7 text-xs w-24"
+                    value={syncIntervalDraft}
+                    onChange={(e) => setSyncIntervalDraft(e.target.value)}
+                    autoFocus
+                  />
+                  <span className="text-xs text-muted-foreground">minutes</span>
+                  <Button
+                    size="sm"
+                    className="h-7 text-xs"
+                    disabled={!syncIntervalDraft || updateIntervalMut.isPending}
+                    onClick={() => {
+                      const v = parseInt(syncIntervalDraft, 10)
+                      if (v > 0) updateIntervalMut.mutate(v)
+                    }}
+                  >
+                    {updateIntervalMut.isPending ? 'Saving…' : 'Save'}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs"
+                    onClick={() => {
+                      setSyncIntervalDraft(String(intervalData?.sync_interval_minutes ?? ''))
+                      setEditingInterval(false)
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <span className="text-sm">{intervalData?.sync_interval_minutes ?? '—'} minutes</span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs"
+                    onClick={() => {
+                      setSyncIntervalDraft(String(intervalData?.sync_interval_minutes ?? ''))
+                      setEditingInterval(true)
+                    }}
+                  >
+                    <Pencil className="w-3 h-3 mr-1" />Edit
+                  </Button>
+                </>
+              )}
+            </div>
+          )}
+
           {isAdmin && addingCluster && (
             <div className="border rounded p-4 space-y-3 bg-muted/30">
               <h3 className="text-sm font-medium">New Cluster</h3>
@@ -182,12 +263,12 @@ export default function ClusterEnterprisesPage() {
                             <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                               {syncBadge(ent.last_sync_status)}
                               {ent.last_sync_error && (
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <span className="text-xs text-destructive cursor-help underline decoration-dotted">error</span>
-                                  </TooltipTrigger>
-                                  <TooltipContent><p className="max-w-xs text-xs">{ent.last_sync_error}</p></TooltipContent>
-                                </Tooltip>
+                                <span className="text-xs text-destructive">
+                                  {ent.last_sync_error_code != null && (
+                                    <span className="font-mono mr-1">[{ent.last_sync_error_code}]</span>
+                                  )}
+                                  {ent.last_sync_error}
+                                </span>
                               )}
                             </div>
                             <p className="text-xs text-muted-foreground mt-1"><span className="font-medium">Last synced:</span> {formatDateTime(ent.last_sync_at)}</p>
