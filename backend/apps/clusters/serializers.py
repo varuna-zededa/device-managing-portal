@@ -3,7 +3,7 @@ from rest_framework import serializers
 from .models import Cluster
 from apps.enterprises.serializers import EnterpriseReadSerializer
 
-_HOST_RE = re.compile(r'^zcloud\.[a-z0-9][a-z0-9-]*\.zededa\.(net|dev)$')
+_HOST_RE = re.compile(r'^zedcontrol\.[a-z0-9][a-z0-9-]*\.zededa\.(net|dev)$')
 
 
 class ClusterSerializer(serializers.ModelSerializer):
@@ -24,6 +24,6 @@ class ClusterSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('Host is required.')
         if not _HOST_RE.match(value.strip()):
             raise serializers.ValidationError(
-                'Host must follow the format: zcloud.<name>.zededa.net or zcloud.<name>.zededa.dev'
+                'Host must follow the format: zedcontrol.<name>.zededa.net or zedcontrol.<name>.zededa.dev'
             )
         return value.strip()

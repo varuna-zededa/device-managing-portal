@@ -210,7 +210,7 @@ export function NotificationBell() {
                 className={cn('px-3 py-2 border-b border-border/50', !n.is_read && 'bg-muted/20')}
               >
                 <p className={cn('text-sm font-medium', !n.is_read && 'text-foreground')}>{n.title}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">{n.body}</p>
+                <p className="text-xs text-muted-foreground mt-0.5 whitespace-pre-wrap">{n.body}</p>
                 <div className="flex items-center justify-between mt-1">
                   <p className="text-xs text-muted-foreground">{timeAgo(n.created_at)}</p>
                   {!n.is_read && (

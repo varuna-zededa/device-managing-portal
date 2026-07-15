@@ -12,13 +12,13 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/sonner'
 
-const HOST_RE = /^zcloud\.[a-z0-9][a-z0-9-]*\.zededa\.(net|dev)$/
+const HOST_RE = /^zedcontrol\.[a-z0-9][a-z0-9-]*\.zededa\.(net|dev)$/
 
 const schema = z.object({
   name: z.string().min(1, 'Cluster name is required'),
   host: z.string().min(1, 'Host is required').regex(
     HOST_RE,
-    'Host must follow the format: zcloud.<name>.zededa.net or zcloud.<name>.zededa.dev'
+    'Host must follow the format: zedcontrol.<name>.zededa.net or zedcontrol.<name>.zededa.dev'
   ),
 })
 
@@ -41,7 +41,7 @@ export function AddClusterModal({ open, onOpenChange, onCreated }: AddClusterMod
 
   useEffect(() => {
     if (!nameVal) return
-    form.setValue('host', `zcloud.${nameVal.toLowerCase()}.zededa.net`, { shouldDirty: false })
+    form.setValue('host', `zedcontrol.${nameVal.toLowerCase()}.zededa.net`, { shouldDirty: false })
   }, [nameVal, form])
 
   const mutation = useMutation({
