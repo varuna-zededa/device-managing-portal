@@ -69,7 +69,7 @@ export function AddClusterModal({ open, onOpenChange, onCreated }: AddClusterMod
               name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Name</FormLabel>
+                  <FormLabel>Name *</FormLabel>
                   <FormControl><Input placeholder="e.g. staging" {...field} spellCheck={false} autoComplete="off" /></FormControl>
                   <FormMessage />
                 </FormItem>
@@ -80,7 +80,7 @@ export function AddClusterModal({ open, onOpenChange, onCreated }: AddClusterMod
               name="host"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Host</FormLabel>
+                  <FormLabel>Host *</FormLabel>
                   <FormControl><Input placeholder="zedcontrol.example.zededa.net" {...field} spellCheck={false} autoComplete="url" /></FormControl>
                   <FormMessage />
                 </FormItem>
