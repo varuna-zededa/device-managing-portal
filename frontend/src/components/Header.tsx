@@ -49,7 +49,10 @@ export function Header() {
               <p className="text-muted-foreground mt-0.5">May the Force be with your lab.</p>
             </TooltipContent>
           </Tooltip>
-          <span className="font-semibold text-foreground">Holocron</span>
+          <NavLink to="/devices" className="flex items-baseline gap-1 hover:opacity-80 transition-opacity">
+            <span className="font-semibold text-foreground">Holocron</span>
+            <span className="text-[10px] text-muted-foreground font-normal">v{__APP_VERSION__}</span>
+          </NavLink>
         </div>
         <nav className="flex items-center gap-1">
           {navItems.map(({ to, label }) => (
