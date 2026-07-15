@@ -99,21 +99,61 @@ const ResizableTable = React.forwardRef<HTMLTableElement, ResizableTableProps>(
       const cells = containerRef.current.querySelectorAll<HTMLElement>(`[data-column-id="${columnId}"]`);
       if (cells.length === 0) return;
 
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
       let maxContentWidth = 0;
       cells.forEach((cell) => {
-        const truncSpan = cell.querySelector<HTMLElement>('.truncate');
-        if (truncSpan) {
-          maxContentWidth = Math.max(maxContentWidth, truncSpan.scrollWidth);
-        }
+        // Measure only leaf .truncate elements so we get the correct font (e.g. font-medium
+        // inner span) and avoid concatenated text from container .truncate wrappers.
+        const truncEls = cell.querySelectorAll<HTMLElement>('.truncate');
+        const leaves = Array.from(truncEls).filter((el) => !el.querySelector('.truncate'));
+        const targets = leaves.length > 0 ? leaves : [cell];
+        targets.forEach((textEl) => {
+          const text = textEl.textContent?.trim() ?? '';
+          if (!text) return;
+          const s = window.getComputedStyle(textEl);
+          ctx.font = `${s.fontWeight} ${s.fontSize} ${s.fontFamily}`;
+          maxContentWidth = Math.max(maxContentWidth, ctx.measureText(text).width);
+        });
       });
 
       if (maxContentWidth === 0) return;
 
       const col = columns.find((c) => c.id === columnId);
       const minWidth = col?.minWidth ?? 30;
-      // 32px = px-4 padding (16px each side); 8px buffer for copy button / sort icon
-      setColumnWidths((prev) => ({ ...prev, [columnId]: Math.max(minWidth, maxContentWidth + 40) }));
-    }, [columns, setColumnWidths]);
+      // 32px cell padding + 40px copy-button + gap + 8px buffer
+      const desiredWidth = Math.max(minWidth, Math.ceil(maxContentWidth) + 80);
+
+      // Redistribute the other resizable columns so the total stays at container width.
+      // Without this, autoFitColumns runs on the next load and scales everything back.
+      const cw = containerRef.current.clientWidth;
+      const fixedWidth = columnOrder.slice(0, leadingColumns).reduce(
+        (sum, id) => sum + (columnWidths[id] ?? 150), 0
+      );
+      const remaining = cw - fixedWidth;
+      const resizableCols = columnOrder.slice(leadingColumns);
+      const otherCols = resizableCols.filter((id) => id !== columnId);
+      const otherMinTotal = otherCols.reduce((sum, id) => {
+        const c = columns.find((col) => col.id === id);
+        return sum + (c?.minWidth ?? 30);
+      }, 0);
+      const cappedWidth = Math.min(desiredWidth, remaining - otherMinTotal);
+      const availableForOthers = remaining - cappedWidth;
+      const otherCurrentTotal = otherCols.reduce((sum, id) => sum + (columnWidths[id] ?? 150), 0);
+      const otherScale = otherCurrentTotal > 0 ? availableForOthers / otherCurrentTotal : 1;
+
+      setColumnWidths((prev) => {
+        const newWidths: Record<string, number> = { ...prev, [columnId]: cappedWidth };
+        otherCols.forEach((id) => {
+          const c = columns.find((col) => col.id === id);
+          const cMin = c?.minWidth ?? 30;
+          newWidths[id] = Math.max(cMin, Math.floor((prev[id] ?? 150) * otherScale));
+        });
+        return newWidths;
+      });
+    }, [columnOrder, columnWidths, columns, leadingColumns, setColumnWidths]);
 
     const autoFitColumns = React.useCallback(() => {
       if (!containerRef.current || isResizing || keyboardResizingRef.current) return;
@@ -315,20 +355,19 @@ const ResizableTableCell = React.forwardRef<HTMLTableCellElement, ResizableTable
       <td
         ref={ref}
         data-column-id={columnId}
-        className={cn("p-4 align-middle [&:has([role=checkbox])]:pr-0 group/cell", className)}
+        className={cn("relative p-4 align-middle [&:has([role=checkbox])]:pr-0 group/cell", className)}
         style={{ overflow: "hidden", maxWidth: 0 }}
         {...props}
       >
         {truncate ? (
-          <div className="flex items-center gap-1 min-w-0">
-            <TruncatedCell tooltipContent={tooltipContent} className="truncate flex-1 min-w-0" maxWidth={400}>
+          <div className="flex items-center min-w-0">
+            <TruncatedCell tooltipContent={tooltipContent} className="truncate flex-1 min-w-0">
               {children}
             </TruncatedCell>
             {showCopy && (
-              <CopyButton
-                value={textForCopy}
-                className="opacity-0 group-hover/cell:opacity-100 transition-opacity"
-              />
+              <div className="absolute right-4 top-1/2 -translate-y-1/2 opacity-0 group-hover/cell:opacity-100 transition-opacity">
+                <CopyButton value={textForCopy} />
+              </div>
             )}
           </div>
         ) : (
