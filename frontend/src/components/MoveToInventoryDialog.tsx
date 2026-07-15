@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { moveToInventory, type UntrackedDevice } from '@/api/untracked'
 import { getChoices } from '@/api/choices'
@@ -118,6 +118,14 @@ export function MoveToInventoryDialog({ device, open, onOpenChange }: Props) {
   const [selectedModelId, setSelectedModelId] = useState<number | null>(null)
   const [selectedModelName, setSelectedModelName] = useState('')
   const qc = useQueryClient()
+
+  useEffect(() => {
+    if (!open) {
+      setLab('')
+      setSelectedModelId(null)
+      setSelectedModelName('')
+    }
+  }, [open])
 
   const { data: choices } = useQuery({ queryKey: ['choices'], queryFn: getChoices, staleTime: Infinity })
   const { data: models = [] } = useQuery({ queryKey: ['device-models'], queryFn: getDeviceModels })
