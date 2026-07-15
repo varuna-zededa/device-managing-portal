@@ -35,6 +35,7 @@ class Enterprise(models.Model):
 class PortalSettings(models.Model):
     sync_interval_minutes = models.PositiveIntegerField(default=60)
     last_sync_at = models.DateTimeField(null=True, blank=True)
+    sync_running = models.BooleanField(default=False)
 
     class Meta:
         verbose_name = 'Portal Settings'

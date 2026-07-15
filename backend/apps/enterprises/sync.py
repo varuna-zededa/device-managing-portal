@@ -18,7 +18,11 @@ _sync_lock = threading.Lock()
 
 
 def is_sync_running() -> bool:
-    return _sync_lock.locked()
+    from apps.enterprises.models import PortalSettings  # noqa: PLC0415
+    try:
+        return PortalSettings.objects.filter(pk=1).values_list('sync_running', flat=True).first() or False
+    except Exception:
+        return _sync_lock.locked()
 
 
 # ── Serial / model filters ────────────────────────────────────────────────────
@@ -359,8 +363,12 @@ def sync_all_enterprises() -> None:
         logger.info('sync_all_enterprises already running — skipping')
         return
     try:
+        from apps.enterprises.models import PortalSettings  # noqa: PLC0415
+        PortalSettings.objects.filter(pk=1).update(sync_running=True)
         _sync_all_enterprises_inner()
     finally:
+        from apps.enterprises.models import PortalSettings  # noqa: PLC0415
+        PortalSettings.objects.filter(pk=1).update(sync_running=False)
         _sync_lock.release()
 
 
