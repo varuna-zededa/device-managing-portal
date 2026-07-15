@@ -13,7 +13,19 @@ export function CopyButton({ value, iconSize = 14, className }: CopyButtonProps)
 
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation();
-    navigator.clipboard.writeText(value).catch(() => {});
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(value).catch(() => {});
+    } else {
+      // Fallback for HTTP (non-secure) contexts where navigator.clipboard is unavailable.
+      const el = document.createElement('textarea');
+      el.value = value;
+      el.style.position = 'fixed';
+      el.style.opacity = '0';
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
+    }
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
