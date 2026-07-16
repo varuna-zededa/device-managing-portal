@@ -2,6 +2,8 @@ services:
   backend:
     build: ./backend
     env_file: ./backend/.env
+    environment:
+      - START_SCHEDULER=true
     volumes:
       - sqlite_data:/app/data
       - static_files:/app/static
