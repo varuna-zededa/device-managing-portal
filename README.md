@@ -11,7 +11,7 @@ Holocron is an internal web portal for Zededa test teams to manage shared physic
 - **Device table** — ownership, EVE version, SSH IPs, condition, cluster assignment at a glance
 - **Reserve / Release** — instant transfer if free; email approval flow if owned
 - **Fetch Status** — pulls live EVE version, run state, and connectivity from ZedCloud on demand
-- **Condition flags** — Out of Order, Needs Repair, Temporarily Leased, Dedicated, Missing
+- **Condition flags** — Out of Order, Temporarily Leased, Dedicated (user-settable); Missing, Needs Recovery (sync-engine-controlled)
 - **Admin controls** — force-assign, bulk CSV import/export, user management
 - **User import/export** — JSON bulk import/export for portal users (skip or overwrite on conflict)
 - **Ownership history** — append-only audit log per device

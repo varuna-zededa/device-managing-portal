@@ -9,7 +9,7 @@ It contains exact file paths, code patterns, and checklists for every common imp
 
 ## Stack
 
-- **Backend:** Python / Django 5 + Django REST Framework; SQLite (dev) → PostgreSQL-compatible
+- **Backend:** Python / Django 6 + Django REST Framework; SQLite (dev) → PostgreSQL (set `DATABASE_URL`)
 - **Frontend:** React 19 + Vite + TypeScript + Tailwind v4 + shadcn/ui
 - **HTTP client (backend→ZedCloud):** `httpx` (sync)
 - **Data fetching (frontend):** TanStack Query (`useQuery` / `useMutation`)

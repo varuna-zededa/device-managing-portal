@@ -223,9 +223,9 @@ Admins manage the list of portal users (name, email, team, role). Users are not 
 
 ---
 
-## 8. Notifications (Admin Only)
+## 8. Notifications
 
-The notification bell in the header shows unread alerts for admins. Each notification links to the relevant resource.
+The notification bell in the header shows unread alerts. System-wide notifications (sync errors, token expiry, name mismatches) are visible to admins only. Per-user notifications (force-assign) are delivered to the affected user directly.
 
 ![Notifications panel](docs/img/09-notifications.png)
 
@@ -235,6 +235,7 @@ The notification bell in the header shows unread alerts for admins. Each notific
 | `sync_error` | Unexpected sync failure for an enterprise | Navigate to Clusters page |
 | `name_mismatch` | ZedCloud enterprise name differs from stored name | Inline "Use ZedCloud name" / "Keep current name" buttons |
 | `enterprise_inactive` | ZedCloud reports enterprise state ≠ ACTIVE | Navigate to Clusters page |
+| `force_assigned` | An admin force-assigned a device away from you | Navigate to the device in the device table |
 
 `token_expired` notifications are **automatically deleted** when the next sync for that enterprise succeeds.
 
@@ -313,8 +314,8 @@ Base path: `/api/v1/`
 | `enterprises/<id>/sync/` | POST | Manual sync trigger |
 | `reservations/pending/` | GET | Admin: all pending requests |
 | `reservations/mine/` | GET | Current user's reservations |
-| `reservations/<id>/approve/` | POST | Admin or device owner |
-| `reservations/<id>/reject/` | POST | Admin or device owner |
+| `reservations/<token>/approve/` | POST | No auth — token IS the auth |
+| `reservations/<token>/reject/` | POST | No auth — token IS the auth |
 | `users/` | GET, POST, PATCH, DELETE | Includes import/export |
 | `notifications/` | GET | Admin only; supports mark-read |
 | `choices/` | GET | Labs, teams, conditions — cached `staleTime: Infinity` |

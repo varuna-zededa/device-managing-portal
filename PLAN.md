@@ -35,8 +35,8 @@ Each version follows the same 5-step cycle before shipping:
 - Serial number verification on status fetch; silent skip if ZedCloud returns no serial
 - `device_connectivity` JSONField — one entry per IPv4 on any up+uplink interface
 - Name in Cluster as dedicated table column; cluster + cluster_device_name optional
-- Device conditions: `normal · out_of_order · needs_repair · temporarily_leased · dedicated · missing`; badge labels shown in title case; values stored as snake_case and normalized on CSV import
-- Summary bar below "Devices" heading: total · available · reserved · online · needs repair · out of order · leased · missing; non-zero counts only for problem states; reflects active filters; hidden during load
+- Device conditions: `admin_condition` (`normal · out_of_order · temporarily_leased · dedicated`) and `sync_condition` (`missing · needs_recovery`); badge labels shown in title case; values stored as snake_case
+- Summary bar below "Devices" heading: total · available · reserved · online · out of order · leased · missing · needs recovery; non-zero counts only for problem states; reflects active filters; hidden during load
 - Lab and Team backed by DB models (Lab, Team); add via Django admin; all dropdowns refresh on next page load — no code changes needed to add new labs or teams
 - All device table columns sortable (except Comment); empty values sort last; Users page columns also sortable
 - `dedicated` condition: team name chip in Owner column; Reserve disabled; blue row
@@ -231,4 +231,4 @@ Each version follows the same 5-step cycle before shipping:
   `update_or_create` mode; frontend drag-drop picker with 5-row preview and result summary modal;
   `GET /api/admin/import-template/` serves a ready-to-fill CSV template
 - **Import forgiving parsing** — column headers normalised (strip/lowercase/underscore + alias map);
-  `condition` field value normalised to snake_case on import ("Needs Repair" → `needs_repair`)
+  `admin_condition` field value normalised to snake_case on import (e.g. "Out Of Order" → `out_of_order`); `sync_condition` is never read from CSV

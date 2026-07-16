@@ -192,8 +192,10 @@ team                 FK     → Team.id; nullable (SET_NULL); required before se
 owner_email          str    nullable; FK → User.email; set on reserve
 lab                  FK     → Lab.id (PROTECT, NOT NULL); must reference an existing Lab row
 location_detail      str    nullable; free text — exact spot inside lab (e.g. "Rack-B3, slot 4", "Near the printer")
-condition            enum   default 'normal' (NOT NULL); normal | out_of_order | needs_repair | temporarily_leased | dedicated | missing
-                            DB constraint: CheckConstraint ensures condition is always one of the six valid enum values
+admin_condition      enum   default 'normal' (NOT NULL); normal | out_of_order | temporarily_leased | dedicated
+                            DB constraint: CheckConstraint; user-controlled — the only condition field writable via API or CSV import
+sync_condition       enum   nullable; missing | needs_recovery
+                            sync-engine-controlled only — never writable via API or CSV import; null means no finding
 idrac_ip             str    nullable
 idrac_username       str    nullable
 idrac_password_enc   bytes  nullable; AES-encrypted
@@ -211,7 +213,7 @@ created_at           datetime
 updated_at           datetime
 ```
 
-**Derived (not stored):** `is_available = (owner_email IS NULL) AND condition NOT IN (out_of_order, temporarily_leased, dedicated, missing)`. Used by both the Available/Reserved filter and the status badge — a device with a blocking condition is **never** "Available" even though it has no owner.
+**Derived (not stored):** `is_available = (owner_email IS NULL) AND (admin_condition = 'normal') AND (sync_condition IS NULL)`. Used by both the Available/Reserved filter and the status badge — a device with any blocking condition is **never** "Available" even though it has no owner.
 
 **Required on creation:** name, serial_number, model, lab
 **Optional on creation:** description, cluster_id, cluster_device_name, team, owner_email,
@@ -240,11 +242,8 @@ id          int   PK auto
 name        str
 email       str   unique — identity anchor
 team        FK    → Team.id (PROTECT, nullable); required for member users; optional for admin users
-user_type   enum  admin | member | guest
+user_type   enum  admin | member
 ```
-- `guest` — read-only; can log in and view the device table and expand panels; cannot perform any
-  write operation (reserve, release, edit, delete, fetch status, force-assign, export/import);
-  all action controls hidden in the UI; `/users` page inaccessible (redirects to `/devices`)
 
 ### Enterprise  *(admin-managed ZedCloud enterprise credentials)*
 ```text
@@ -353,7 +352,8 @@ POST /api/v1/models            any user; body: {name, customer_partner_name?}
 ```text
 GET    /api/v1/devices          ?q=<search>&available=<true|false|all>
                                 &team=<ST|EVE|PLATFORM>&lab=<lab name>
-                                &condition=<normal|out_of_order|needs_repair|temporarily_leased|dedicated>
+                                &admin_condition=<normal|out_of_order|temporarily_leased|dedicated>
+                                &sync_condition=<missing|needs_recovery>
                                 q matches: name, model, cluster, owner name, eve_version, purpose text,
                                 customer_partner_name (via device model)
                                 team / lab / condition are exact-match filter selects (combinable)
@@ -580,7 +580,7 @@ Tie-break rule: when two candidates have the same tier, the one whose enterprise
 
 **Skipped at intake:** `RUN_STATE_UNPROVISIONED` and `RUN_STATE_PROVISIONED` devices are not added to candidates at all — they are invisible to the conflict resolver and do not count as "seen" for missing-mark purposes.
 
-**SUSPECT winner special case:** If the winning candidate's `run_state` is `RUN_STATE_SUSPECT`, device fields are **not** updated. Only devices with `condition = normal` are transitioned to `condition = needs_repair`. All other data (enterprise, cluster, version, connectivity) remains unchanged. This prevents a suspect reading in one enterprise from overwriting a cleaner record from another.
+**SUSPECT winner special case:** If the winning candidate's `run_state` is `RUN_STATE_SUSPECT`, ZedCloud data is **not** written to the device. Instead `sync_condition` is set to `needs_recovery`, enterprise/cluster/cluster_device_name are cleared, and device status is set to `Suspect`. Exception: when `admin_condition = 'out_of_order'`, any stale `sync_condition` is cleared to `null` — out-of-order supersedes sync findings.
 
 **Apply phase:** After conflict resolution, the winning candidates are written to inventory and `UntrackedDevice` in a single apply phase (`_apply_inventory_candidate()`). Single-enterprise paths use `apply_candidates()` directly, bypassing the conflict resolver.
 
@@ -746,15 +746,15 @@ A stats line appears directly below the "Devices" heading, giving an at-a-glance
 current filtered set:
 
 ```text
-37 total  ·  12 available  ·  5 reserved  ·  19 online  ·  3 needs repair  ·  1 out of order  ·  2 leased  ·  1 missing
+37 total  ·  12 available  ·  5 reserved  ·  19 online  ·  1 out of order  ·  2 leased  ·  1 missing  ·  1 needs recovery
 ```
 
 - Hidden while the initial data load is in progress
 - Counts always reflect the currently applied search and filter — not global totals
 - **`total`**, **`available`**, **`online`** are always shown
-- **`reserved`**, **`needs repair`**, **`out of order`**, **`leased`**, **`missing`** are omitted when their count is 0
-- Color coding: `total` → foreground, `available` → emerald green, `needs repair` → yellow-400,
-  `out of order` → red-400, `leased` → violet-400, `missing` → orange-400; rest inherit muted foreground
+- **`reserved`**, **`out of order`**, **`leased`**, **`missing`**, **`needs recovery`** are omitted when their count is 0
+- Color coding: `total` → foreground, `available` → emerald green, `out of order` → red-400,
+  `leased` → violet-400, `missing` → orange-400, `needs recovery` → yellow-400; rest inherit muted foreground
 
 ### Search & Filter
 - **Single search box** — debounced 300ms — placeholder lists all searchable fields; matches
@@ -871,36 +871,40 @@ The Release button uses red outline styling (`border-destructive/50 text-destruc
 
 ## Device Condition Flags
 
-Any logged-in user can set or clear the condition via the **Edit Device modal**.
+Devices have two independent condition fields — one user-controlled, one sync-engine-controlled.
+Values are stored in the DB as snake_case and displayed in title-case via `.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())` in the frontend.
 
-Condition values are stored in the DB as snake_case (`needs_repair`, `out_of_order`, etc.) and
-displayed in the UI as title-case labels ("Needs Repair", "Out Of Order", etc.).
+### admin_condition (user-controlled)
+
+Set via the **Edit Device modal** by any portal user. Never written by the sync engine.
 
 | Condition | Row highlight | Owner field | Reserve | Release | Email alert |
 |---|---|---|---|---|---|
 | `out_of_order` | Red row + red left border | **UNAVAILABLE** | Disabled | Hidden | Yes — all admins |
-| `needs_repair` | Yellow row + yellow left border | Unchanged | Normal | Normal | No |
 | `temporarily_leased` | Violet row + violet left border | **UNAVAILABLE** | Disabled | Hidden | No |
 | `dedicated` | Blue row + blue left border | Device team name (e.g. "ST") — requires `device.team` to be set | Disabled | Hidden | No |
-| `missing` | Orange row + orange left border | **UNAVAILABLE** | Disabled | Hidden | No |
-| *(cleared / normal)* | No highlight | Stays null — new reservation needed | Normal | Normal | No |
+| *(normal / cleared)* | No highlight | Stays null — new reservation needed | Normal | Normal | No |
 
-**`missing` condition** — used when a physical device cannot be located. Behaves like `out_of_order`
-for reservation purposes (clears owner, expires pending requests) but does **not** send an admin email.
-Useful to flag devices that disappeared from a lab without triggering an incident notification.
+**Rule:** When `admin_condition = 'out_of_order'`, the sync engine never sets `sync_condition`; any stale value is cleared to `null`. Out-of-order supersedes all sync findings.
+
+### sync_condition (sync-engine-controlled)
+
+Set by the hourly background sync. **Never writable via API or CSV import.** `null` = no finding.
+
+| Condition | Row highlight | Meaning | Clears when |
+|---|---|---|---|
+| `missing` | Orange row + orange left border | Device not seen in ZedCloud this sync cycle | Device reappears in a subsequent sync |
+| `needs_recovery` | Yellow row + yellow left border | Device seen only in SUSPECT run-state across all enterprises | Non-SUSPECT found, or `out_of_order` set |
 
 **UI color tokens (Tailwind):**
 
-| Condition | Row bg | Left border | Badge |
+| Field | Value | Row bg + border | Badge |
 |---|---|---|---|
-| out_of_order | `bg-red-50` | `border-l-red-500` | `bg-red-100 text-red-700` |
-| needs_repair | `bg-yellow-50` | `border-l-yellow-400` | `bg-yellow-100 text-yellow-800` |
-| temporarily_leased | `bg-violet-50` | `border-l-violet-400` | `bg-violet-100 text-violet-700` |
-| dedicated | `bg-blue-50` | `border-l-blue-400` | `bg-blue-100 text-blue-700` |
-| missing | `bg-orange-50` | `border-l-orange-400` | `bg-orange-100 text-orange-700` |
-
-Condition values are stored in the DB as snake_case (`needs_repair`, `out_of_order`, etc.) and rendered
-in the UI as title-case labels ("Needs Repair", "Out Of Order", etc.) via a `.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())` transform in the frontend.
+| admin_condition | `out_of_order` | `bg-red-50/10 border-l-red-500` | `bg-red-500/20 text-red-400 border-red-500/30` |
+| admin_condition | `temporarily_leased` | `bg-violet-50/10 border-l-violet-400` | `bg-violet-400/20 text-violet-400 border-violet-400/30` |
+| admin_condition | `dedicated` | `bg-blue-50/10 border-l-blue-400` | `bg-blue-400/20 text-blue-400 border-blue-400/30` |
+| sync_condition | `missing` | `bg-orange-50/10 border-l-orange-400` | `bg-orange-400/20 text-orange-400 border-orange-400/30` |
+| sync_condition | `needs_recovery` | `bg-yellow-50/10 border-l-yellow-400` | `bg-yellow-400/20 text-yellow-400 border-yellow-400/30` |
 
 **Out of Order — admin email content:**
 
@@ -1013,9 +1017,9 @@ are mapped to canonical names automatically:
 | Location | location_detail |
 | Lab Location, lab_location | lab |
 
-**Value normalisation:** The `condition` field value is also normalised — any casing or spacing
+**Value normalisation:** The `admin_condition` field value is normalised — any casing or spacing
 variant is accepted and converted to the DB snake_case format on import
-(e.g. "Needs Repair", "needs repair", "NEEDS_REPAIR" → `needs_repair`).
+(e.g. "Out Of Order", "out of order", "OUT_OF_ORDER" → `out_of_order`). `sync_condition` is never read from CSV.
 
 **Per-row field validation:** Each row is validated before any DB write. Rejected rows are reported in the error list (with row number and reason) and skipped; valid rows continue to be processed. Validated fields: `owner_email` (valid email format), `idrac_ip` (valid IPv4 or IPv6), `condition` (must be a known value after normalisation), `lab` (must reference an existing Lab row), `team` (must reference an existing Team row if provided).
 
@@ -1323,15 +1327,15 @@ device-managing-portal/
 | 27 | Admin-only pages | Users page (`/users`) visible in nav only to Admin users |
 | 29 | Device purpose | Any user can write; clearing requires owner or admin; last 10 entries kept; bulk-deleted on ownership transfer |
 | 30 | Ownership history | Append-only; never deleted; admin-only via API and UI |
-| 31 | Device condition | Enum: normal / out_of_order / needs_repair / temporarily_leased / dedicated / missing; changed via Edit Device modal; values stored as snake_case; displayed as title-case in UI |
+| 31 | Device condition | Two fields: `admin_condition` (normal / out_of_order / temporarily_leased / dedicated; user-controlled) and `sync_condition` (missing / needs_recovery; sync-engine-controlled, nullable); displayed as title-case in UI |
 | 34 | Table layout | Compact primary row + chevron-expand panel; secondary fields in expand panel |
 | 35 | Device list filters | Available/Reserved/All chip + Team/Lab/Condition selects, server-side |
 | 36 | Latest purpose in list | Denormalized on Device (last_purpose_text/by/at) to avoid N+1 join |
-| 37 | "Available" semantics | owner is null AND condition not in (out_of_order, temporarily_leased, dedicated, missing) |
+| 37 | "Available" semantics | owner_email IS NULL AND admin_condition = 'normal' AND sync_condition IS NULL |
 | 38 | Viewport scope | Desktop-first; internal workstation tool; responsive/mobile layout out of scope |
 | 39 | List states | Loading, empty, no-results, load-error, stale — wireframed in states.html |
 | 32 | Lab field | DB-backed Lab model; pre-seeded 6 labs; add new labs via Django admin; all dropdowns refresh on next page load; free-text `location_detail` for exact spot inside lab |
-| 33 | Condition colors | out_of_order=red, needs_repair=yellow, temporarily_leased=violet, dedicated=blue, missing=orange |
+| 33 | Condition colors | out_of_order=red, temporarily_leased=violet, dedicated=blue, missing=orange, needs_recovery=yellow |
 | 40 | Serial verification on status fetch | `minfo.serialNumber` checked first (primary), `hardwareInfo.serialNum` as fallback; mismatch → reject update entirely, show error with device/cluster/expected/actual |
 | 41 | Serial absent in response | If ZedCloud returns no serialNum, skip verification silently and proceed with update |
 | 42 | device_connectivity | Single JSONField replaces ssh_ips + ssh_macs; one entry per IPv4: [{ip, mac, interface_name}]; shown per entry in expand panel Connectivity group |
