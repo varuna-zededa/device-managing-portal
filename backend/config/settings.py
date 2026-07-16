@@ -64,11 +64,9 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'config.wsgi.application'
 
+_sqlite_url = f'sqlite:///{BASE_DIR / "data" / "db.sqlite3"}'
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'data' / 'db.sqlite3',
-    }
+    'default': env.db('DATABASE_URL', default=_sqlite_url),
 }
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
