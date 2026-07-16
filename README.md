@@ -113,6 +113,7 @@ Create a `.env` file in the repo root (for Docker) or `backend/.env` (for local 
 | `LOG_LEVEL` | No | `INFO` | Log verbosity for portal code: `DEBUG`, `INFO`, `WARNING`, or `ERROR` |
 | `LOG_DIR` | No | `backend/logs` | Directory for rotating log files (`portal.log`); mapped to `./logs` in Docker |
 | **Portal behavior** | | | |
+| `START_SCHEDULER` | No | `false` | Set to `true` to start the APScheduler background thread (hourly sync, nightly digest). **Required in Docker / gunicorn** — the scheduler does not start automatically in multi-worker production mode. Already set in `docker-compose.yml`; only needed if running gunicorn manually. |
 | `LOAD_DEMO_DATA` | No | `false` | Load the demo fixture on startup — populates devices, users, labs, and teams for demonstration |
 | `DEVICE_LIST_REFRESH_MS` | No | `300000` | How often the device table auto-refreshes in the browser (milliseconds) |
 | `NOTIFICATION_REFRESH_MS` | No | `30000` | How often the notification panel polls for new alerts (milliseconds) |
