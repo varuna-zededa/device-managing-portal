@@ -367,8 +367,11 @@ def sync_all_enterprises() -> None:
         PortalSettings.objects.filter(pk=1).update(sync_running=True)
         _sync_all_enterprises_inner()
     finally:
-        from apps.enterprises.models import PortalSettings  # noqa: PLC0415
-        PortalSettings.objects.filter(pk=1).update(sync_running=False)
+        try:
+            from apps.enterprises.models import PortalSettings  # noqa: PLC0415
+            PortalSettings.objects.filter(pk=1).update(sync_running=False)
+        except Exception as exc:
+            logger.warning('Failed to clear sync_running flag: %s', exc)
         _sync_lock.release()
 
 
