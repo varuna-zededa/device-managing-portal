@@ -510,7 +510,7 @@ if (!isAdmin) return <Navigate to="/devices" replace />
   3. Sets `name_verified=True` **only** in the active-and-matched `else` branch; NOT set on inactive (step 1) or name-mismatch (step 2) branches
   4. Skips the enterprise silently on decrypt error or network error
 - APScheduler (in `apps/enterprises/apps.py`): only two registered jobs — `sync_all_enterprises` every 1 hour, `send_nightly_digest` at midnight UTC; `verify_enterprise_names` is **not** in the scheduler
-- APScheduler guard: only starts in the child process under `runserver` (`RUN_MAIN=true`) or in production; prevents double-start on Django's reloader
+- APScheduler guard: only starts under `runserver` child process (`RUN_MAIN=true`) or when `START_SCHEDULER=true` is set; prevents double-start on Django's reloader and prevents spurious scheduler starts in management commands (`migrate`, `collectstatic`, etc.). In Docker, `backend/entrypoint.sh` sets `START_SCHEDULER=true` via `export` immediately before the `exec gunicorn` line — **not** in `.env` — so management commands that run earlier in the script do not inherit it
 
 **`sync_enterprise()` return type — `tuple[set[str], list[dict]]`:**
 - Returns `(seen_serials, candidates)` — device writes are deferred to allow cross-enterprise conflict resolution in the caller

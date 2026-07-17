@@ -1139,7 +1139,8 @@ python manage.py loaddata clusters_seed.json   # idempotent — safe to repeat
 if [ "$LOAD_DEMO_DATA" = "true" ]; then
   python manage.py loaddata demo_fixture.json
 fi
-exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 2
+export START_SCHEDULER=true
+exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 1
 ```
 
 **frontend/nginx.conf sketch:**
@@ -1176,7 +1177,8 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 ### Bare-metal alternative
 ```bash
-# backend
+# backend — START_SCHEDULER must be set here; entrypoint.sh handles this automatically in Docker
+export START_SCHEDULER=true
 gunicorn config.wsgi:application --bind 127.0.0.1:8000
 
 # frontend — build once, serve with nginx
