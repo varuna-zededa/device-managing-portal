@@ -11,7 +11,7 @@ from django.http import HttpResponse
 from django.utils import timezone
 from django.core.validators import validate_email
 from django.core.exceptions import ValidationError as DjangoValidationError
-from apps.devices.models import Device, Lab, ADMIN_CONDITION_CHOICES, UntrackedDevice
+from apps.devices.models import Device, Lab, ADMIN_CONDITION_CHOICES, SYNC_CONDITION_CHOICES, UntrackedDevice
 from apps.devices.serializers import DeviceSerializer
 from apps.clusters.models import Cluster
 from apps.device_models.models import DeviceModel
@@ -368,4 +368,24 @@ class LatencyView(APIView):
             'retention_days': self.RETENTION_DAYS,
             'slow_threshold_ms': self.SLOW_THRESHOLD_MS,
             'total_7d': len(logs_7d),
+        })
+
+
+class ChoicesView(APIView):
+    permission_classes = [IsPortalUser]
+
+    def get(self, request):
+        from apps.enterprises.models import Enterprise  # noqa: PLC0415
+        enterprises = list(
+            Enterprise.objects.select_related('cluster').values('id', 'name', 'cluster__name')
+        )
+        return Response({
+            'labs': list(Lab.objects.values_list('name', flat=True)),
+            'teams': list(Team.objects.values_list('name', flat=True)),
+            'admin_conditions': [c[0] for c in ADMIN_CONDITION_CHOICES],
+            'sync_conditions': [c[0] for c in SYNC_CONDITION_CHOICES],
+            'enterprises': [
+                {'id': e['id'], 'name': e['name'], 'cluster_name': e['cluster__name']}
+                for e in enterprises
+            ],
         })

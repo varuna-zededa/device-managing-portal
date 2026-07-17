@@ -8,8 +8,6 @@ from .views import (
     DeviceStatusView,
     DevicePurposeView,
     DeviceOwnershipHistoryView,
-    UntrackedDeviceListView,
-    MoveToInventoryView,
 )
 
 urlpatterns = [

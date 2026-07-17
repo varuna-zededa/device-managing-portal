@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import UntrackedDeviceListView, UntrackedDeviceExportView, MoveToInventoryView
+from .untracked_views import UntrackedDeviceListView, UntrackedDeviceExportView, MoveToInventoryView
 
 urlpatterns = [
     path('', UntrackedDeviceListView.as_view()),

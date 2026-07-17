@@ -3,7 +3,7 @@ from django.conf import settings as django_settings
 from django.urls import path, include
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from apps.devices.views import ChoicesView
+from apps.admin_tools.views import ChoicesView
 from version import APP_VERSION, API_VERSION
 
 
